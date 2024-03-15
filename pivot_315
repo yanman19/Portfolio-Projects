@@ -1,0 +1,46 @@
+import pandas as pd
+
+def pivot_tables_by_technology(df, states, technologies):
+    """
+    Create pivot tables for each technology, filtered by states.
+    
+    Parameters:
+    - df: DataFrame with at least 'state', 'month', 'year', 'value', and 'technology' columns.
+    - states: List of states to filter by.
+    - technologies: Explicit list of technologies to ensure all possible technologies are included.
+    
+    Returns:
+    A dictionary of pivot tables for each technology.
+    """
+    # Filter DataFrame by states
+    filtered_df = df[df['state'].isin(states)]
+    
+    # Initialize dictionary to hold pivot tables
+    pivot_tables = {}
+    
+    # Iterate over each technology
+    for technology in technologies:
+        # Filter DataFrame by current technology
+        tech_df = filtered_df[filtered_df['technology'] == technology]
+        
+        # Pivot table with 'year' as index, 'month' as columns, and 'value' as values, summed up
+        pivot = tech_df.pivot_table(index='year', columns='month', values='value', aggfunc='sum', fill_value=0)
+        
+        # Ensure all months are present in the pivot table, even if they're missing in the tech_df
+        all_months = [i for i in range(1, 13)]  # Assuming months are represented as integers from 1 to 12
+        for month in all_months:
+            if month not in pivot.columns:
+                pivot[month] = 0
+        pivot = pivot[all_months]  # Reorder columns to ensure consistency
+        
+        pivot_tables[technology] = pivot
+    
+    return pivot_tables
+
+# Example usage:
+# df is your DataFrame
+# states_list is your list of states to filter by
+# technologies_list is your list of all possible technologies to ensure coverage
+# pivot_tables = pivot_tables_by_technology(df, states_list, technologies_list)
+
+# Now pivot_tables will have a pivot table for each technology.
