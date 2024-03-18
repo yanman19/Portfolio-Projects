@@ -1,0 +1,9 @@
+import pandas as pd
+
+# Assuming df is your DataFrame and it has columns 'retirement_date' and 'online_date'
+
+# Step 1: Create the 'date' and 'type' columns
+df['date'] = df['retirement_date'].fillna(df['online_date'])
+df['type'] = df['retirement_date'].apply(lambda x: 'retirement' if pd.notnull(x) else 'new build')
+
+# Now, df has two new columns 'date' and 'type' as per the criteria
