@@ -1,0 +1,52 @@
+import pandas as pd
+
+def merge_three_dfs(df1, df2, df3, on_columns):
+    """
+    Merges three DataFrames on specified columns.
+
+    Parameters:
+    - df1, df2, df3: The three DataFrames to merge.
+    - on_columns: List of column names to merge on.
+
+    Returns:
+    - A DataFrame that is the result of merging df1, df2, and df3 on the specified columns.
+    """
+    # Merge df1 and df2 on the specified columns
+    merged_df = pd.merge(df1, df2, on=on_columns, how='inner')
+    
+    # Merge the result with df3 on the specified columns
+    merged_df = pd.merge(merged_df, df3, on=on_columns, how='inner')
+    
+    return merged_df
+
+# Example usage
+import pandas as pd
+
+# Sample data for demonstration
+data1 = {
+    'first name': ['John', 'Jane'],
+    'middle name': ['Doe', 'Doe'],
+    'last name': ['Smith', 'Smith'],
+    'age': [30, 25]
+}
+data2 = {
+    'first name': ['John', 'Jane'],
+    'middle name': ['Doe', 'Doe'],
+    'last name': ['Smith', 'Smith'],
+    'occupation': ['Engineer', 'Doctor']
+}
+data3 = {
+    'first name': ['John', 'Jane'],
+    'middle name': ['Doe', 'Doe'],
+    'last name': ['Smith', 'Smith'],
+    'city': ['New York', 'Los Angeles']
+}
+
+df1 = pd.DataFrame(data1)
+df2 = pd.DataFrame(data2)
+df3 = pd.DataFrame(data3)
+
+# Merge on first name, middle name, and last name
+merged_df = merge_three_dfs(df1, df2, df3, ['first name', 'middle name', 'last name'])
+
+print(merged_df)
