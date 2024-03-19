@@ -1,0 +1,11 @@
+import pandas as pd
+
+# Sample DataFrame creation
+# df = pd.DataFrame({
+#     'Plant State': ['CT', 'MA', 'VT', 'ME', 'RI', 'NY', 'PA']
+# })
+
+# Lambda function to apply the conditions
+df['ISO'] = df['Plant State'].apply(lambda x: 'NEPOOL' if x in ['CT', 'MA', 'VT', 'ME', 'RI'] else ('NYPP' if x == 'NY' else 'NA'))
+
+# This adds a new column 'ISO' to your DataFrame based on the conditions specified
