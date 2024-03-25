@@ -1,0 +1,28 @@
+import pandas as pd
+from datetime import datetime
+
+# Data extracted from the image provided by the user
+data = {
+    'Date': ['3/15/2024', '12/15/2023', '9/15/2023', '5/16/2023', '3/17/2023',
+             '12/20/2022', '9/16/2022', '6/10/2022', '3/18/2022', '12/17/2021',
+             '9/16/2021', '6/14/2021', '3/15/2021', '12/18/2020', '9/24/2020', '12/19/2019'],
+    'Clearing': [2.25, 2.25, 3, 9.4, 12.05,
+                 14.2, 14.73, 9.75, 0.5, 9.75,
+                 10, 7.75, 6.5, 7.25, 7.5, 8]
+}
+
+# Create a DataFrame
+df_original = pd.DataFrame(data)
+df_original['Date'] = pd.to_datetime(df_original['Date'])
+df_original.sort_values('Date', inplace=True)
+df_original.reset_index(drop=True, inplace=True)
+
+# Create a daily time series DataFrame starting from the first date to 1/1/2030
+daily_dates = pd.date_range(start=df_original['Date'].iloc[0], end='1/1/2030')
+df = pd.DataFrame(daily_dates, columns=['Date'])
+
+# Forward fill the values
+df = df.merge(df_original, on='Date', how='left')
+df['Clearing'].ffill(inplace=True)
+
+df.head()
