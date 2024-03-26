@@ -1,0 +1,20 @@
+import pandas as pd
+
+# Assuming df1 and df2 are your dataframes
+
+# Convert the 'Date' columns to datetime objects to ensure uniformity
+df1['Date'] = pd.to_datetime(df1['Date'], errors='coerce')
+df2['Date'] = pd.to_datetime(df2['Date'], errors='coerce')
+
+# Optional: If you suspect there could be timezone differences and it's safe to ignore them, normalize timezones
+# df1['Date'] = df1['Date'].dt.tz_localize(None)
+# df2['Date'] = df2['Date'].dt.tz_localize(None)
+
+# Now attempt the merge again
+merged_df = pd.merge(df1, df2, on='Date', how='inner')
+
+# Check if the merge was successful
+if not merged_df.empty:
+    print("Merge successful, resulting dataframe is not empty.")
+else:
+    print("Merge resulted in an empty dataframe. No matching dates found.")
