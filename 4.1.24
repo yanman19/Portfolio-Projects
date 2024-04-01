@@ -1,0 +1,78 @@
+import pandas as pd
+
+def calculate_spread_pnl(df, peak_type, location1, location2):
+    # Filter the DataFrame for the given peak type and locations
+    filtered_df = df[(df['peaktype'] == peak_type) &
+                     ((df['location'] == location1) | (df['location'] == location2))]
+    
+    if filtered_df.empty:
+        return "No data available for given inputs."
+    
+    # Ensure data is available for both locations
+    if not all(location in filtered_df['location'].values for location in [location1, location2]):
+        return "Data for both locations not found."
+    
+    # Extract data for each location
+    loc1_data = filtered_df[filtered_df['location'] == location1].iloc[0]
+    loc2_data = filtered_df[filtered_df['location'] == location2].iloc[0]
+    
+    # Calculate spread move
+    spread_move = (loc1_data['start mark'] - loc2_data['start mark']) - (loc1_data['end mark'] - loc2_data['end mark'])
+    
+    # Calculate Spread PnL
+    spread_pnl = spread_move * loc1_data['position'] * loc1_data['hours']
+    
+    return spread_pnl
+
+# Example DataFrame structure
+data = {
+    'peaktype': ['A', 'A', 'B', 'B'],
+    'location': ['Loc1', 'Loc2', 'Loc1', 'Loc2'],
+    'start mark': [100, 95, 105, 90],
+    'end mark': [102, 97, 100, 92],
+    'position': [50, 30, 60, 40],
+    'hours': [24, 24, 36, 36]
+}
+df = pd.DataFrame(data)
+
+# Example usage
+peak_type = 'A'
+location1 = 'Loc1'
+location2 = 'Loc2'
+print(calculate_spread_pnl(df, peak_type, location1, location2))
+
+import pandas as pd
+import itertools
+
+# Assuming the function calculate_spread_pnl is defined as in the previous step
+
+# Example DataFrame structure (Replace with your actual DataFrame)
+data = {
+    'peaktype': ['A', 'A', 'B', 'B'],
+    'location': ['Loc1', 'Loc2', 'Loc1', 'Loc2'],
+    'start mark': [100, 95, 105, 90],
+    'end mark': [102, 97, 100, 92],
+    'position': [50, 30, 60, 40],
+    'hours': [24, 24, 36, 36]
+}
+df = pd.DataFrame(data)
+
+# Get all unique peak types and locations
+unique_peak_types = df['peaktype'].unique()
+unique_locations = df['location'].unique()
+
+# Generate all combinations of peak type and two locations
+# itertools.product will create all possible combinations, but we filter to remove cases where locations are the same
+combinations = [(peak_type, loc1, loc2) for peak_type, loc1, loc2 in itertools.product(unique_peak_types, unique_locations, repeat=2) if loc1 != loc2]
+
+# Calculate Spread PnL for each combination
+results = []
+for peak_type, location1, location2 in combinations:
+    spread_pnl = calculate_spread_pnl(df, peak_type, location1, location2)
+    results.append((peak_type, location1, location2, spread_pnl))
+
+# Convert the results to a DataFrame for easier viewing
+results_df = pd.DataFrame(results, columns=['Peak Type', 'Location 1', 'Location 2', 'Spread PnL'])
+
+print(results_df)
+
