@@ -1,0 +1,49 @@
+import os
+import pickle
+
+# Step 1: Check the pickle file
+pickle_file_path = "example.pickle"
+if os.path.exists(pickle_file_path):
+    print("Step 1: Check the pickle file - ✓")
+else:
+    print("Step 1: Check the pickle file - ✗ (File does not exist)")
+
+# Step 2: Ensure the file is not corrupted
+try:
+    with open(pickle_file_path, "rb") as file:
+        contents = file.read()
+        if contents:
+            print("Step 2: Ensure the file is not corrupted - ✓")
+        else:
+            print("Step 2: Ensure the file is not corrupted - ✗ (File is empty)")
+except Exception as e:
+    print(f"Step 2: Ensure the file is not corrupted - ✗ ({type(e).__name__}: {e})")
+
+# Step 3: Recreate the pickle file
+# Assuming you have the original data source or can regenerate the data
+# Replace this with your actual data loading and serialization code
+data = {"example": "data"}
+try:
+    with open(pickle_file_path, "wb") as file:
+        pickle.dump(data, file)
+    print("Step 3: Recreate the pickle file - ✓")
+except Exception as e:
+    print(f"Step 3: Recreate the pickle file - ✗ ({type(e).__name__}: {e})")
+
+# Step 4: Use try-except blocks
+try:
+    with open(pickle_file_path, "rb") as file:
+        loaded_data = pickle.load(file)
+    print("Step 4: Use try-except blocks - ✓")
+except EOFError:
+    print("Step 4: Use try-except blocks - ✗ (EOFError: Ran out of input)")
+except Exception as e:
+    print(f"Step 4: Use try-except blocks - ✗ ({type(e).__name__}: {e})")
+
+# Step 5: Check for file handling errors
+try:
+    with open(pickle_file_path, "rb") as file:
+        loaded_data = pickle.load(file)
+    print("Step 5: Check for file handling errors - ✓")
+except Exception as e:
+    print(f"Step 5: Check for file handling errors - ✗ ({type(e).__name__}: {e})")
