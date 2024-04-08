@@ -1,0 +1,46 @@
+import pandas as pd
+from datetime import datetime
+
+# Assume df is your DataFrame with columns: ['fuel_type', 'start_date', 'size', 'location']
+
+# 1. Convert start date to datetime
+df['start_date'] = pd.to_datetime(df['start_date'])
+
+# 2. Filter the data from 2014 to current date
+start_date = '2014-01-01'
+end_date = datetime.now().strftime('%Y-%m-%d')  # current date
+mask = (df['start_date'] >= start_date) & (df['start_date'] <= end_date)
+df = df.loc[mask]
+
+# 3. Sort by start date
+df.sort_values('start_date', inplace=True)
+
+# 4. Create 'zone' column for 'west' (A-E) and 'east' (F-K)
+def determine_zone(location):
+    if location.lower() in ['a', 'b', 'c', 'd', 'e']:
+        return 'west'
+    elif location.lower() in ['f', 'g', 'h', 'i', 'j', 'k']:
+        return 'east'
+    else:
+        return 'other'
+
+df['zone'] = df['location'].apply(determine_zone)
+
+# 5. Group by fuel type and month-year for cumulative size
+df.set_index('start_date', inplace=True)
+monthly_cumulative = df.groupby([df['fuel_type'], df.index.to_period('M')])['size'].sum().groupby(level=0).cumsum()
+
+# 6. Group by zone, fuel type, and month-year for west and east
+zone_monthly_cumulative = df.groupby([df['zone'], df['fuel_type'], df.index.to_period('M')])['size'].sum().groupby(level=[0,1]).cumsum()
+
+# Now you have two DataFrames:
+# 'monthly_cumulative' for the cumulative size by fuel type and month-year
+# 'zone_monthly_cumulative' for the cumulative size by zone, fuel type, and month-year
+
+# You may want to reset index if you need to work with the data in a flat structure
+monthly_cumulative = monthly_cumulative.reset_index()
+zone_monthly_cumulative = zone_monthly_cumulative.reset_index()
+
+# Optionally, you can rename the columns for clarity
+monthly_cumulative.rename(columns={'start_date': 'month_year', 'size': 'cumulative_size'}, inplace=True)
+zone_monthly_cumulative.rename(columns={'start_date': 'month_year', 'size': 'cumulative_size'}, inplace=True)
