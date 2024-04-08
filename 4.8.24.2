@@ -1,0 +1,54 @@
+import pandas as pd
+import numpy as np
+from pandas.tseries.offsets import MonthEnd
+
+# Assuming 'df' is your DataFrame with columns: ['fuel_type', 'start_date', 'size', 'location']
+
+# Convert the start date column to datetime
+df['start_date'] = pd.to_datetime(df['start_date'])
+
+# Define the date range
+start_period = pd.Timestamp('2014-01-01')
+end_period = pd.Timestamp.today().normalize() # to get the first of this month
+date_range = pd.date_range(start=start_period, end=end_period, freq='MS')
+
+# Define zone mapping based on location
+zone_mapping = {letter: 'west' for letter in ['a', 'b', 'c', 'd', 'e']}
+zone_mapping.update({letter: 'east' for letter in ['f', 'g', 'h', 'i', 'j', 'k']})
+df['zone'] = df['location'].str.lower().map(zone_mapping)
+
+# Initialize a DataFrame to store the time series
+time_series_data = {
+    'date': [],
+    'zone': [],
+    'fuel_type': [],
+    'cumulative_size': []
+}
+
+# Generate the time series
+for single_date in date_range:
+    # Filter the DataFrame up to the current month in the loop
+    df_filtered = df[df['start_date'] <= single_date]
+    
+    # Get cumulative sum for the filtered data
+    cumulative_data = df_filtered.groupby(['zone', 'fuel_type'])['size'].sum().reset_index()
+    
+    # Append to the time series data
+    for _, row in cumulative_data.iterrows():
+        time_series_data['date'].append(single_date)
+        time_series_data['zone'].append(row['zone'])
+        time_series_data['fuel_type'].append(row['fuel_type'])
+        time_series_data['cumulative_size'].append(row['size'])
+
+# Create the time series DataFrame
+time_series_df = pd.DataFrame(time_series_data)
+
+# You may need to unstack or pivot the DataFrame to get it in the format you desire
+# Here's an example to pivot the DataFrame to have fuel types as columns
+pivot_df = time_series_df.pivot_table(index=['date', 'zone'], columns='fuel_type', values='cumulative_size', fill_value=0)
+
+# Reset the index if you want to flatten the DataFrame after pivoting
+pivot_df = pivot_df.reset_index()
+pivot_df.columns.name = None  # Remove the columns' name
+
+# Now `pivot_df` is your final time series DataFrame
