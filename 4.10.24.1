@@ -1,0 +1,41 @@
+import pandas as pd
+
+def create_time_series(retro, current, future):
+    # Assuming start_date and end_date in YYYY-MM format for simplicity
+    # Concatenate the dataframes with an additional column to mark their origin
+    retro['status'] = 'retro'
+    current['status'] = 'current'
+    future['status'] = 'future'
+    df = pd.concat([retro, current, future])
+    
+    # Convert start_date and end_date to datetime
+    df['start_date'] = pd.to_datetime(df['start_date'], format='%Y-%m').dt.to_period('M')
+    df['end_date'] = pd.to_datetime(df['end_date'], format='%Y-%m', errors='coerce').dt.to_period('M')
+    
+    # Generate monthly time range
+    months = pd.period_range('2000-01', '2040-12', freq='M')
+    
+    # Prepare a DataFrame to hold the results
+    time_series = pd.DataFrame(index=months)
+    
+    # For each month, calculate the total size by fuel type
+    for month in months:
+        # Filter plants active in each month
+        active = df[((df['status'] != 'retro') & (df['start_date'] <= month)) |
+                    ((df['status'] == 'retro') & (df['start_date'] <= month) & (df['end_date'] >= month))]
+        totals = active.groupby('fuel_type')['size'].sum()
+        time_series = pd.concat([time_series, totals.rename(month)], axis=1)
+    
+    # Transpose and fill NaNs with 0
+    time_series = time_series.T.fillna(0)
+    
+    return time_series
+
+# Example usage
+# Define your DataFrames: retro, current, future
+# retro = pd.DataFrame(...)
+# current = pd.DataFrame(...)
+# future = pd.DataFrame(...)
+
+# time_series = create_time_series(retro, current, future)
+# print(time_series)
