@@ -1,0 +1,53 @@
+import pandas as pd
+
+def create_time_series(retro, current, future):
+    # Assign a status to each DataFrame
+    retro['status'] = 'retro'
+    current['status'] = 'current'
+    future['status'] = 'future'
+    
+    # Ensure all DataFrames have the necessary columns
+    retro['end_date'] = pd.to_datetime(retro['end_date'], format='%m/%d/%Y').dt.to_period('M')
+    current['end_date'] = pd.NaT  # Assigning NaT (Not a Time) for end_date in current since it's unknown
+    future['end_date'] = pd.NaT  # Future DataFrame won't have this column
+    
+    # Concatenate the dataframes
+    df = pd.concat([retro, current, future])
+    
+    # Convert start_date to datetime format
+    df['start_date'] = pd.to_datetime(df['start_date'], format='%m/%d/%Y').dt.to_period('M')
+    
+    # Handle end_date for future plants (assuming they don't retire within our timeframe)
+    # No action needed as we've initialized end_date to NaT for current and future DataFrames
+    
+    # Generate monthly time range
+    months = pd.period_range('2000-01', '2040-12', freq='M')
+    
+    # Prepare a DataFrame to hold the results
+    time_series = pd.DataFrame(index=months)
+    
+    # Calculate total size by fuel type for each month
+    for month in months:
+        # Filter plants that are active during each month
+        # Conditions:
+        # - If it's not retired (current or future), started before or in the month
+        # - If it's retired (retro), started and ended around the month
+        active = df[((df['status'] != 'retro') & (df['start_date'] <= month)) |
+                    ((df['status'] == 'retro') & (df['start_date'] <= month) & (df['end_date'] >= month))]
+        
+        # Group by fuel type and sum sizes
+        totals = active.groupby('fuel_type')['size'].sum()
+        # Append totals to the time_series DataFrame
+        time_series = pd.concat([time_series, totals.rename(month)], axis=1)
+    
+    # Transpose and fill NaNs with 0
+    time_series = time_series.T.fillna(0)
+    
+    return time_series
+
+# Example usage
+# retro = pd.DataFrame({'start_date': [...], 'end_date': [...], 'size': [...], 'fuel_type': [...]})
+# current = pd.DataFrame({'start_date': [...], 'size': [...], 'fuel_type': [...]})
+# future = pd.DataFrame({'start_date': [...], 'size': [...], 'fuel_type': [...]})
+# time_series = create_time_series(retro, current, future)
+# print(time_series)
