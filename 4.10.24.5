@@ -1,0 +1,48 @@
+import pandas as pd
+
+def create_time_series(retro, current, future):
+    # Ensure all dataframes have 'end_date' with NaT for current and future, as they might not have retire dates
+    retro['end_date'] = pd.to_datetime(retro['end_date'], format='%m/%d/%Y')
+    current['end_date'] = pd.NaT  # Not applicable for current
+    future['end_date'] = pd.NaT  # Not applicable for future
+
+    # Convert 'start_date' to datetime
+    retro['start_date'] = pd.to_datetime(retro['start_date'], format='%m/%d/%Y')
+    current['start_date'] = pd.to_datetime(current['start_date'], format='%m/%d/%Y')
+    future['start_date'] = pd.to_datetime(future['start_date'], format='%m/%d/%Y')
+
+    # Concatenate all dataframes
+    df = pd.concat([retro, current, future], ignore_index=True)
+
+    # Generate a monthly time range from January 2000 to December 2040
+    months = pd.date_range('2000-01-01', '2040-12-31', freq='MS')  # MS is month start frequency
+
+    # Initialize an empty DataFrame for the time series
+    # This will have a date column and a column for each unique fuel type
+    unique_fuel_types = df['fuel_type'].unique()
+    columns = ['Date'] + list(unique_fuel_types)
+    time_series = pd.DataFrame(columns=columns)
+    time_series['Date'] = months
+
+    # Fill in the size for each fuel type, for each month
+    for fuel_type in unique_fuel_types:
+        monthly_sizes = []
+        for month in months:
+            # Sum sizes for the given month and fuel type, considering the operational status
+            size = df[(df['fuel_type'] == fuel_type) & 
+                      (df['start_date'] <= month) & 
+                      ((df['end_date'].isna()) | (df['end_date'] >= month))]['size'].sum()
+            monthly_sizes.append(size)
+        time_series[fuel_type] = monthly_sizes
+
+    return time_series
+
+# Example usage
+# Define your DataFrames: retro, current, future
+# retro = pd.DataFrame(...)
+# current = pd.DataFrame(...)
+# future = pd.DataFrame(...)
+
+# Assuming the 'size' and 'fuel_type' columns are correctly filled in your dataframes
+# time_series = create_time_series(retro, current, future)
+# print(time_series)
