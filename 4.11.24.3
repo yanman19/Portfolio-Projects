@@ -1,0 +1,49 @@
+import pandas as pd
+
+def create_time_series_and_yoy(retro, current, future):
+    # Preparing the data frames
+    retro['start_date'] = pd.to_datetime(retro['start_date'], format='%m/%d/%Y')
+    retro['end_date'] = pd.to_datetime(retro['end_date'], format='%m/%d/%Y')
+    current['start_date'] = pd.to_datetime(current['start_date'], format='%m/%d/%Y')
+    current['end_date'] = pd.NaT  # Assuming current plants have no end date
+    future['start_date'] = pd.to_datetime(future['start_date'], format='%m/%d/%Y')
+    future['end_date'] = pd.NaT  # Future plants also have no end date
+
+    # Combine into a single DataFrame for processing
+    all_plants = pd.concat([retro, current, future], ignore_index=True)
+    
+    # Generate the time series frame
+    start_date = '2000-01-01'
+    end_date = '2040-12-31'
+    months = pd.date_range(start=start_date, end=end_date, freq='MS')
+    fuel_types = all_plants['fuel_type'].unique()
+    time_series = pd.DataFrame({'Date': months})
+    for fuel_type in fuel_types:
+        time_series[fuel_type] = 0
+
+    # Populate the time series with actual sizes
+    for month in time_series['Date']:
+        for fuel_type in fuel_types:
+            # Plants that are operational in 'month'
+            operational = all_plants[(all_plants['fuel_type'] == fuel_type) &
+                                     (all_plants['start_date'] <= month) &
+                                     ((all_plants['end_date'].isnull()) | (all_plants['end_date'] >= month))]
+            time_series.loc[time_series['Date'] == month, fuel_type] = operational['size'].sum()
+
+    # Calculate YOY percentage changes
+    yoy_change = time_series.copy()
+    for fuel_type in fuel_types:
+        yoy_change[fuel_type] = time_series[fuel_type].pct_change(12) * 100
+    yoy_change['Date'] = time_series['Date']  # Ensure Date column is properly aligned
+
+    return time_series, yoy_change
+
+# Example usage
+# retro, current, and future should be defined with 'start_date', 'end_date' (where applicable), 'size', and 'fuel_type' columns
+# retro = pd.DataFrame({...})
+# current = pd.DataFrame({...})
+# future = pd.DataFrame({...})
+
+# time_series, yoy_change = create_time_series_and_yoy(retro, current, future)
+# print("Monthly Totals DataFrame:\n", time_series.head())
+# print("\nYOY Percentage Change DataFrame:\n", yoy_change.head())
