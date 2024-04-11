@@ -1,0 +1,46 @@
+import pandas as pd
+
+def create_time_series_and_yoy(retro, current, future):
+    # Data preparation steps as before
+    retro['end_date'] = pd.to_datetime(retro['end_date'], format='%m/%d/%Y')
+    current['end_date'], future['end_date'] = pd.NaT, pd.NaT
+    retro['start_date'] = pd.to_datetime(retro['start_date'], format='%m/%d/%Y')
+    current['start_date'] = pd.to_datetime(current['start_date'], format='%m/%d/%Y')
+    future['start_date'] = pd.to_datetime(future['start_date'], format='%m/%d/%Y')
+    df = pd.concat([retro, current, future], ignore_index=True)
+    
+    # Generate monthly time series DataFrame
+    months = pd.date_range('2000-01-01', '2040-12-31', freq='MS')
+    unique_fuel_types = df['fuel_type'].unique()
+    time_series = pd.DataFrame({'Date': months})
+    for fuel_type in unique_fuel_types:
+        monthly_sizes = []
+        for month in months:
+            size = df[(df['fuel_type'] == fuel_type) & 
+                      (df['start_date'] <= month) & 
+                      ((df['end_date'].isna()) | (df['end_date'] >= month))]['size'].sum()
+            monthly_sizes.append(size)
+        time_series[fuel_type] = monthly_sizes
+    
+    # Calculate YOY percentage change DataFrame
+    yoy_change = time_series.copy()
+    for fuel_type in unique_fuel_types:
+        # Calculate YOY change as percentage
+        # pct_change with periods=12 for YOY calculation based on monthly data
+        yoy_change[fuel_type] = time_series[fuel_type].pct_change(periods=12) * 100
+    
+    # Adjust 'Date' column to be the only non-operated column in YOY DataFrame
+    yoy_change = yoy_change.drop(columns=['Date'])
+    yoy_change.insert(0, 'Date', time_series['Date'])
+    
+    return time_series, yoy_change
+
+# Example usage
+# Define your DataFrames: retro, current, future
+# retro = pd.DataFrame({...})
+# current = pd.DataFrame({...})
+# future = pd.DataFrame({...})
+
+# time_series, yoy_change = create_time_series_and_yoy(retro, current, future)
+# print("Monthly Totals DataFrame:\n", time_series)
+# print("\nYOY Percentage Change DataFrame:\n", yoy_change)
