@@ -1,0 +1,37 @@
+import pandas as pd
+import numpy as np
+import plotly.express as px
+from sklearn.preprocessing import PolynomialFeatures
+from sklearn.linear_model import LinearRegression
+
+def plot_scatter_with_regression(df, x, y, month):
+    # Filter data for the specified month
+    df['month'] = df['date'].dt.month
+    df_filtered = df[df['month'] == month]
+    
+    # Create a column for the year to use in coloring the dots
+    df_filtered['year'] = df_filtered['date'].dt.year
+
+    # Prepare data for polynomial regression (degree 2 for quadratic fit)
+    polynomial_features = PolynomialFeatures(degree=2)
+    x_poly = polynomial_features.fit_transform(df_filtered[x].values.reshape(-1, 1))
+    
+    # Fit the model
+    model = LinearRegression()
+    model.fit(x_poly, df_filtered[y].values)
+    
+    # Generate predictions for the regression line
+    x_range = np.linspace(df_filtered[x].min(), df_filtered[x].max(), 100)
+    y_pred = model.predict(polynomial_features.transform(x_range.reshape(-1, 1)))
+    
+    # Create the scatter plot
+    fig = px.scatter(df_filtered, x=x, y=y, color='year', hover_data=['date'])
+
+    # Add the regression line to the plot
+    fig.add_scatter(x=x_range, y=y_pred, mode='lines', name='Quadratic Fit', showlegend=True)
+    
+    return fig
+
+# Example usage with a DataFrame 'df' that includes a datetime column named 'date'
+# plot = plot_scatter_with_regression(df, 'x_column_name', 'y_column_name', 4)  # 4 for April
+# plot.show()
