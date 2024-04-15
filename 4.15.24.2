@@ -1,0 +1,78 @@
+import matplotlib.pyplot as plt
+import pandas as pd
+from sklearn.linear_model import LinearRegression
+import numpy as np
+
+def plot_scatter_with_regression_matplotlib(df, x_var, y_var, date_var, month):
+    # Convert the date_var to datetime, extract year, and filter by month
+    df[date_var] = pd.to_datetime(df[date_var])
+    df = df[df[date_var].dt.month == month]
+
+    # Plotting scatter
+    plt.figure(figsize=(10, 6))
+    for year in df[date_var].dt.year.unique():
+        year_data = df[df[date_var].dt.year == year]
+        plt.scatter(year_data[x_var], year_data[y_var], label=str(year))
+
+    # Fit regression model
+    model = LinearRegression()
+    model.fit(df[x_var].values.reshape(-1, 1), df[y_var].values)
+
+    # Create regression line
+    x_range = np.linspace(df[x_var].min(), df[x_var].max(), 100)
+    y_range = model.predict(x_range.reshape(-1, 1))
+
+    # Plot regression line
+    plt.plot(x_range, y_range, color='black', linewidth=2, label='Regression Line')
+
+    # Add labels and legend
+    plt.xlabel(x_var)
+    plt.ylabel(y_var)
+    plt.title(f"{x_var} vs {y_var} - Regression Analysis")
+    plt.legend()
+    plt.grid(True)
+    plt.show()
+
+import matplotlib.pyplot as plt
+import pandas as pd
+import numpy as np
+from sklearn.preprocessing import PolynomialFeatures
+from sklearn.linear_model import LinearRegression
+
+def plot_scatter_with_polynomial_regression_matplotlib(df, x_var, y_var, date_var, month, degree=2):
+    # Convert the date_var to datetime, extract year, and filter by month
+    df[date_var] = pd.to_datetime(df[date_var])
+    df = df[df[date_var].dt.month == month]
+
+    # Plotting scatter
+    plt.figure(figsize=(10, 6))
+    for year in df[date_var].dt.year.unique():
+        year_data = df[df[date_var].dt.year == year]
+        plt.scatter(year_data[x_var], year_data[y_var], label=str(year))
+
+    # Prepare data for polynomial regression
+    x_data = df[x_var].values.reshape(-1, 1)
+    y_data = df[y_var].values
+    
+    # Polynomial Features
+    polynomial_features = PolynomialFeatures(degree=degree)
+    x_poly = polynomial_features.fit_transform(x_data)
+    
+    # Polynomial Regression Model
+    model = LinearRegression()
+    model.fit(x_poly, y_data)
+    
+    # Create regression curve
+    x_range = np.linspace(x_data.min(), x_data.max(), 100).reshape(-1, 1)
+    y_range = model.predict(polynomial_features.transform(x_range))
+
+    # Plot regression curve
+    plt.plot(x_range, y_range, color='red', linewidth=2, label=f'Polynomial Regression (Degree {degree})')
+
+    # Add labels and legend
+    plt.xlabel(x_var)
+    plt.ylabel(y_var)
+    plt.title(f"{x_var} vs {y_var} - Polynomial Regression Analysis")
+    plt.legend()
+    plt.grid(True)
+    plt.show()
