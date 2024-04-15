@@ -1,0 +1,94 @@
+import plotly.express as px
+import pandas as pd
+from sklearn.linear_model import LinearRegression
+import numpy as np
+
+def plot_scatter_with_regression(df, x_var, y_var, date_var, month):
+    # Convert the date_var to datetime, extract year, and filter by month
+    df[date_var] = pd.to_datetime(df[date_var])
+    df['year'] = df[date_var].dt.year
+    df = df[df[date_var].dt.month == month]
+
+    # Plotting scatter by year
+    fig = px.scatter(df, x=x_var, y=y_var, color='year', hover_data=[date_var])
+    
+    # Fit regression model
+    model = LinearRegression()
+    model.fit(df[x_var].values.reshape(-1, 1), df[y_var].values)
+    
+    # Create regression line
+    x_range = np.linspace(df[x_var].min(), df[x_var].max(), 100)
+    y_range = model.predict(x_range.reshape(-1, 1))
+    
+    # Add regression line to the plot
+    fig.add_traces(px.line(x=x_range, y=y_range, labels={'x': x_var, 'y': y_var}).data[0])
+    
+    # Update layout with title
+    fig.update_layout(title=f"{x_var} vs {y_var}: Regression Analysis")
+    
+    fig.show()
+
+# Example usage
+data = {
+    'date': ['2021-07-01', '2021-07-02', '2021-08-01', '2022-07-01'],
+    'sales': [200, 210, 230, 240],
+    'temperature': [30, 35, 28, 22]
+}
+df = pd.DataFrame(data)
+plot_scatter_with_regression(df, 'temperature', 'sales', 'date', month=7)
+
+import plotly.express as px
+import pandas as pd
+import numpy as np
+from sklearn.preprocessing import PolynomialFeatures
+from sklearn.linear_model import LinearRegression
+
+def plot_scatter_with_polynomial_regression(df, x_var, y_var, date_var, month, degree=2):
+    # Convert the date_var to datetime, extract year, and filter by month
+    df[date_var] = pd.to_datetime(df[date_var])
+    df['year'] = df[date_var].dt.year
+    df = df[df[date_var].dt.month == month]
+
+    # Plotting scatter by year
+    fig = px.scatter(df, x=x_var, y=y_var, color='year', hover_data=[date_var])
+    
+    # Prepare data for polynomial regression
+    x_data = df[x_var].values.reshape(-1, 1)
+    y_data = df[y_var].values
+    
+    # Polynomial Features
+    polynomial_features = PolynomialFeatures(degree=degree)
+    x_poly = polynomial_features.fit_transform(x_data)
+    
+    # Polynomial Regression Model
+    model = LinearRegression()
+    model.fit(x_poly, y_data)
+    
+    # Create regression curve
+    x_range = np.linspace(x_data.min(), x_data.max(), 100).reshape(-1, 1)
+    y_range = model.predict(polynomial_features.transform(x_range))
+    
+    # Add regression curve to the plot
+    fig.add_traces(px.line(x=x_range.squeeze(), y=y_range, labels={'x': x_var, 'y': y_var}).data[0])
+    
+    # Update layout with title
+    fig.update_layout(title=f"{x_var} vs {y_var}: Polynomial Regression Analysis")
+    
+    fig.show()
+
+# Example usage
+data = {
+    'date': ['2021-07-01', '2021-07-02', '2021-08-01', '2022-07-01'],
+    'sales': [200, 210, 230, 240],
+    'temperature': [30, 35, 28, 22]
+}
+df = pd.DataFrame(data)
+plot_scatter_with_polynomial_regression(df, 'temperature', 'sales', 'date', month=7, degree=2)
+
+def plot_scatter_for_all_months(plot_function, df, x_var, y_var, date_var, **kwargs):
+    # Iterate through all months (1 to 12)
+    for month in range(1, 13):
+        print(f"Month: {month}")
+        # Call the provided plot function for each month
+        plot_function(df, x_var, y_var, date_var, month, **kwargs)
+
