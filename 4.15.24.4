@@ -1,0 +1,20 @@
+import pandas as pd
+
+# Example DataFrames
+df1 = pd.DataFrame({'date': ['2021-01-01', '2021-02-01', '2022-01-01'], 'value': [10, 20, 30]})
+df2 = pd.DataFrame({'date': ['2021-03-01', '2022-02-01', '2022-03-01'], 'value': [40, 50, 60]})
+
+# List of DataFrame names (assuming you have these DataFrames defined as above)
+dfs = [df1, df2]  # If you have names in strings, you'll need to use eval() or a similar method to reference DataFrames
+
+# Dictionary to hold the grouped results
+grouped_dfs = {}
+
+# Processing each DataFrame
+for i, df in enumerate(dfs):
+    df['date'] = pd.to_datetime(df['date'])
+    df_grouped = df.groupby(df['date'].dt.year).mean()  # Group by year and calculate mean
+    grouped_dfs[f'df{i+1}_grouped'] = df_grouped  # Store in dictionary with a new key
+
+# Example to access the grouped DataFrame
+print(grouped_dfs['df1_grouped'])
