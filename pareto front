@@ -1,0 +1,47 @@
+import pandas as pd
+import matplotlib.pyplot as plt
+
+def is_dominated(row, candidates):
+    """Check if a row is dominated by any candidate in the list."""
+    for _, candidate in candidates.iterrows():
+        if all(candidate <= row) and any(candidate < row):
+            return True
+    return False
+
+def pareto_front(df):
+    """Extract the Pareto front from a DataFrame."""
+    pareto_points = []
+    for index, row in df.iterrows():
+        if not is_dominated(row, df.drop(index)):
+            pareto_points.append(row)
+    return pd.DataFrame(pareto_points)
+
+def plot_pareto_3d(df, pareto_df):
+    """Plot the dataset and the Pareto front in 3D."""
+    fig = plt.figure()
+    ax = fig.add_subplot(111, projection='3d')
+    ax.scatter(df['Price'], df['Performance'], df['Durability'], c='blue', marker='o', label='All Points')
+    ax.scatter(pareto_df['Price'], pareto_df['Performance'], pareto_df['Durability'], c='red', marker='^', label='Pareto Front')
+    ax.set_xlabel('Price')
+    ax.set_ylabel('Performance')
+    ax.set_zlabel('Durability')
+    plt.title('3D Pareto Front')
+    plt.legend()
+    plt.show()
+
+# Example data for high-performance cars
+car_data = {
+    'Name': ['Ferrari 812', 'McLaren 765LT', 'McLaren 750S', 'Aston Martin DBS', 'Lamborghini Aventador', 'Chevrolet Corvette Z06', 'Porsche 911 Turbo S', 
+             'Audi RS e-tron GT', 'BMW M8 Competition', 'Mercedes-AMG GT 63', 'Nissan GT-R', 'Audi R8', 'Dodge Charger SRT Hellcat', 'Tesla Model S Plaid', 
+             'Ford Mustang Shelby GT500', 'Porsche Taycan Turbo S', 'Aston Martin Vantage', 'Jaguar F-Type R', 'Lexus LC 500', 'Maserati MC20', 
+             'Chevrolet Camaro ZL1', 'Bentley Continental GT', 'Lotus Evija', 'Ferrari Roma', 'Porsche Panamera Turbo S'],
+    'Price': [433765, 385000, 308195, 316300, 417826, 85000, 207000, 139900, 130000, 140250, 113540, 142700, 72000, 129990, 
+              76000, 185000, 139000, 103200, 93000, 210000, 63000, 202500, 2000000, 222620, 153000],
+    'Performance': [788, 755, 740, 715, 730, 670, 640, 637, 617, 630, 565, 602, 707, 1020, 
+                    760, 761, 503, 575, 471, 621, 650, 626, 2000, 612, 620],
+    'Durability': [10, 20, 15, 12, 30, 22, 25, 18, 14, 17, 16, 19, 13, 21, 11, 23, 24, 28, 27, 26, 29, 31, 32, 33, 34]
+}
+
+df = pd.DataFrame(car_data)
+pareto_df = pareto_front(df)
+plot_pareto_3d(df[['Price', 'Performance', 'Durability']], pareto_df[['Price', 'Performance', 'Durability']])
