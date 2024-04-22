@@ -1,0 +1,190 @@
+import numpy as np
+import matplotlib.pyplot as plt
+
+def weighted_sum_method(data, weights):
+    """Apply the weighted sum method to optimize multiple objectives.
+    
+    Args:
+        data (np.array): A 2D numpy array with each row representing a solution and each column an objective.
+        weights (list): A list of weights corresponding to the importance of each objective.
+
+    Returns:
+        np.array: The solution that maximizes the weighted sum of objectives.
+    """
+    weighted_scores = np.dot(data, weights)
+    optimal_index = np.argmax(weighted_scores)
+    return data[optimal_index]
+
+# Example use case:
+# A manufacturer wants to optimize cost, quality, and time for a product.
+# Higher weight to cost, followed by quality and time.
+data = np.array([
+    [100, 80, 70],
+    [90, 85, 65],
+    [110, 75, 80]
+])
+weights = [0.5, 0.3, 0.2]  # Emphasis on cost
+optimal_solution = weighted_sum_method(data, weights)
+
+# Plotting
+plt.bar(['Cost', 'Quality', 'Time'], optimal_solution)
+plt.title('Optimal Solution by Weighted Sum Method')
+plt.show()
+
+def goal_programming(data, goals, weights):
+    """Apply goal programming to find the solution that minimizes the deviation from set goals.
+    
+    Args:
+        data (np.array): A 2D numpy array with each row representing a solution and each column an objective.
+        goals (list): Target goals for each objective.
+        weights (list): Weights indicating the priority of meeting each goal.
+
+    Returns:
+        np.array: The solution that minimizes the weighted deviations from the goals.
+    """
+    deviations = np.sum(weights * np.abs(data - goals), axis=1)
+    optimal_index = np.argmin(deviations)
+    return data[optimal_index]
+
+# Example use case:
+# Optimizing a supply chain for cost, delivery time, and quality with specific targets.
+goals = [90, 90, 75]
+weights = [0.4, 0.3, 0.3]
+optimal_solution = goal_programming(data, goals, weights)
+
+# Plotting
+plt.bar(['Cost', 'Delivery Time', 'Quality'], optimal_solution)
+plt.title('Optimal Solution by Goal Programming')
+plt.show()
+
+def compromise_programming(data, ideal, weights):
+    """Apply compromise programming to find the solution closest to the ideal using a weighted distance.
+    
+    Args:
+        data (np.array): A 2D numpy array of solutions.
+        ideal (list): The ideal values for each objective.
+        weights (list): Weights corresponding to each objective's importance.
+
+    Returns:
+        np.array: The solution closest to the ideal values.
+    """
+    distances = np.sqrt(np.sum(weights * ((data - ideal) ** 2), axis=1))
+    optimal_index = np.argmin(distances)
+    return data[optimal_index]
+
+# Example use case:
+# Selecting a project plan that is closest to the ideal cost, duration, and impact.
+ideal = [85, 90, 80]
+optimal_solution = compromise_programming(data, ideal, weights)
+
+# Plotting
+plt.bar(['Cost', 'Duration', 'Impact'], optimal_solution)
+plt.title('Optimal Solution by Compromise Programming')
+plt.show()
+
+import numpy as np
+import matplotlib.pyplot as plt
+from scipy.optimize import linprog
+
+def lexicographic_method(data, priorities):
+    """Apply lexicographic method to find the optimal solution based on a priority order of objectives.
+    
+    Args:
+        data (np.array): A 2D numpy array of solutions.
+        priorities (list): A list of column indices in the order of priority.
+    
+    Returns:
+        np.array: The optimal solution according to the lexicographic order.
+    """
+    for priority in priorities:
+        optimal_value = np.max(data[:, priority])
+        optimal_indices = np.where(data[:, priority] == optimal_value)[0]
+        data = data[optimal_indices]
+    return data[0]
+
+def multi_attribute_utility_theory(data, utilities, weights):
+    """Apply Multi-Attribute Utility Theory (MAUT) to find the optimal solution.
+    
+    Args:
+        data (np.array): A 2D numpy array of solutions.
+        utilities (list): A list of utility functions for each objective.
+        weights (list): Weights for each utility function.
+    
+    Returns:
+        np.array: The optimal solution maximizing the combined utility.
+    """
+    total_utility = np.sum([weights[i] * utilities[i](data[:, i]) for i in range(len(utilities))], axis=0)
+    optimal_index = np.argmax(total_utility)
+    return data[optimal_index]
+
+def analytic_hierarchy_process(data, comparison_matrix):
+    """Apply Analytic Hierarchy Process (AHP) to find the optimal solution.
+    
+    Args:
+        data (np.array): A 2D numpy array of solutions.
+        comparison_matrix (np.array): Pairwise comparison matrix for criteria weights.
+    
+    Returns:
+        np.array: The optimal solution according to the AHP weights.
+    """
+    # Eigenvalue method to find weights
+    eigvals, eigvecs = np.linalg.eig(comparison_matrix)
+    max_index = np.argmax(eigvals)
+    weights = np.abs(eigvecs[:, max_index])
+    weights /= weights.sum()
+    
+    scores = np.dot(data, weights)
+    optimal_index = np.argmax(scores)
+    return data[optimal_index]
+
+def genetic_algorithm(objective_function, bounds, population_size, generations):
+    """Simple genetic algorithm for optimization problems.
+    
+    Args:
+        objective_function (callable): The function to maximize.
+        bounds (list of tuples): Bounds for each variable (min, max).
+        population_size (int): The number of individuals in the population.
+        generations (int): The number of generations to evolve.
+    
+    Returns:
+        np.array: The best solution found.
+    """
+    # Initialize random population
+    population = np.random.rand(population_size, len(bounds))
+    population = population * (np.array(bounds)[:, 1] - np.array(bounds)[:, 0]) + np.array(bounds)[:, 0]
+    
+    for _ in range(generations):
+        # Evaluate fitness
+        fitness = np.array([objective_function(ind) for ind in population])
+        # Selection
+        parents_indices = np.argsort(fitness)[-population_size//2:]
+        # Crossover and mutation
+        children = []
+        while len(children) < population_size//2:
+            parent1, parent2 = population[np.random.choice(parents_indices, 2, replace=False)]
+            child = (parent1 + parent2) / 2  # Simple average crossover
+            mutation = np.random.randn(*child.shape) * 0.1  # Small random mutation
+            child += mutation
+            child = np.clip(child, np.array(bounds)[:, 0], np.array(bounds)[:, 1])  # Keep within bounds
+            children.append(child)
+        population[population_size//2:] = children
+    
+    # Find the best solution
+    best_index = np.argmax(np.array([objective_function(ind) for ind in population]))
+    return population[best_index]
+
+# Example usage of all methods
+data = np.array([
+    [100, 80, 70],
+    [90, 85, 65],
+    [110, 75, 80]
+])
+
+# Lexicographic Method
+priorities = [2, 1, 0]  # Prioritize the third column, then second, then first
+lexico_solution = lexicographic_method(data, priorities)
+
+# MAUT
+utilities = [lambda x: x/100, lambda x: x/85, lambda x: x/80]
+weights = [0.3, 0.5, 0.2]
+maut_solution = multi_attribute_utility_theory(data, utilities, weights)
