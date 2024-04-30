@@ -1,0 +1,45 @@
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+from sklearn.linear_model import LinearRegression
+
+def plot_scatter_with_exponential_regression_matplotlib(df, x_var, y_var, date_var, month):
+    # Convert the date_var to datetime, extract year, and filter by month
+    df[date_var] = pd.to_datetime(df[date_var])
+    df = df[df[date_var].dt.month == month]
+
+    # Plotting scatter
+    plt.figure(figsize=(10, 6))
+    for year in df[date_var].dt.year.unique():
+        year_data = df[df[date_var].dt.year == year]
+        plt.scatter(year_data[x_var], year_data[y_var], label=str(year))
+
+    # Prepare data for exponential regression
+    x_data = df[x_var].values.reshape(-1, 1)
+    y_data = df[y_var].values
+
+    # Ensure all y_data elements are positive
+    if np.any(y_data <= 0):
+        raise ValueError("All y values must be positive for exponential regression.")
+
+    # Transform y_data for a linear fit on the log of y_data
+    y_transformed = np.log(y_data)
+
+    # Linear Regression Model
+    model = LinearRegression()
+    model.fit(x_data, y_transformed)
+
+    # Create exponential regression curve
+    x_range = np.linspace(x_data.min(), x_data.max(), 100).reshape(-1, 1)
+    y_range = np.exp(model.predict(x_range))  # Inverse log transformation
+
+    # Plot regression curve
+    plt.plot(x_range, y_range, color='red', linewidth=2, label='Exponential Regression')
+
+    # Add labels and legend
+    plt.xlabel(x_var)
+    plt.ylabel(y_var)
+    plt.title(f"{x_var} vs {y_var} - Exponential Regression Analysis")
+    plt.legend()
+    plt.grid(True)
+    plt.show()
