@@ -1,0 +1,54 @@
+import pandas as pd
+
+def create_energy_timeseries(past, present, future):
+    # Adjusting DataFrame structure
+    past['Date'] = pd.to_datetime(past['Retire Date'])
+    future['Date'] = pd.to_datetime(future['Retire Date']).fillna(pd.to_datetime(future['Start Date']))
+    present['Date'] = pd.to_datetime(present['Start Date'])
+
+    # Combining all data into one DataFrame
+    all_plants = pd.concat([
+        present[['Plant Name', 'Date', 'MW Size', 'Gentype']],
+        past[['Plant Name', 'Date', 'MW Size', 'Gentype']],
+        future[['Plant Name', 'Date', 'MW Size', 'Gentype']]
+    ])
+
+    # Sorting by date
+    all_plants = all_plants.sort_values('Date')
+
+    # Create full date range from 1900 to 2040 monthly
+    full_date_range = pd.date_range(start='1900-01-01', end='2040-01-31', freq='M')
+
+    # Create a time series, fill forward within the given time frame
+    time_series = all_plants.groupby('Gentype').apply(
+        lambda x: x.set_index('Date')['MW Size'].cumsum().reindex(full_date_range, method='ffill')
+    ).unstack(level=0).fillna(method='ffill').fillna(0)
+
+    return time_series
+
+# Example usage with the provided data frames (assuming they are defined as before)
+past_df = pd.DataFrame({
+    'Plant Name': ['Plant A', 'Plant B'],
+    'Retire Date': ['2020-01-01', '2021-01-01'],
+    'Gentype': ['Coal', 'Solar'],
+    'MW Size': [-100, -200]
+})
+
+present_df = pd.DataFrame({
+    'Plant Name': ['Plant C', 'Plant D'],
+    'Start Date': ['2019-01-01', '2020-01-01'],
+    'MW Size': [300, 400],
+    'Gentype': ['Wind', 'Nuclear']
+})
+
+future_df = pd.DataFrame({
+    'Plant Name': ['Plant E', 'Plant F', 'New Gas Plant'],
+    'Retire Date': ['2030-01-01', pd.NA, pd.NA],
+    'Start Date': [pd.NA, '2025-01-01', '2023-07-01'],
+    'MW Size': [-500, 600, 1000],
+    'Gentype': ['Coal', 'Solar', 'Gas']
+})
+
+# Generate the time series
+energy_time_series = create_energy_timeseries(past_df, present_df, future_df)
+print(energy_time_series.head())
