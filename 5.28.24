@@ -1,0 +1,49 @@
+import pandas as pd
+
+def create_timeseries(retire_df, present_df, future_df):
+    # Generate a date range from 2000-01 to 2040-12
+    date_range = pd.date_range(start='2000-01-01', end='2040-12-31', freq='MS')
+
+    # Initialize an empty DataFrame to hold the timeseries
+    timeseries = pd.DataFrame(index=date_range)
+    
+    # Add current operating systems to the timeseries
+    for fuel in present_df['Fuel'].unique():
+        fuel_present = present_df[present_df['Fuel'] == fuel]
+        start_dates = pd.to_datetime(fuel_present['Start date'])
+        size = fuel_present['Size MW'].sum()
+        timeseries[fuel] = 0
+        for start_date in start_dates:
+            timeseries.loc[start_date:, fuel] += size
+    
+    # Subtract retired systems based on retire date
+    for fuel in retire_df['Fuel'].unique():
+        fuel_retire = retire_df[retire_df['Fuel'] == fuel]
+        retire_dates = pd.to_datetime(fuel_retire['Retire date'])
+        size = fuel_retire['Size MW'].sum()
+        if fuel not in timeseries.columns:
+            timeseries[fuel] = 0
+        for retire_date in retire_dates:
+            timeseries.loc[retire_date:, fuel] -= size
+
+    # Add future systems based on start date
+    for fuel in future_df['Fuel'].unique():
+        fuel_future = future_df[future_df['Fuel'] == fuel]
+        start_dates = pd.to_datetime(fuel_future['Start date'])
+        size = fuel_future['Size MW'].sum()
+        if fuel not in timeseries.columns:
+            timeseries[fuel] = 0
+        for start_date in start_dates:
+            timeseries.loc[start_date:, fuel] += size
+    
+    # Fill any missing values with the previous value
+    timeseries = timeseries.cumsum().fillna(method='ffill')
+
+    return timeseries
+
+# Example usage:
+# retire_df = pd.DataFrame({'Name': [...], 'Retire date': [...], 'Fuel': [...], 'Size MW': [...]})
+# present_df = pd.DataFrame({'Name': [...], 'Fuel': [...], 'Start date': [...], 'Size MW': [...]})
+# future_df = pd.DataFrame({'Name': [...], 'Fuel': [...], 'Start date': [...], 'Size MW': [...]})
+
+# timeseries = create_timeseries(retire_df, present_df, future_df)
