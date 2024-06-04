@@ -1,0 +1,56 @@
+import numpy as np
+import matplotlib.pyplot as plt
+from scipy.optimize import curve_fit
+import pandas as pd
+
+def plot_scatter_with_exp_regression(df, data_col, date_col, months, years):
+    # Filter the DataFrame based on the specified months and years
+    df[date_col] = pd.to_datetime(df[date_col])
+    df_filtered = df[df[date_col].dt.month.isin(months) & df[date_col].dt.year.isin(years)]
+    
+    # Extract the relevant columns
+    x = df_filtered[date_col].map(lambda d: (d - pd.Timestamp("1970-01-01")) // pd.Timedelta('1D')).values
+    y = df_filtered[data_col].values
+
+    # Define the exponential function
+    def exp_func(x, a, b, c):
+        return a * np.exp(b * x) + c
+
+    # Fit the exponential curve
+    popt, pcov = curve_fit(exp_func, x, y, p0=(1, 1e-6, 1))
+
+    # Generate points for the fitted curve
+    x_fit = np.linspace(min(x), max(x), 100)
+    y_fit = exp_func(x_fit, *popt)
+
+    # Create scatter plot
+    plt.scatter(x, y, label='Data')
+
+    # Plot the exponential regression line
+    plt.plot(x_fit, y_fit, color='red', label='Exponential fit: a*exp(b*x) + c')
+
+    # Add labels and legend
+    plt.xlabel('Days since 1970-01-01')
+    plt.ylabel(data_col)
+    plt.legend()
+    plt.show()
+
+    # Create DataFrame for specific intervals
+    x_intervals = np.arange(min(x), max(x) + 0.01, 0.25)
+    y_predictions = exp_func(x_intervals, *popt)
+    df_predictions = pd.DataFrame({'X': x_intervals, 'Predicted_Y': y_predictions})
+
+    return df_predictions
+
+# Example usage
+df = pd.DataFrame({
+    'Date': pd.date_range(start='2023-01-01', periods=100, freq='D'),
+    'Temperature': np.random.rand(100) * 30 + 20  # Random temperatures between 20 and 50 degrees
+})
+data_col = 'Temperature'
+date_col = 'Date'
+months = [1, 2, 3]
+years = [2023]
+df_predictions = plot_scatter_with_exp_regression(df, data_col, date_col, months, years)
+
+import ace_tools as tools; tools.display_dataframe_to_user(name="Predicted Values", dataframe=df_predictions)
