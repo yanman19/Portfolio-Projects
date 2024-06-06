@@ -1,0 +1,59 @@
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+import seaborn as sns
+from sklearn.preprocessing import PolynomialFeatures
+from sklearn.linear_model import LinearRegression
+from sklearn.metrics import r2_score
+
+def plot_polynomial_regression(df, x_col, y_col, date_col, months, years, degree=2):
+    # Filter dataframe based on the specified months and years
+    df[date_col] = pd.to_datetime(df[date_col])
+    df = df[df[date_col].dt.month.isin(months) & df[date_col].dt.year.isin(years)]
+    
+    # Create a column for the year to use for coloring
+    df['Year'] = df[date_col].dt.year
+    
+    # Prepare the data for regression
+    X = df[[x_col]].values
+    y = df[y_col].values
+    
+    # Perform polynomial transformation for the specified degree
+    poly = PolynomialFeatures(degree=degree)
+    X_poly = poly.fit_transform(X)
+    
+    # Fit the model
+    model = LinearRegression()
+    model.fit(X_poly, y)
+    
+    # Predict the values for the curve
+    y_pred = model.predict(X_poly)
+    
+    # Calculate the r-squared value
+    r2 = r2_score(y, y_pred)
+    
+    # Prepare the predicted curve dataframe
+    curve_df = pd.DataFrame({x_col: df[x_col], 'y_hat': y_pred})
+    
+    # Plot the scatter with different colors for each year
+    plt.figure(figsize=(10, 6))
+    sns.scatterplot(data=df, x=x_col, y=y_col, hue='Year', palette='viridis')
+    
+    # Plot the predicted polynomial curve
+    sorted_indices = np.argsort(X[:, 0])
+    plt.plot(X[sorted_indices], y_pred[sorted_indices], color='red', label=f'Polynomial Fit (R² = {r2:.2f})')
+    
+    # Add legend and labels
+    plt.legend()
+    plt.xlabel(x_col)
+    plt.ylabel(y_col)
+    plt.title(f'{x_col} vs {y_col} - Polynomial Regression')
+    
+    # Show plot
+    plt.show()
+    
+    return curve_df
+
+# Example usage:
+# df = pd.read_csv('data.csv')
+# plot_polynomial_regression(df, 'X', 'Y', 'Date', [1, 2, 3], [2022, 2023], degree=2)
