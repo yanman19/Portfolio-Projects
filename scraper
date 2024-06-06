@@ -1,0 +1,19 @@
+pip install pandas lxml
+import pandas as pd
+
+# URL of the page to scrape
+url = "https://fbref.com/en/comps/Big5/stats/players/Big-5-European-Leagues-Stats"
+
+# Read all tables from the URL
+tables = pd.read_html(url)
+
+# Assuming the first table is the one we need
+df = tables[0]
+
+# Clean up the headers by combining multi-level columns into single level
+df.columns = df.columns.map(' '.join).str.strip()
+
+# Save the DataFrame to a CSV file
+df.to_csv('player_standard_stats_2023_2024.csv', index=False)
+
+print("CSV file has been created successfully.")
