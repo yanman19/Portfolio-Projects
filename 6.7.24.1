@@ -1,0 +1,34 @@
+import pandas as pd
+import numpy as np
+
+# Assuming curve_df is your dataframe with columns ['x_col', 'y_hat', 'y_min', 'y_max']
+def group_by_x_intervals(curve_df, x_col, interval=0.25):
+    # Create bins for every 0.25 value in x_col
+    bins = np.arange(curve_df[x_col].min(), curve_df[x_col].max() + interval, interval)
+    labels = bins[:-1] + interval / 2  # Label bins with the midpoint
+    
+    # Bin the x_col values
+    curve_df['x_bin'] = pd.cut(curve_df[x_col], bins=bins, labels=labels, include_lowest=True)
+    
+    # Group by the bins and calculate the mean of y_hat, y_min, and y_max
+    grouped_df = curve_df.groupby('x_bin').agg(
+        y_hat_avg=('y_hat', 'mean'),
+        y_min_avg=('y_min', 'mean'),
+        y_max_avg=('y_max', 'mean')
+    ).reset_index()
+    
+    # Rename the x_bin column to x_col for consistency
+    grouped_df = grouped_df.rename(columns={'x_bin': x_col})
+    
+    return grouped_df
+
+# Example usage:
+# curve_df = pd.DataFrame({
+#     'x_col': np.random.rand(100) * 10,  # Random x values between 0 and 10
+#     'y_hat': np.random.rand(100),       # Random y_hat values
+#     'y_min': np.random.rand(100),       # Random y_min values
+#     'y_max': np.random.rand(100)        # Random y_max values
+# })
+
+grouped_curve_df = group_by_x_intervals(curve_df, 'x_col', interval=0.25)
+print(grouped_curve_df)
