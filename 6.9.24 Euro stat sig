@@ -1,0 +1,55 @@
+import pandas as pd
+import math
+from scipy.stats import norm
+
+# Function to calculate required goals for significance
+def required_goals_for_significance(probabilities, alpha=0.05, power=0.8):
+    n_players = len(probabilities)
+    if n_players < 2:
+        return float('inf')  # If there is only one player, we can't calculate significance
+    p1 = probabilities[0]
+    p2 = probabilities[1]
+    effect_size = abs(p1 - p2)
+    
+    z_alpha = abs(norm.ppf(alpha / 2))  # Z value for the significance level
+    z_beta = abs(norm.ppf(power))       # Z value for the power
+    
+    # Calculate sample size using the formula for comparing two proportions
+    p_bar = (p1 + p2) / 2
+    q_bar = 1 - p_bar
+    sample_size = ((z_alpha * math.sqrt(2 * p_bar * q_bar)) + (z_beta * math.sqrt(p1 * (1 - p1) + p2 * (1 - p2)))) ** 2 / (effect_size ** 2)
+    
+    return math.ceil(sample_size)
+
+# Main function to add required goals column
+def add_required_goals(df, nationality_col='Nationality', probability_col='% Country top', alpha=0.05, power=0.8):
+    result_df = df.copy()
+    result_df['Goals Needed'] = float('inf')  # Initialize with infinity
+    
+    # Get unique nationalities
+    nationalities = result_df[nationality_col].unique()
+    
+    for nationality in nationalities:
+        # Filter players from the same nationality
+        subset = result_df[result_df[nationality_col] == nationality]
+        probabilities = subset[probability_col].tolist()
+        probabilities.sort(reverse=True)  # Sort probabilities in descending order
+        
+        # Calculate required goals for this nationality
+        required_goals = required_goals_for_significance(probabilities, alpha, power)
+        
+        # Update the dataframe with the calculated value
+        result_df.loc[result_df[nationality_col] == nationality, 'Goals Needed'] = required_goals
+    
+    return result_df
+
+# Example usage
+data = {
+    'Player': ['Player1', 'Player2', 'Player3', 'Player4', 'Player5', 'Player6'],
+    'Nationality': ['Country1', 'Country1', 'Country2', 'Country2', 'Country3', 'Country3'],
+    '% Country top': [0.3, 0.25, 0.4, 0.35, 0.2, 0.15]
+}
+
+df = pd.DataFrame(data)
+result_df = add_required_goals(df)
+print(result_df)
