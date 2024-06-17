@@ -1,0 +1,28 @@
+import pandas as pd
+from datetime import datetime
+import os
+
+# Assume 'predictions' is your existing dataframe with the prediction data
+predictions = pd.DataFrame({
+    'Prediction': [0.5, 0.7, 0.3],
+    'OtherData': [1, 2, 3]
+})
+
+# Get today's date
+today_date = datetime.today().strftime('%Y-%m-%d')
+
+# Add today's date as a column to the predictions dataframe
+predictions['Date'] = today_date
+
+# Define the filename
+filename = 'vintage_predictions.csv'
+
+# Check if the file exists
+if os.path.isfile(filename):
+    # Append the new predictions to the existing CSV
+    predictions.to_csv(filename, mode='a', header=False, index=False)
+else:
+    # Save the dataframe to a new CSV if the file does not exist
+    predictions.to_csv(filename, index=False)
+
+print(predictions)
