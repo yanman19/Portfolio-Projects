@@ -1,0 +1,74 @@
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+import seaborn as sns
+from sklearn.preprocessing import PolynomialFeatures
+from sklearn.linear_model import LinearRegression
+from sklearn.metrics import mean_absolute_error, mean_squared_error
+
+def plot_polynomial_regression(df, x_col, y_col, date_col, months, years, degree=2, prediction_df=None):
+    # Convert the date column to datetime
+    df[date_col] = pd.to_datetime(df[date_col])
+
+    # Filter dataframe based on the specified months and years
+    df = df[df[date_col].dt.month.isin(months) & df[date_col].dt.year.isin(years)]
+
+    # Create a column for the year to use for coloring
+    df['year'] = df[date_col].dt.year
+
+    # Prepare the data for regression
+    x = df[[x_col]].values
+    y = df[y_col].values
+
+    # Perform polynomial transformation for the specified degree
+    poly = PolynomialFeatures(degree=degree)
+    x_poly = poly.fit_transform(x)
+
+    # Fit the model
+    model = LinearRegression()
+    model.fit(x_poly, y)
+
+    # Predict the values for the curve
+    y_pred = model.predict(x_poly)
+
+    # Calculate the MAE and MSE
+    mae = mean_absolute_error(y, y_pred)
+    mse = mean_squared_error(y, y_pred)
+
+    # Prepare the predicted curve dataframe
+    curve_df = pd.DataFrame({x_col: df[x_col], 'y_hat': y_pred})
+    
+    # Predict values for the additional dataframe if provided
+    if prediction_df is not None:
+        prediction_x = prediction_df[[x_col]].values
+        prediction_x_poly = poly.transform(prediction_x)
+        prediction_df['y_pred'] = model.predict(prediction_x_poly)
+
+    # Plot the scatter with different colors for each year
+    plt.figure(figsize=(12, 6))
+    sns.scatterplot(data=df, x=x_col, y=y_col, hue='year', palette='colorblind')
+
+    # Plot the predicted polynomial curve
+    sorted_indices = np.argsort(x[:, 0])
+    plt.plot(x[sorted_indices], y_pred[sorted_indices], color='red', label=f'Polynomial Fit (MAE = {mae:.2f}, MSE = {mse:.2f})')
+
+    # Add legend and labels
+    plt.legend()
+    plt.xlabel(x_col)
+    plt.ylabel(y_col)
+    plt.title(f'{y_col} vs {x_col} - {months} months')
+
+    # Show plot
+    plt.show()
+
+    # Round and sort the curve_df for output
+    curve_df = curve_df.round(1)
+    curve_df = curve_df.drop_duplicates(subset=x_col)
+    curve_df = curve_df.sort_values(by=x_col, ascending=False)
+    
+    return curve_df, prediction_df if prediction_df is not None else curve_df
+
+# Example usage (assuming you have a dataframe `df` and `pred_df`):
+# df = pd.read_csv('your_data.csv')
+# pred_df = pd.read_csv('your_prediction_data.csv')
+# curve_df, predictions = plot_polynomial_regression(df, 'x_column_name', 'y_column_name', 'date_column_name', [1, 2, 3], [2020, 2021], degree=3, prediction_df=pred_df)
