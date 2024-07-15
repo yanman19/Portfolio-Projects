@@ -1,0 +1,55 @@
+import pandas as pd
+from fbprophet import Prophet
+from sklearn.metrics import mean_squared_error, mean_absolute_error
+import matplotlib.pyplot as plt
+
+def prophet_forecast(dataframe, target_col, datetime_col, prediction_df):
+    # Prepare the data for Prophet
+    df = dataframe.rename(columns={datetime_col: 'ds', target_col: 'y'})
+    
+    # Select predictors
+    predictors = [col for col in df.columns if col not in ['ds', 'y']]
+    
+    # Split the data into train and test
+    train = df.iloc[:-120]
+    test = df.iloc[-120:]
+    
+    # Initialize and fit the Prophet model with additional regressors
+    model = Prophet()
+    for predictor in predictors:
+        model.add_regressor(predictor)
+    model.fit(train)
+    
+    # Make predictions on the test set
+    test_future = test[['ds'] + predictors]
+    test_forecast = model.predict(test_future)
+    
+    # Combine the test set with the predictions
+    test_df = test.copy()
+    test_df['yhat'] = test_forecast['yhat'].values
+    
+    # Calculate error metrics
+    mse = mean_squared_error(test_df['y'], test_df['yhat'])
+    mae = mean_absolute_error(test_df['y'], test_df['yhat'])
+    
+    # Plot the results
+    plt.figure(figsize=(10, 6))
+    plt.plot(test_df['ds'], test_df['y'], label='Realized Values')
+    plt.plot(test_df['ds'], test_df['yhat'], label='Predicted Values')
+    plt.legend()
+    plt.title(f'Realized vs Predicted Values\nMSE: {mse:.2f}, MAE: {mae:.2f}')
+    plt.xlabel('Date')
+    plt.ylabel(target_col)
+    plt.show()
+    
+    # Prepare the prediction dataframe
+    prediction_future = prediction_df.rename(columns={datetime_col: 'ds'})
+    for predictor in predictors:
+        model.add_regressor(predictor)
+    prediction_forecast = model.predict(prediction_future)
+    predict_df = prediction_forecast[['ds', 'yhat']].rename(columns={'ds': datetime_col, 'yhat': target_col})
+    
+    return test_df, plt, predict_df
+
+# Example usage:
+# test_df, plot, predict_df = prophet_forecast(dataframe, 'target_column', 'date_column', prediction_df)
