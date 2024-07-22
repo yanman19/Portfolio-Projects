@@ -1,0 +1,81 @@
+import pandas as pd
+from datetime import datetime
+from fbprophet import Prophet
+import matplotlib.pyplot as plt
+
+def weathergetter(start_date, end_date):
+    # Dummy function to simulate pulling hourly weather data
+    date_range = pd.date_range(start=start_date, end=end_date, freq='H')
+    data = {'temp': range(len(date_range))}
+    df = pd.DataFrame(data, index=date_range)
+    return df
+
+def create_monthly_dataframes(month, start_year, end_year):
+    dataframes = {}
+    
+    for year in range(start_year, end_year + 1):
+        start_date = datetime(year, month, 1)
+        if month == 12:
+            end_date = datetime(year + 1, 1, 1) - pd.Timedelta(days=1)
+        else:
+            end_date = datetime(year, month + 1, 1) - pd.Timedelta(days=1)
+        
+        df = weathergetter(start_date, end_date)
+        df['datetime'] = df.index  # Add the 'datetime' column which is just the index
+        dataframes[f'{year}_{month}'] = df[['datetime', 'temp']]  # Select only the 'datetime' and 'temp' columns
+    
+    return dataframes
+
+def prophet_forecast(model, dataframe, datetime_col, prediction_df):
+    # Prepare the data for Prophet
+    df = dataframe.rename(columns={datetime_col: 'ds'})
+    
+    # Select predictors
+    predictors = [col for col in df.columns if col not in ['ds']]
+    
+    # Prepare the prediction dataframe
+    prediction_future = prediction_df.rename(columns={datetime_col: 'ds'})
+    prediction_forecast = model.predict(prediction_future[['ds'] + predictors])
+    predict_df = prediction_forecast[['ds', 'yhat']].rename(columns={'ds': datetime_col, 'yhat': 'predicted_temp'})
+    
+    return predict_df
+
+def apply_model_to_dataframes(model, dataframes, datetime_col='datetime'):
+    prediction_dfs = {}
+    
+    for key, df in dataframes.items():
+        print(f"Forecasting for: {key}")
+        
+        # Prepare prediction DataFrame for the next month
+        next_month_start = df[datetime_col].max() + pd.Timedelta(hours=1)
+        next_month_end = next_month_start + pd.DateOffset(months=1) - pd.Timedelta(hours=1)
+        prediction_df = pd.DataFrame({datetime_col: pd.date_range(start=next_month_start, end=next_month_end, freq='H')})
+        
+        # Apply the trained model to get predictions
+        predict_df = prophet_forecast(model, df, datetime_col, prediction_df)
+        
+        # Store the predictions in the dictionary
+        prediction_dfs[key] = predict_df
+    
+    return prediction_dfs
+
+# Example usage
+month = 8
+start_year = 2000
+end_year = 2023
+dataframes = create_monthly_dataframes(month, start_year, end_year)
+
+# Assume you have a pre-trained Prophet model
+trained_model = Prophet()
+# Dummy fitting the model to make the example run (replace with your actual trained model)
+dummy_data = pd.DataFrame({
+    'ds': pd.date_range(start='2020-01-01', periods=100, freq='D'),
+    'y': range(100)
+})
+trained_model.fit(dummy_data)
+
+# Apply the model to the dictionary of dataframes
+prediction_dfs = apply_model_to_dataframes(trained_model, dataframes)
+
+# Access and print a specific prediction DataFrame
+print(prediction_dfs['2020_8'].head())
