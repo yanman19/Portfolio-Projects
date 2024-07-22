@@ -1,0 +1,31 @@
+import pandas as pd
+from datetime import datetime
+
+def weathergetter(start_date, end_date):
+    # Dummy function to simulate pulling hourly weather data
+    date_range = pd.date_range(start=start_date, end=end_date, freq='H')
+    data = {'Datetime': date_range, 'Value': range(len(date_range))}
+    return pd.DataFrame(data)
+
+def create_monthly_dataframes(month, start_year, end_year):
+    dataframes = {}
+    
+    for year in range(start_year, end_year + 1):
+        start_date = datetime(year, month, 1)
+        if month == 12:
+            end_date = datetime(year + 1, 1, 1) - pd.Timedelta(days=1)
+        else:
+            end_date = datetime(year, month + 1, 1) - pd.Timedelta(days=1)
+        
+        dataframes[f'{year}_{month}'] = weathergetter(start_date, end_date)
+    
+    return dataframes
+
+# Example usage
+month = 8
+start_year = 2000
+end_year = 2023
+dataframes = create_monthly_dataframes(month, start_year, end_year)
+
+# Accessing a specific dataframe
+print(dataframes['2020_8'])
