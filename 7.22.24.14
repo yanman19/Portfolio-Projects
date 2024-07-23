@@ -1,0 +1,51 @@
+def add_date_column_and_groupby_day(dataframes):
+    grouped_dataframes = {}
+
+    for key in dataframes:
+        df = dataframes[key].copy()
+        
+        # Ensure 'Datetime1' column exists
+        if 'Datetime1' not in df.columns:
+            raise ValueError(f"Dataframe '{key}' does not contain required column: 'Datetime1'")
+        
+        # Add 'date' column
+        df['date'] = df['Datetime1'].dt.date
+        
+        # Group by 'date'
+        grouped_df = df.groupby('date').mean().reset_index()
+        
+        # Store the grouped dataframe in the new dictionary
+        grouped_dataframes[key] = grouped_df
+    
+    return grouped_dataframes
+
+def create_summary_dataframe(grouped_dataframes):
+    summary_list = []
+
+    for key in grouped_dataframes:
+        df = grouped_dataframes[key]
+        
+        # Calculate the average of all dates
+        average_values = df.mean(numeric_only=True)
+        
+        # Extract the year from the key or 'Datetime1' column
+        year = int(key.split('_')[0])
+        
+        # Create a summary dictionary
+        summary_dict = {'Year': year}
+        summary_dict.update(average_values)
+        
+        summary_list.append(summary_dict)
+    
+    # Create a new dataframe from the summary list
+    summary_df = pd.DataFrame(summary_list)
+    
+    return summary_df
+
+# Usage
+# Assuming `dataframes` is your dictionary of dataframes
+grouped_dataframes = add_date_column_and_groupby_day(dataframes)
+summary_df = create_summary_dataframe(grouped_dataframes)
+
+# Display the summary dataframe
+print(summary_df)
