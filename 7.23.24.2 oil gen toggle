@@ -1,0 +1,24 @@
+import pandas as pd
+
+# Example dictionary of dataframes
+dataframes_dict = {
+    'df1': pd.DataFrame({'DALoad': [19, 21, 23], 'oilGen': [1, 1, 1]}),
+    'df2': pd.DataFrame({'DALoad': [18, 20.5, 22.5], 'oilGen': [1, 1, 1]})
+}
+
+def update_oilGen(df):
+    conditions = [
+        (df['DALoad'] <= 20),
+        (df['DALoad'] > 20) & (df['DALoad'] <= 22),
+        (df['DALoad'] > 22)
+    ]
+    choices = [0, 0.5, 1]
+    df['oilGen'] = pd.cut(df['DALoad'], bins=[-float('inf'), 20, 22, float('inf')], labels=[0, 0.5, 1], right=False).astype(float)
+    return df
+
+for name, df in dataframes_dict.items():
+    dataframes_dict[name] = update_oilGen(df)
+
+# Display the updated dataframes
+for name, df in dataframes_dict.items():
+    print(f"{name}:\n{df}\n")
