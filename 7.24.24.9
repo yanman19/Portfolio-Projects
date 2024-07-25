@@ -1,0 +1,23 @@
+import pandas as pd
+
+# Assume the data is in a CSV file named 'data.csv'
+# df = pd.read_csv('data.csv')
+
+# Since we don't have the actual file, I will create a sample DataFrame based on the image provided
+data = {
+    'Datetime1': ['8/9/2024 10:00', '8/30/2024 12:00', '8/24/2024 12:00', '8/24/2024 10:00', 
+                  '8/24/2024 8:00', '8/25/2024 9:00', '8/31/2024 8:00', '8/18/2024 10:00'],
+    'KeyName': ['2017_8', '2012_8', '2003_8', '2003_8', '2003_8', '1995_8', '2006_8', '2007_8']
+}
+
+df = pd.DataFrame(data)
+
+# Extract the new year from the KeyName column
+df['NewYear'] = df['KeyName'].apply(lambda x: x.split('_')[0])
+
+# Convert Datetime1 to datetime format and replace the year
+df['Datetime1'] = pd.to_datetime(df['Datetime1'])
+df['DateTime2'] = df.apply(lambda row: row['Datetime1'].replace(year=int(row['NewYear'])), axis=1)
+
+# Display the resulting DataFrame
+print(df[['Datetime1', 'DateTime2', 'KeyName']])
