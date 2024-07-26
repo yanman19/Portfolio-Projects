@@ -1,0 +1,80 @@
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+
+def adjust_distribution(df, x_col, months, years, input_price):
+    # Ensure the date column is datetime
+    df['date'] = pd.to_datetime(df['date'])
+
+    # Filter dataframe based on months and years
+    df['month'] = df['date'].dt.month
+    df['year'] = df['date'].dt.year
+    filtered_df = df[(df['month'].isin(months)) & (df['year'].isin(years))]
+    
+    # Plot the original distribution of x_col counts
+    original_distribution = filtered_df[x_col].value_counts().sort_index()
+    original_avg = filtered_df[x_col].mean()
+    
+    # Adjust the values in the filtered dataframe
+    adjustment_factor = input_price / original_avg
+    filtered_df[x_col] *= adjustment_factor
+    
+    # Plot the adjusted distribution
+    adjusted_distribution = filtered_df[x_col].value_counts().sort_index()
+    adjusted_avg = filtered_df[x_col].mean()
+    
+    # Plotting the distributions
+    plt.figure(figsize=(14, 7))
+
+    plt.subplot(1, 2, 1)
+    original_distribution.plot(kind='bar', color='blue')
+    plt.axhline(y=original_avg, color='red', linestyle='--', label=f'Original Avg: {original_avg:.2f}')
+    plt.xlabel(x_col)
+    plt.ylabel('Count')
+    plt.title('Original Distribution')
+    plt.legend()
+
+    plt.subplot(1, 2, 2)
+    adjusted_distribution.plot(kind='bar', color='green')
+    plt.axhline(y=adjusted_avg, color='red', linestyle='--', label=f'Adjusted Avg: {adjusted_avg:.2f}')
+    plt.xlabel(x_col)
+    plt.ylabel('Count')
+    plt.title('Adjusted Distribution')
+    plt.legend()
+    
+    plt.show()
+    
+    return filtered_df
+
+def adjust_distribution_dict(df_dict, x_col, months, years, input_price):
+    adjusted_dict = {}
+    for key, df in df_dict.items():
+        adjusted_df = adjust_distribution(df, x_col, months, years, input_price)
+        adjusted_dict[key] = adjusted_df
+    return adjusted_dict
+
+# Example usage:
+# Assuming you have a dictionary of dataframes `df_dict` with columns 'date' and 'price'
+df_dict = {
+    'df1': pd.DataFrame({
+        'date': pd.date_range(start='1/1/2020', periods=100, freq='D'),
+        'price': np.random.randint(1, 4, size=100)
+    }),
+    'df2': pd.DataFrame({
+        'date': pd.date_range(start='1/1/2020', periods=100, freq='D'),
+        'price': np.random.randint(1, 4, size=100)
+    }),
+    'df3': pd.DataFrame({
+        'date': pd.date_range(start='1/1/2020', periods=100, freq='D'),
+        'price': np.random.randint(1, 4, size=100)
+    }),
+    'df4': pd.DataFrame({
+        'date': pd.date_range(start='1/1/2020', periods=100, freq='D'),
+        'price': np.random.randint(1, 4, size=100)
+    })
+}
+
+adjusted_df_dict = adjust_distribution_dict(df_dict, 'price', [1, 2], [2020], 3)
+for key, adjusted_df in adjusted_df_dict.items():
+    print(f"{key} adjusted dataframe:")
+    print(adjusted_df)
