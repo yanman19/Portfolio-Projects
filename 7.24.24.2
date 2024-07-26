@@ -1,0 +1,50 @@
+import pandas as pd
+
+def daily_average(df1, df2, df3, df4, target_col):
+    # Ensure the date columns are datetime
+    df1['date'] = pd.to_datetime(df1['date'])
+    df2['date'] = pd.to_datetime(df2['date'])
+    df3['date'] = pd.to_datetime(df3['date'])
+    df4['date'] = pd.to_datetime(df4['date'])
+
+    # Group by date and calculate the mean for each dataframe
+    df1_avg = df1.groupby('date')[target_col].mean().reset_index()
+    df2_avg = df2.groupby('date')[target_col].mean().reset_index()
+    df3_avg = df3.groupby('date')[target_col].mean().reset_index()
+    df4_avg = df4.groupby('date')[target_col].mean().reset_index()
+
+    # Merge the dataframes on the date column
+    merged_df = df1_avg.merge(df2_avg, on='date', suffixes=('_df1', '_df2'))
+    merged_df = merged_df.merge(df3_avg, on='date').rename(columns={target_col: target_col + '_df3'})
+    merged_df = merged_df.merge(df4_avg, on='date').rename(columns={target_col: target_col + '_df4'})
+
+    # Calculate the daily average across the 4 dataframes
+    merged_df['daily_average'] = merged_df[[target_col + '_df1', target_col + '_df2', target_col + '_df3', target_col + '_df4']].mean(axis=1)
+
+    # Return the result
+    return merged_df[['date', 'daily_average']]
+
+# Example usage:
+# Assuming you have 4 dataframes df1, df2, df3, df4 each with columns 'date' and 'price'
+df1 = pd.DataFrame({
+    'date': pd.date_range(start='1/1/2020', periods=10, freq='D'),
+    'price': np.random.randint(1, 4, size=10)
+})
+
+df2 = pd.DataFrame({
+    'date': pd.date_range(start='1/1/2020', periods=10, freq='D'),
+    'price': np.random.randint(1, 4, size=10)
+})
+
+df3 = pd.DataFrame({
+    'date': pd.date_range(start='1/1/2020', periods=10, freq='D'),
+    'price': np.random.randint(1, 4, size=10)
+})
+
+df4 = pd.DataFrame({
+    'date': pd.date_range(start='1/1/2020', periods=10, freq='D'),
+    'price': np.random.randint(1, 4, size=10)
+})
+
+average_df = daily_average(df1, df2, df3, df4, 'price')
+print(average_df)
