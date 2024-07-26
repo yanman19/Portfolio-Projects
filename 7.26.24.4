@@ -1,0 +1,27 @@
+import pandas as pd
+
+# Example dictionary of time dataframes
+time_dataframes = {
+    'df1': pd.DataFrame({
+        'Datetime1': pd.date_range(start='2023-01-01', periods=5, freq='D'),
+        'Value': [10, 20, 30, 40, 50]
+    }),
+    'df2': pd.DataFrame({
+        'Datetime1': pd.date_range(start='2023-01-06', periods=5, freq='D'),
+        'Value': [60, 70, 80, 90, 100]
+    })
+}
+
+# Example prices dataframe
+prices_df = pd.DataFrame({
+    'Datetime1': pd.date_range(start='2023-01-01', periods=10, freq='D'),
+    'Price': [100, 200, 300, 400, 500, 600, 700, 800, 900, 1000]
+})
+
+# Apply prices to each dataframe in the dictionary
+for key in time_dataframes:
+    time_dataframes[key] = time_dataframes[key].merge(prices_df, on='Datetime1', how='left')
+
+# Display the updated dataframes
+for key, df in time_dataframes.items():
+    print(f"Updated {key}:\n{df}\n")
