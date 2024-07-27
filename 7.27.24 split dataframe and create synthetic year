@@ -1,0 +1,33 @@
+import pandas as pd
+
+def split_dataframe_by_month_and_year(df, input_month, input_year):
+    # Ensure the datetime column is in datetime format
+    df['datetime'] = pd.to_datetime(df['datetime'])
+    
+    # Filter the dataframe for the given month
+    df_filtered = df[df['datetime'].dt.month == input_month].copy()
+    
+    # Update the year in the datetime column
+    df_filtered['Datetime1'] = df_filtered['datetime'].apply(lambda x: x.replace(year=input_year))
+    
+    # Drop the original datetime column
+    df_filtered = df_filtered.drop(columns=['datetime'])
+    
+    # Create a dictionary to store dataframes for each year
+    dfs_by_year = {}
+    
+    # Group by year and create a dataframe for each year
+    for year, group in df_filtered.groupby(df_filtered['Datetime1'].dt.year):
+        key = f"{year}_{input_month}"
+        dfs_by_year[key] = group
+    
+    return dfs_by_year
+
+# Example usage:
+# df = pd.DataFrame({
+#     'datetime': ['2020-07-01', '2020-07-02', '2019-07-01', '2019-07-02', '2020-08-01'],
+#     'load': [100, 150, 200, 250, 300],
+#     'price': [10, 15, 20, 25, 30]
+# })
+# result = split_dataframe_by_month_and_year(df, 7, 2024)
+# print(result)
