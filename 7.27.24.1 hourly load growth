@@ -1,0 +1,41 @@
+import pandas as pd
+
+# Prebuilt dictionary for hourly multipliers
+hourly_load_growth = {
+    8: 1, 9: 1, 10: 1, 11: 1, 12: 1, 13: 1, 14: 1,
+    15: 1, 16: 1, 17: 1, 18: 1, 19: 1, 20: 1, 21: 1,
+    22: 1, 23: 1
+}
+
+# Function to apply hourly multipliers to 'DALoad' in the dictionary of dataframes
+def apply_hourly_multipliers(df_dict, hourly_multipliers):
+    """
+    Applies hourly multipliers to the 'DALoad' column of each dataframe in the dictionary.
+    
+    Parameters:
+    df_dict (dict): A dictionary of dataframes.
+    hourly_multipliers (dict): A dictionary of hourly multipliers for hours 8 through 23.
+    
+    Returns:
+    dict: A dictionary of dataframes with updated 'DALoad' values.
+    """
+    updated_df_dict = {}
+    
+    for key, df in df_dict.items():
+        df['Hour'] = df['Datetime1'].dt.hour
+        df['DALoad'] = df.apply(lambda row: row['DALoad'] * hourly_multipliers.get(row['Hour'], 1), axis=1)
+        updated_df_dict[key] = df.drop(columns=['Hour'])
+    
+    return updated_df_dict
+
+# Example usage:
+# Assume df_dict is your dictionary of dataframes
+# df_dict = {'df1': dataframe1, 'df2': dataframe2, ...}
+
+# Apply the hourly multipliers to the dictionary of dataframes
+updated_df_dict = apply_hourly_multipliers(df_dict, hourly_load_growth)
+
+# Printing the updated dictionary of dataframes for verification
+for key, df in updated_df_dict.items():
+    print(f"DataFrame: {key}")
+    print(df)
