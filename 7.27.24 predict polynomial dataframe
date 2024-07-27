@@ -1,0 +1,24 @@
+import pandas as pd
+from sklearn.preprocessing import PolynomialFeatures
+from sklearn.linear_model import LinearRegression
+
+def polynomial_model_and_predict(train_data, pred_data, x_col, target_col, degree=2):
+    # Extract X and y from train_data
+    X_train = train_data[[x_col]].values
+    y_train = train_data[target_col].values
+
+    # Create polynomial features
+    poly = PolynomialFeatures(degree=degree)
+    X_train_poly = poly.fit_transform(X_train)
+    
+    # Train the model
+    model = LinearRegression()
+    model.fit(X_train_poly, y_train)
+
+    # Predict and add the predictions to pred_data
+    X_pred = pred_data[[x_col]].values
+    X_pred_poly = poly.transform(X_pred)
+    predictions = model.predict(X_pred_poly)
+    pred_data[target_col] = predictions
+    
+    return pred_data
