@@ -1,0 +1,21 @@
+def exclude_last_n_dataframes(dfs_dict, n=13):
+    # Get a list of keys in the dictionary
+    keys = list(dfs_dict.keys())
+    
+    # Exclude the last n keys
+    keys_to_include = keys[:-n]
+    
+    # Create a new dictionary with the included keys
+    new_dfs_dict = {key: dfs_dict[key] for key in keys_to_include}
+    
+    return new_dfs_dict
+
+# Example usage:
+# original_dfs_dict = {
+#     '2020_7': df1,
+#     '2021_7': df2,
+#     ...
+#     '2023_7': dfN
+# }
+# new_dfs_dict = exclude_last_n_dataframes(original_dfs_dict, 13)
+# print(new_dfs_dict)
