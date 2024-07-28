@@ -1,0 +1,17 @@
+def combine_dictionaries(dict1, dict2):
+    # Create a new dictionary that combines both dictionaries
+    combined_dict = dict1.copy()
+    combined_dict.update(dict2)
+    return combined_dict
+
+# Example usage:
+# dict1 = {
+#     '2020_7': df1,
+#     '2021_7': df2,
+# }
+# dict2 = {
+#     '2022_7': df3,
+#     '2023_7': df4,
+# }
+# combined_dict = combine_dictionaries(dict1, dict2)
+# print(combined_dict)
