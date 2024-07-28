@@ -1,0 +1,40 @@
+import pandas as pd
+
+def dict_merge(dict1, dict2, merge_col):
+    """
+    Merges two dictionaries of dataframes on a specified column.
+    
+    Parameters:
+    dict1 (dict): The first dictionary of dataframes.
+    dict2 (dict): The second dictionary of dataframes.
+    merge_col (str): The column name to merge the dataframes on.
+    
+    Returns:
+    dict: A dictionary of merged dataframes.
+    """
+    # Initialize an empty dictionary to store the merged dataframes
+    merged_dict = {}
+
+    # Iterate over the keys in the dictionaries
+    for key in dict1.keys():
+        # Merge the dataframes from both dictionaries on the specified column
+        merged_dict[key] = pd.merge(dict1[key], dict2[key], on=merge_col)
+    
+    return merged_dict
+
+# Example usage
+dict1 = {
+    'df1': pd.DataFrame({'Datetime1': pd.date_range(start='2021-01-01', periods=5, freq='D'), 'A': range(5)}),
+    'df2': pd.DataFrame({'Datetime1': pd.date_range(start='2021-01-01', periods=5, freq='D'), 'B': range(5, 10)})
+}
+
+dict2 = {
+    'df1': pd.DataFrame({'Datetime1': pd.date_range(start='2021-01-01', periods=5, freq='D'), 'C': range(10, 15)}),
+    'df2': pd.DataFrame({'Datetime1': pd.date_range(start='2021-01-01', periods=5, freq='D'), 'D': range(15, 20)})
+}
+
+merged_dict = dict_merge(dict1, dict2, 'Datetime1')
+
+# Print the merged dataframes for verification
+for key, df in merged_dict.items():
+    print(f"Dataframe {key}:\n{df}\n")
