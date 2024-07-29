@@ -1,0 +1,44 @@
+import pandas as pd
+import matplotlib.pyplot as plt
+
+def plot_avg_value_per_year(df, x_col, y_col, datetime_col, months, years):
+    # Convert the datetime column to datetime if it's not already
+    df[datetime_col] = pd.to_datetime(df[datetime_col])
+    
+    # Filter the dataframe for the specified months and years
+    df_filtered = df[(df[datetime_col].dt.month.isin(months)) & (df[datetime_col].dt.year.isin(years))]
+    
+    # Create a dictionary to store the average values per year
+    avg_values_per_year = {}
+    dataframes_per_year = {}
+
+    for year in years:
+        # Filter the dataframe for the specific year
+        df_year = df_filtered[df_filtered[datetime_col].dt.year == year]
+        
+        # Group by the x_col and calculate the average y_col
+        avg_values = df_year.groupby(x_col)[y_col].mean()
+        avg_values_per_year[year] = avg_values
+
+        # Store the dataframe for each year
+        dataframes_per_year[year] = avg_values.reset_index()
+
+    # Plotting
+    plt.figure(figsize=(10, 6))
+
+    for year, avg_values in avg_values_per_year.items():
+        plt.plot(avg_values.index, avg_values.values, label=f'Year {year}')
+    
+    plt.xlabel(x_col)
+    plt.ylabel(f'Average {y_col}')
+    plt.title(f'Average {y_col} by {x_col} for Specified Months and Years')
+    plt.legend()
+    plt.grid(True)
+    plt.show()
+
+    return dataframes_per_year
+
+# Example usage
+# result_dfs = plot_avg_value_per_year(df, 'x_column', 'y_column', 'datetime_column', [1, 2, 3], [2020, 2021])
+# result_dfs[2020]  # DataFrame for year 2020
+# result_dfs[2021]  # DataFrame for year 2021
