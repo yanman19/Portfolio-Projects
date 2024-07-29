@@ -1,0 +1,84 @@
+import pandas as pd
+
+def merge_four_dicts(dict1, dict2, dict3, dict4, merge_col):
+    """
+    Merges four dictionaries of dataframes on a specified column.
+    
+    Parameters:
+    dict1 (dict): The first dictionary of dataframes.
+    dict2 (dict): The second dictionary of dataframes.
+    dict3 (dict): The third dictionary of dataframes.
+    dict4 (dict): The fourth dictionary of dataframes.
+    merge_col (str): The column name to merge the dataframes on.
+    
+    Returns:
+    dict: A dictionary of merged dataframes.
+    """
+    # Initialize an empty dictionary to store the merged dataframes
+    merged_dict = {}
+
+    # Get the list of keys from the first dictionary (assuming all dictionaries have the same keys)
+    keys = dict1.keys()
+    
+    # Iterate over the keys in the dictionaries
+    for key in keys:
+        # Merge the dataframes from all four dictionaries on the specified column
+        merged_df = pd.merge(dict1[key], dict2[key], on=merge_col)
+        merged_df = pd.merge(merged_df, dict3[key], on=merge_col)
+        merged_df = pd.merge(merged_df, dict4[key], on=merge_col)
+        
+        # Store the merged dataframe in the merged_dict
+        merged_dict[key] = merged_df
+    
+    return merged_dict
+
+# Example usage
+dict1 = {
+    'df1': pd.DataFrame({
+        'Datetime1': pd.date_range(start='2021-01-01', periods=5, freq='D'), 
+        'A': range(5)
+    }),
+    'df2': pd.DataFrame({
+        'Datetime1': pd.date_range(start='2021-01-01', periods=5, freq='D'), 
+        'B': range(5, 10)
+    })
+}
+
+dict2 = {
+    'df1': pd.DataFrame({
+        'Datetime1': pd.date_range(start='2021-01-01', periods=5, freq='D'), 
+        'C': range(10, 15)
+    }),
+    'df2': pd.DataFrame({
+        'Datetime1': pd.date_range(start='2021-01-01', periods=5, freq='D'), 
+        'D': range(15, 20)
+    })
+}
+
+dict3 = {
+    'df1': pd.DataFrame({
+        'Datetime1': pd.date_range(start='2021-01-01', periods=5, freq='D'), 
+        'E': range(20, 25)
+    }),
+    'df2': pd.DataFrame({
+        'Datetime1': pd.date_range(start='2021-01-01', periods=5, freq='D'), 
+        'F': range(25, 30)
+    })
+}
+
+dict4 = {
+    'df1': pd.DataFrame({
+        'Datetime1': pd.date_range(start='2021-01-01', periods=5, freq='D'), 
+        'G': range(30, 35)
+    }),
+    'df2': pd.DataFrame({
+        'Datetime1': pd.date_range(start='2021-01-01', periods=5, freq='D'), 
+        'H': range(35, 40)
+    })
+}
+
+merged_dict = merge_four_dicts(dict1, dict2, dict3, dict4, 'Datetime1')
+
+# Print the merged dataframes for verification
+for key, df in merged_dict.items():
+    print(f"Dataframe {key}:\n{df}\n")
