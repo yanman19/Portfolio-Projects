@@ -1,0 +1,49 @@
+import pandas as pd
+
+def min_max_normalize_by_group(df, group_col, target_col):
+    def normalize(group):
+        min_val = group[target_col].min()
+        max_val = group[target_col].max()
+        group[f'{target_col}_min_max_normalized'] = (group[target_col] - min_val) / (max_val - min_val)
+        return group
+    
+    return df.groupby(group_col).apply(normalize).reset_index(drop=True)
+
+def z_score_normalize_by_group(df, group_col, target_col):
+    def normalize(group):
+        mean_val = group[target_col].mean()
+        std_val = group[target_col].std()
+        group[f'{target_col}_z_score_normalized'] = (group[target_col] - mean_val) / std_val
+        return group
+    
+    return df.groupby(group_col).apply(normalize).reset_index(drop=True)
+
+def max_abs_normalize_by_group(df, group_col, target_col):
+    def normalize(group):
+        max_abs_val = group[target_col].abs().max()
+        group[f'{target_col}_max_abs_normalized'] = group[target_col] / max_abs_val
+        return group
+    
+    return df.groupby(group_col).apply(normalize).reset_index(drop=True)
+
+# Example usage
+data = {
+    'weather': ['sunny', 'rainy', 'sunny', 'cloudy', 'rainy'],
+    'load': [100, 150, -110, 130, -140]
+}
+df = pd.DataFrame(data)
+
+# Min-Max Normalization
+min_max_normalized_df = min_max_normalize_by_group(df.copy(), 'weather', 'load')
+print("Min-Max Normalized DataFrame:")
+print(min_max_normalized_df)
+
+# Z-Score Normalization
+z_score_normalized_df = z_score_normalize_by_group(df.copy(), 'weather', 'load')
+print("\nZ-Score Normalized DataFrame:")
+print(z_score_normalized_df)
+
+# Max Abs Normalization
+max_abs_normalized_df = max_abs_normalize_by_group(df.copy(), 'weather', 'load')
+print("\nMax Abs Normalized DataFrame:")
+print(max_abs_normalized_df)
