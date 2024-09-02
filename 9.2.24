@@ -1,0 +1,20 @@
+import pandas as pd
+
+# Sample DataFrame creation for demonstration
+# Replace this with your actual DataFrame
+data = {
+    'marketday': ['2024-09-01', '2024-09-01', '2024-09-02', '2024-09-02', '2024-09-03', '2024-09-03'],
+    'hour': [1, 2, 1, 2, 1, 2],
+    'mysticGen': [0, 1, 0, 0, 0, 0]
+}
+
+df = pd.DataFrame(data)
+
+# Identify marketdays where mysticGen > 0
+marketdays_to_drop = df[df['mysticGen'] > 0]['marketday'].unique()
+
+# Drop rows with those marketdays
+df_cleaned = df[~df['marketday'].isin(marketdays_to_drop)]
+
+# Display the cleaned DataFrame
+df_cleaned
