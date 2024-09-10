@@ -1,0 +1,52 @@
+import pandas as pd
+from sklearn.preprocessing import MinMaxScaler
+
+def normalize_based_on_x(df, date_col, x_col, y_col):
+    # Create a copy of the dataframe to avoid modifying the original one
+    df_copy = df.copy()
+    
+    # Fit the scaler to the x_col and y_col
+    scaler_x = MinMaxScaler()
+    scaler_y = MinMaxScaler()
+
+    # Normalize x_col and y_col
+    df_copy['normalized_x'] = scaler_x.fit_transform(df_copy[[x_col]])
+    df_copy['normalized_y'] = scaler_y.fit_transform(df_copy[[y_col]])
+
+    # Calculate the weather normalized load (normalized y based on normalized x)
+    df_copy['normalized_y_based_on_x'] = df_copy['normalized_y'] / df_copy['normalized_x']
+    
+    # Return the dataframe including the original and the newly created column
+    return df_copy[[date_col, x_col, y_col, 'normalized_y_based_on_x']]
+
+import pandas as pd
+
+def zscore_normalize_based_on_x(df, date_col, x_col, y_col):
+    # Create a copy of the dataframe to avoid modifying the original one
+    df_copy = df.copy()
+
+    # Z-score normalization for x_col and y_col
+    df_copy['zscore_x'] = (df_copy[x_col] - df_copy[x_col].mean()) / df_copy[x_col].std()
+    df_copy['zscore_y'] = (df_copy[y_col] - df_copy[y_col].mean()) / df_copy[y_col].std()
+
+    # Calculate the load normalized by weather (normalized y based on normalized x)
+    df_copy['zscore_y_based_on_x'] = df_copy['zscore_y'] / df_copy['zscore_x']
+
+    # Return the dataframe including the original and the newly created column
+    return df_copy[[date_col, x_col, y_col, 'zscore_y_based_on_x']]
+
+import pandas as pd
+
+def min_max_normalize_based_on_x(df, date_col, x_col, y_col):
+    # Create a copy of the dataframe to avoid modifying the original one
+    df_copy = df.copy()
+
+    # Min-Max normalization for x_col and y_col
+    df_copy['min_max_x'] = (df_copy[x_col] - df_copy[x_col].min()) / (df_copy[x_col].max() - df_copy[x_col].min())
+    df_copy['min_max_y'] = (df_copy[y_col] - df_copy[y_col].min()) / (df_copy[y_col].max() - df_copy[y_col].min())
+
+    # Calculate the load normalized by weather (normalized y based on normalized x)
+    df_copy['min_max_y_based_on_x'] = df_copy['min_max_y'] / df_copy['min_max_x']
+
+    # Return the dataframe including the original and the newly created column
+    return df_copy[[date_col, x_col, y_col, 'min_max_y_based_on_x']]
