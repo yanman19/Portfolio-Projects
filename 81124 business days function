@@ -1,0 +1,12 @@
+import numpy as np
+from datetime import datetime, timedelta
+
+def get_business_days_ago(days):
+    end_date = datetime.now()
+    while days > 0:
+        end_date -= timedelta(days=1)
+        if np.is_busday(end_date.strftime('%Y-%m-%d')):
+            days -= 1
+    return end_date.strftime('%Y-%m-%d')
+
+END_date = get_business_days_ago(30)
