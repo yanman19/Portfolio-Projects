@@ -1,0 +1,56 @@
+import pandas as pd
+
+# Sample DataFrame, replace this with your df
+# df = pd.DataFrame({
+#     'Column 1': [1, 2, 3],
+#     'Column 2': ['A', 'B', 'C']
+# })
+
+def generate_html(df):
+    html_string = '''
+    <html>
+    <head>
+    <title>DataFrame Dashboard</title>
+    <!-- Load jQuery and DataTables CSS/JS from CDN -->
+    <link rel="stylesheet" type="text/css" href="https://cdn.datatables.net/1.11.3/css/jquery.dataTables.css">
+    <script type="text/javascript" charset="utf8" src="https://code.jquery.com/jquery-3.5.1.js"></script>
+    <script type="text/javascript" charset="utf8" src="https://cdn.datatables.net/1.11.3/js/jquery.dataTables.js"></script>
+    <script>
+    $(document).ready( function () {
+        $('#dataframe').DataTable();
+    });
+    </script>
+    </head>
+    <body>
+    <h1>DataFrame Dashboard</h1>
+    
+    <table id="dataframe" class="display" style="width:100%">
+        <thead>
+            <tr>
+                {header}
+            </tr>
+        </thead>
+        <tbody>
+            {rows}
+        </tbody>
+    </table>
+
+    </body>
+    </html>
+    '''
+
+    # Create table header
+    header = ''.join(f'<th>{col}</th>' for col in df.columns)
+    
+    # Create table rows
+    rows = ''
+    for i in range(len(df)):
+        row = ''.join(f'<td>{df.iloc[i, j]}</td>' for j in range(df.shape[1]))
+        rows += f'<tr>{row}</tr>'
+    
+    # Write the generated HTML to a file
+    with open('dataframe_dashboard.html', 'w') as f:
+        f.write(html_string.format(header=header, rows=rows))
+
+# Call the function with your dataframe
+generate_html(df)
