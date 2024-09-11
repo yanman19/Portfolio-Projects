@@ -1,0 +1,13 @@
+import pandas as pd
+
+def adjust_column_to_target(df, x_col, target_val):
+    # Calculate the current average of the column
+    current_avg = df[x_col].mean()
+    
+    # Calculate the adjustment factor
+    adjustment_factor = target_val / current_avg
+    
+    # Adjust the column values
+    df[x_col] = df[x_col] * adjustment_factor
+    
+    return df
