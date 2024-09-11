@@ -1,0 +1,29 @@
+import dash
+from dash import dcc, html
+import dash_table
+import pandas as pd
+
+# Assuming df is your dataframe
+# Example:
+# df = pd.DataFrame({
+#     'Column 1': [1, 2, 3],
+#     'Column 2': ['A', 'B', 'C']
+# })
+
+app = dash.Dash(__name__)
+
+app.layout = html.Div([
+    html.H1("DataFrame Dashboard"),
+    
+    dash_table.DataTable(
+        id='table',
+        columns=[{'name': col, 'id': col} for col in df.columns],
+        data=df.to_dict('records'),
+        sort_action='native',  # Enables sorting by clicking on the column headers
+        filter_action='native',  # Enables filtering
+        page_size=10  # Number of rows per page
+    )
+])
+
+if __name__ == '__main__':
+    app.run_server(debug=True)
