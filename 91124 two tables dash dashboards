@@ -1,0 +1,42 @@
+import dash
+from dash import dcc, html
+import dash_table
+import pandas as pd
+
+# Sample DataFrames, replace these with your actual dataframes
+df1 = pd.DataFrame({
+    'Column 1': [1, 2, 3],
+    'Column 2': ['A', 'B', 'C']
+})
+
+df2 = pd.DataFrame({
+    'Column 1': [4, 5, 6],
+    'Column 2': ['D', 'E', 'F']
+})
+
+app = dash.Dash(__name__)
+
+app.layout = html.Div([
+    html.H1("Top Table"),
+    dash_table.DataTable(
+        id='table-1',
+        columns=[{'name': col, 'id': col} for col in df1.columns],
+        data=df1.to_dict('records'),
+        sort_action='native',
+        filter_action='native',
+        page_size=5  # Adjust page size as needed
+    ),
+    
+    html.H1("Bottom Table"),
+    dash_table.DataTable(
+        id='table-2',
+        columns=[{'name': col, 'id': col} for col in df2.columns],
+        data=df2.to_dict('records'),
+        sort_action='native',
+        filter_action='native',
+        page_size=5  # Adjust page size as needed
+    )
+])
+
+if __name__ == '__main__':
+    app.run_server(debug=True)
