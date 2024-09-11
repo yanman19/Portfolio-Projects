@@ -1,0 +1,25 @@
+import pandas as pd
+from sklearn.preprocessing import PolynomialFeatures
+from sklearn.linear_model import LinearRegression
+
+def add_polynomial_predictions(df, x_col, y_col, target_df, degree=2):
+    # Prepare the polynomial features
+    poly = PolynomialFeatures(degree=degree)
+    
+    # Reshape x for polynomial features
+    X = df[[x_col]].values
+    X_poly = poly.fit_transform(X)
+    
+    # Create and fit the model
+    model = LinearRegression()
+    model.fit(X_poly, df[y_col].values)
+    
+    # Predict on the target dataframe
+    X_target = target_df[[x_col]].values
+    X_target_poly = poly.transform(X_target)
+    target_df[y_col] = model.predict(X_target_poly)
+    
+    return target_df
+
+# Example usage:
+# updated_df = add_polynomial_predictions(df, 'x', 'y', target_df, degree=2)
