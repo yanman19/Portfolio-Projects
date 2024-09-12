@@ -1,0 +1,32 @@
+from jupyter_dash import JupyterDash
+import dash
+from dash import dcc, html
+import dash_table
+import pandas as pd
+
+# Initialize JupyterDash instead of dash.Dash
+app = JupyterDash(__name__)
+
+# Your Dash layout and logic here
+app.layout = html.Div([
+    html.H1("Top Table"),
+    dash_table.DataTable(
+        id='table-1',
+        columns=[{'name': col, 'id': col} for col in df1.columns],
+        data=df1.to_dict('records'),
+        sort_action='native',
+        filter_action='native',
+        page_size=5  # Adjust page size as needed
+    ),
+    html.H1("Bottom Table"),
+    dash_table.DataTable(
+        id='table-2',
+        columns=[{'name': col, 'id': col} for col in df2.columns],
+        data=df2.to_dict('records'),
+        sort_action='native',
+        filter_action='native',
+        page_size=5  # Adjust page size as needed
+    )
+])
+
+app.run_server(mode='inline')  # Use mode='inline' for Jupyter notebook
