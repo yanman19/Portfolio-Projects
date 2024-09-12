@@ -1,0 +1,16 @@
+import pandas as pd
+import dataframe_image as dfi
+
+def save_as_png(input_var, filename):
+    # Check if input is a DataFrame
+    if isinstance(input_var, pd.DataFrame):
+        # Save the DataFrame as an image
+        dfi.export(input_var, f"{filename}.png")
+        
+    # Check if input is a matplotlib figure (if you still want to support matplotlib)
+    else:
+        raise ValueError("Input must be a DataFrame for this function.")
+        
+# Example usage:
+# df = pd.DataFrame({'A': [1, 2, 3], 'B': [4, 5, 6]})
+# save_as_png(df, 'dataframe_image')
