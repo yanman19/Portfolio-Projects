@@ -1,0 +1,33 @@
+import pandas as pd
+import matplotlib.pyplot as plt
+import matplotlib.figure as figure
+
+def save_as_png(input_var, filename):
+    # Check if input is a DataFrame
+    if isinstance(input_var, pd.DataFrame):
+        # Create a larger plot for the DataFrame to fit properly
+        fig, ax = plt.subplots(figsize=(12, 8))  # Adjust the size if needed
+        ax.axis('tight')
+        ax.axis('off')
+        
+        # Create a table from the DataFrame
+        table = ax.table(cellText=input_var.values, colLabels=input_var.columns, cellLoc='center', loc='center')
+
+        # Adjust font size
+        table.auto_set_font_size(False)
+        table.set_fontsize(12)  # Adjust font size as needed
+    
+    # Check if input is a matplotlib figure
+    elif isinstance(input_var, figure.Figure):
+        fig = input_var
+    
+    else:
+        raise ValueError("Input must be either a DataFrame or a matplotlib Figure.")
+    
+    # Save the figure as a PNG
+    fig.savefig(f"{filename}.png", bbox_inches='tight', pad_inches=0.1)
+    plt.close(fig)
+
+# Example usage:
+# df = pd.DataFrame({'A': [1, 2, 3], 'B': [4, 5, 6]})
+# save_as_png(df, 'dataframe_image')
