@@ -1,0 +1,29 @@
+import matplotlib.pyplot as plt
+import pandas as pd
+
+def plot_filtered_line_graph(df, x_col, y_col, months, years):
+    # Filter the dataframe based on the list of months and years
+    filtered_df = df[(df['Month'].isin(months)) & (df['Year'].isin(years))]
+    
+    # Get unique years for coloring
+    unique_years = filtered_df['Year'].unique()
+    
+    plt.figure(figsize=(10, 6))
+
+    # Plot the data for each year
+    for year in unique_years:
+        year_data = filtered_df[filtered_df['Year'] == year]
+        plt.plot(year_data[x_col], year_data[y_col], label=str(year))
+
+    # Add labels and title
+    plt.xlabel(x_col)
+    plt.ylabel(y_col)
+    plt.title(f"{y_col} vs {x_col} (Filtered by Month and Year)")
+    plt.legend(title="Year")
+
+    # Display the plot
+    plt.show()
+
+# Example of how to use the function
+# df is your DataFrame, 'Month' and 'Year' columns should exist
+# Example: plot_filtered_line_graph(df, 'Date', 'Sales', [1, 2, 3], [2022, 2023])
