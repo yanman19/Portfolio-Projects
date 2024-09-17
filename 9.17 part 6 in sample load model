@@ -1,0 +1,101 @@
+def calculate_load_growth_with_adjusted_predictions(
+    data, train_years, test_year_1, test_year_2, features, target
+):
+    # Split data
+    train_data = data[data['year'].isin(train_years)]
+    test_data_1 = data[data['year'] == test_year_1]
+    
+    # Prepare average weather for test_data_2
+    average_weather = data.groupby(['month', 'hour'])[weather_vars].mean().reset_index()
+    
+    # Create test_data_2
+    from itertools import product
+    months = range(1, 13)
+    hours = range(0, 24)
+    days_of_week = range(0, 7)
+    is_weekend = [0, 1]
+    time_combinations = list(product(months, hours, days_of_week, is_weekend))
+    test_data_2 = pd.DataFrame(time_combinations, columns=['month', 'hour', 'day_of_week', 'is_weekend'])
+    test_data_2 = test_data_2.drop_duplicates(subset=['month', 'hour', 'day_of_week', 'is_weekend'])
+    
+    # Merge with average weather
+    test_data_2 = pd.merge(test_data_2, average_weather, on=['month', 'hour'], how='left')
+    
+    # Fill missing weather data
+    test_data_2[weather_vars] = test_data_2[weather_vars].fillna(data[weather_vars].mean())
+    
+    # Add year column
+    test_data_2['year'] = test_year_2
+    
+    # Prepare training data
+    X_train = train_data[features]
+    y_train = train_data[target]
+    
+    # Prepare test data
+    X_test_1 = test_data_1[features]
+    y_test_1 = test_data_1[target]
+    X_test_2 = test_data_2[features]
+    
+    # Ensure feature consistency
+    X_test_2 = X_test_2[X_train.columns]
+    
+    # Ensure all features are numeric
+    X_test_2 = X_test_2.apply(pd.to_numeric, errors='coerce')
+    
+    # Handle any remaining missing values
+    if X_test_2.isnull().values.any():
+        X_test_2 = X_test_2.fillna(X_test_2.mean())
+    
+    # Train model
+    model = GradientBoostingRegressor(
+        n_estimators=100,
+        max_depth=5,
+        learning_rate=0.1,
+        random_state=42
+    )
+    model.fit(X_train, y_train)
+    
+    # Predict for test_year_1 (2023)
+    y_pred_test_1 = model.predict(X_test_1)
+    
+    # Calculate residuals (errors) for test_year_1
+    residuals = y_test_1.values - y_pred_test_1
+    
+    # Calculate average residuals by hour
+    test_data_1['residuals'] = residuals
+    avg_residuals_by_hour = test_data_1.groupby('hour')['residuals'].mean().reset_index()
+    
+    # Predict for test_year_2 (2024)
+    y_pred_test_2 = model.predict(X_test_2)
+    
+    # Adjust 2024 predictions using average residuals by hour
+    test_data_2['predicted_load'] = y_pred_test_2
+    test_data_2 = pd.merge(
+        test_data_2,
+        avg_residuals_by_hour,
+        on='hour',
+        how='left'
+    )
+    # Fill any missing residuals with zero
+    test_data_2['residuals'] = test_data_2['residuals'].fillna(0)
+    test_data_2['adjusted_prediction'] = test_data_2['predicted_load'] + test_data_2['residuals']
+    
+    # Calculate average load for test_year_1 and adjusted test_year_2
+    average_load_2023 = y_test_1.mean()
+    average_load_2024 = test_data_2['adjusted_prediction'].mean()
+    
+    # Calculate load growth/degradation
+    load_growth = ((average_load_2024 - average_load_2023) / average_load_2023) * 100
+    
+    # Round results
+    average_load_2023 = round(average_load_2023, 2)
+    average_load_2024 = round(average_load_2024, 2)
+    load_growth = round(load_growth, 2)
+    
+    # Create a results DataFrame
+    results = pd.DataFrame({
+        'Year': [test_year_1, test_year_2],
+        'Average_Load': [average_load_2023, average_load_2024]
+    })
+    
+    return results, load_growth
