@@ -1,0 +1,136 @@
+import pandas as pd
+import numpy as np
+from sklearn.ensemble import GradientBoostingRegressor
+import warnings
+
+warnings.filterwarnings('ignore')
+
+# Load data
+data = pd.read_csv('your_data.csv', parse_dates=['timestamp'])
+
+# Extract time features
+data['hour'] = data['timestamp'].dt.hour
+data['month'] = data['timestamp'].dt.month
+data['year'] = data['timestamp'].dt.year
+data['day_of_week'] = data['timestamp'].dt.dayofweek
+data['is_weekend'] = data['day_of_week'].isin([5, 6]).astype(int)
+
+# Define parameters
+train_years = [2021, 2022, 2023]  # Training years
+test_year_1 = train_years[-1]     # Last year in training data (2023)
+test_year_2 = 2024                # Year to predict (2024)
+weather_vars = ['temperature', 'humidity']  # Replace with your actual weather variables
+time_vars = ['hour', 'month', 'day_of_week', 'is_weekend']
+features = weather_vars + time_vars
+target = 'load'
+
+# Clean data
+data = data.dropna(subset=features + [target])
+
+# Function to calculate adjusted predictions and load growth
+def calculate_load_growth_with_adjusted_predictions(
+    data, train_years, test_year_1, test_year_2, features, target
+):
+    # Split data
+    train_data = data[data['year'].isin(train_years)]
+    test_data_1 = data[data['year'] == test_year_1]
+    # For test_year_2, since actual data may not be available, we need to create a placeholder
+    # We'll assume that the weather data for 2024 is available or simulate it using average weather
+    # For this example, we'll use average weather conditions from the training years
+
+    # Calculate average weather conditions for each month and hour
+    average_weather = data.groupby(['month', 'hour'])[weather_vars].mean().reset_index()
+
+    # Create a DataFrame for 2024 with all combinations of month, day, and hour
+    months = range(1, 13)
+    hours = range(0, 24)
+    days_of_week = range(0, 7)
+    is_weekend = [0, 1]
+
+    # Create a cartesian product of all time features
+    from itertools import product
+    time_combinations = list(product(months, hours, days_of_week, is_weekend))
+    test_data_2 = pd.DataFrame(time_combinations, columns=['month', 'hour', 'day_of_week', 'is_weekend'])
+    test_data_2 = test_data_2.drop_duplicates(subset=['month', 'hour', 'day_of_week', 'is_weekend'])
+
+    # Merge with average weather conditions
+    test_data_2 = pd.merge(test_data_2, average_weather, on=['month', 'hour'], how='left')
+
+    # Add the test_year_2 to the data
+    test_data_2['year'] = test_year_2
+
+    # Prepare training data
+    X_train = train_data[features]
+    y_train = train_data[target]
+
+    # Prepare test data
+    X_test_1 = test_data_1[features]
+    y_test_1 = test_data_1[target]
+    X_test_2 = test_data_2[features]
+
+    # Train model
+    model = GradientBoostingRegressor(
+        n_estimators=100,
+        max_depth=5,
+        learning_rate=0.1,
+        random_state=42
+    )
+    model.fit(X_train, y_train)
+
+    # Predict for test_year_1 (2023)
+    y_pred_test_1 = model.predict(X_test_1)
+
+    # Calculate residuals (errors) for test_year_1
+    residuals = y_test_1.values - y_pred_test_1
+
+    # Calculate average residuals by hour
+    test_data_1['residuals'] = residuals
+    avg_residuals_by_hour = test_data_1.groupby('hour')['residuals'].mean().reset_index()
+
+    # Predict for test_year_2 (2024)
+    y_pred_test_2 = model.predict(X_test_2)
+
+    # Adjust 2024 predictions using average residuals by hour
+    adjusted_predictions_2024 = []
+    for idx, row in test_data_2.iterrows():
+        hour = row['hour']
+        # Find the average residual for the current hour
+        avg_residual = avg_residuals_by_hour[avg_residuals_by_hour['hour'] == hour]['residuals'].values
+        if len(avg_residual) > 0:
+            adjusted_prediction = y_pred_test_2[idx] + avg_residual[0]
+        else:
+            # If no residual data for the hour, use the unadjusted prediction
+            adjusted_prediction = y_pred_test_2[idx]
+        adjusted_predictions_2024.append(adjusted_prediction)
+
+    test_data_2['adjusted_prediction'] = adjusted_predictions_2024
+
+    # Calculate average load for test_year_1 and adjusted test_year_2
+    average_load_2023 = y_test_1.mean()
+    average_load_2024 = test_data_2['adjusted_prediction'].mean()
+
+    # Calculate load growth/degradation
+    load_growth = ((average_load_2024 - average_load_2023) / average_load_2023) * 100
+
+    # Round results
+    average_load_2023 = round(average_load_2023, 2)
+    average_load_2024 = round(average_load_2024, 2)
+    load_growth = round(load_growth, 2)
+
+    # Create a results DataFrame
+    results = pd.DataFrame({
+        'Year': [test_year_1, test_year_2],
+        'Average_Load': [average_load_2023, average_load_2024]
+    })
+
+    return results, load_growth
+
+# Call the function
+results_df, load_growth_percentage = calculate_load_growth_with_adjusted_predictions(
+    data, train_years, test_year_1, test_year_2, features, target
+)
+
+# Display the results
+print("Average Load for Test Years:")
+print(results_df)
+print(f"\nEstimated Load Growth from {test_year_1} to {test_year_2}: {load_growth_percentage}%")
