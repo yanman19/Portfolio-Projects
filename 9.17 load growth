@@ -1,0 +1,59 @@
+import pandas as pd
+from sklearn.linear_model import LinearRegression
+
+# Load data
+data = pd.read_csv('your_data.csv', parse_dates=['timestamp'])
+
+# Ensure 'hour', 'month', and 'year' columns exist
+data['hour'] = data['timestamp'].dt.hour
+data['month'] = data['timestamp'].dt.month
+data['year'] = data['timestamp'].dt.year
+
+# Define parameters
+hour = 19  # Hour ending 19 (7 PM)
+month = 7  # July
+years = [2023, 2024]
+weather_vars = ['temperature', 'humidity']  # Replace with your actual weather variables
+target = 'load'  # The load column in your dataset
+
+# Define the function to calculate weather-normalized load growth
+def calculate_weather_normalized_load_growth(data, hour, month, years, weather_vars, target):
+    # Filter data for the specified hour, month, and years
+    filtered_data = data[
+        (data['hour'] == hour) &
+        (data['month'] == month) &
+        (data['year'].isin(years))
+    ]
+    
+    # Separate data for each year
+    data_year1 = filtered_data[filtered_data['year'] == years[0]]
+    data_year2 = filtered_data[filtered_data['year'] == years[1]]
+    
+    # Initialize and fit models for each year
+    model_year1 = LinearRegression()
+    model_year2 = LinearRegression()
+    model_year1.fit(data_year1[weather_vars], data_year1[target])
+    model_year2.fit(data_year2[weather_vars], data_year2[target])
+    
+    # Calculate normal weather conditions (average over all years for the specified hour and month)
+    historical_data = data[
+        (data['hour'] == hour) &
+        (data['month'] == month)
+    ]
+    normal_weather = historical_data[weather_vars].mean().values.reshape(1, -1)
+    
+    # Predict normalized load for each year using the normal weather conditions
+    normalized_load_year1 = model_year1.predict(normal_weather)[0]
+    normalized_load_year2 = model_year2.predict(normal_weather)[0]
+    
+    # Calculate the percentage load growth
+    load_growth = ((normalized_load_year2 - normalized_load_year1) / normalized_load_year1) * 100
+    return load_growth
+
+# Calculate the weather-normalized load growth
+load_growth = calculate_weather_normalized_load_growth(
+    data, hour, month, years, weather_vars, target
+)
+
+# Output the result
+print(f"Weather-normalized load growth from {years[0]} to {years[1]} at hour {hour} in month {month}: {load_growth:.2f}%")
