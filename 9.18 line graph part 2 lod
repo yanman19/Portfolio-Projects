@@ -1,0 +1,21 @@
+import matplotlib.pyplot as plt
+import pandas as pd
+
+def plot_filtered_line_graph(df, x_col, y_col, months):
+    # Filter the DataFrame to include only the rows where the 'MONTH' column matches any of the given months
+    filtered_df = df[df['MONTH'].isin(months)]
+    
+    # Group by x_col and take the mean of y_col for each unique x value
+    averaged_df = filtered_df.groupby(x_col)[y_col].mean().reset_index()
+    
+    # Create the line plot
+    plt.figure(figsize=(10,6))
+    plt.plot(averaged_df[x_col], averaged_df[y_col], marker='o', linestyle='-')
+    
+    # Add labels and title
+    plt.xlabel(x_col)
+    plt.ylabel(y_col)
+    plt.title(f"Line Graph of Average {y_col} vs {x_col} for Months: {', '.join(map(str, months))}")
+    
+    # Display the plot
+    plt.show()
