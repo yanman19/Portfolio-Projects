@@ -1,0 +1,34 @@
+import pandas as pd
+
+# Sample dataframes
+df1 = pd.DataFrame({'Monthly Data': [1, 2, 3]})
+df2 = pd.DataFrame({'Daily Data': [10, 20, 30]})
+df3 = pd.DataFrame({'Hourly Data': [100, 200, 300]})
+
+def save_dataframes_to_excel(df1, df2, df3, month, year, scenario, file_path=""):
+    # Ensure the file path ends with a '/'
+    if file_path and not file_path.endswith('/'):
+        file_path += '/'
+
+    # Create the filename based on the month, year, and scenario
+    file_name = f"{file_path}{month}_{year}_{scenario}.xlsx"
+
+    # Define the sheet names using the month and year
+    sheet_name_monthly = f"{month}_{year}_monthly"
+    sheet_name_daily = f"{month}_{year}_daily"
+    sheet_name_hourly = f"{month}_{year}_hourly"
+
+    # Create the Excel writer object
+    with pd.ExcelWriter(file_name) as writer:
+        # Write each dataframe to a different sheet
+        df1.to_excel(writer, sheet_name=sheet_name_monthly, index=False)
+        df2.to_excel(writer, sheet_name=sheet_name_daily, index=False)
+        df3.to_excel(writer, sheet_name=sheet_name_hourly, index=False)
+
+    print(f"Data has been saved to {file_name}")
+
+# Example usage
+month = "September"
+year = 2024
+scenario = "scenario_name"
+save_dataframes_to_excel(df1, df2, df3, month, year, scenario, file_path="")
