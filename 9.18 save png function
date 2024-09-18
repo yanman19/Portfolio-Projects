@@ -1,0 +1,13 @@
+import dataframe_image as dfi
+
+def save_dataframe_as_png(df, file_name, file_path):
+    # Concatenate file path and file name to create the full file path
+    full_file_path = f"{file_path}/{file_name}.png"
+    
+    # Save the dataframe as a PNG image
+    dfi.export(df, full_file_path)
+    
+    print(f"DataFrame saved as {full_file_path}")
+
+# Example usage:
+# save_dataframe_as_png(df, "my_dataframe", "/path/to/save")
