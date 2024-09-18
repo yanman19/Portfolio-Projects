@@ -1,0 +1,18 @@
+import matplotlib.pyplot as plt
+import pandas as pd
+
+def plot_filtered_line_graph(df, x_col, y_col, month):
+    # Filter the DataFrame by the specified month
+    filtered_df = df[df['MONTH'] == month]
+    
+    # Create the line plot
+    plt.figure(figsize=(10,6))
+    plt.plot(filtered_df[x_col], filtered_df[y_col], marker='o', linestyle='-')
+    
+    # Add labels and title
+    plt.xlabel(x_col)
+    plt.ylabel(y_col)
+    plt.title(f"Line Graph of {y_col} vs {x_col} for Month: {month}")
+    
+    # Return the figure object
+    return plt.gcf()
