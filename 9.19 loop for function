@@ -1,0 +1,17 @@
+# Define the list of months (1-9)
+months = list(range(1, 10))  # Months 1 to 9
+
+# Define the list of years
+years = [2027, 2028]
+
+# Loop through each year and month combination
+for year in years:
+    for month in months:
+        try:
+            print(f"\nAssigning variables for Month: {month}, Year: {year}...")
+            assign_variables(df, month, year)
+            desired_function()
+        except ValueError as ve:
+            print(ve)
+        except Exception as e:
+            print(f"An unexpected error occurred for Month: {month}, Year: {year}: {e}")
