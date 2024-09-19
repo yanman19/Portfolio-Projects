@@ -1,0 +1,28 @@
+import pandas as pd
+
+def assign_variables(df, desired_month, desired_year):
+    """
+    Assigns variables to the global namespace based on DataFrame values for a specific month and year.
+
+    Parameters:
+    - df (pd.DataFrame): The DataFrame containing your data.
+    - desired_month (str or int): The month to filter by.
+    - desired_year (int): The year to filter by.
+
+    Raises:
+    - ValueError: If no matching data is found for the specified month and year.
+    """
+    # Filter the DataFrame for the desired month and year
+    filtered_df = df[(df['month'] == desired_month) & (df['year'] == desired_year)]
+    
+    if filtered_df.empty:
+        raise ValueError(f"No data found for {desired_month}/{desired_year}.")
+
+    # Assuming the DataFrame has exactly one row per month-year combination
+    row = filtered_df.iloc[0]
+    
+    # Iterate over each column except 'month' and 'year'
+    for column in df.columns:
+        if column not in ['month', 'year']:
+            # Assign the value to the global namespace
+            globals()[column] = row[column]
