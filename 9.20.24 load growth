@@ -1,0 +1,56 @@
+import pandas as pd
+from sklearn.ensemble import GradientBoostingRegressor
+
+def gradient_boost_function(df, features_list, target, month_in_question, train_years_list, test_year_1, test_year_2):
+    # Filter the dataframe to only include data from the specified month
+    df_month = df[df['MONTH'] == month_in_question].copy()
+    
+    # Split the data into training and testing sets based on the years
+    df_train = df_month[df_month['YEAR'].isin(train_years_list)].copy()
+    df_test_year_1 = df_train[df_train['YEAR'] == test_year_1].copy()
+    df_train = df_train[df_train['YEAR'] != test_year_1].copy()
+    df_test_year_2 = df_month[df_month['YEAR'] == test_year_2].copy()
+    
+    # Prepare the training data
+    X_train = df_train[features_list]
+    y_train = df_train[target]
+    
+    # Prepare the test data for test_year_1
+    X_test_year_1 = df_test_year_1[features_list]
+    y_test_year_1 = df_test_year_1[target]
+    
+    # Train the Gradient Boosting model
+    model = GradientBoostingRegressor()
+    model.fit(X_train, y_train)
+    
+    # Predict on test_year_1 and calculate the differences
+    df_test_year_1['Predicted'] = model.predict(X_test_year_1)
+    df_test_year_1['Diff'] = df_test_year_1[target] - df_test_year_1['Predicted']
+    
+    # Average the differences by hour
+    avg_diff_by_hour = df_test_year_1.groupby('HE')['Diff'].mean().rename('Avg_Diff').reset_index()
+    
+    # Predict on test_year_2
+    X_test_year_2 = df_test_year_2[features_list]
+    df_test_year_2['Predicted'] = model.predict(X_test_year_2)
+    
+    # Apply the average hourly differences to adjust predictions
+    df_test_year_2 = df_test_year_2.merge(avg_diff_by_hour, on='HE', how='left')
+    df_test_year_2['Adjusted_Predictions'] = df_test_year_2['Predicted'] + df_test_year_2['Avg_Diff']
+    
+    # Calculate the differences between realized values and adjusted predictions
+    df_test_year_2['Test_Year_2_Diff'] = df_test_year_2[target] - df_test_year_2['Adjusted_Predictions']
+    
+    # Average the differences by hour to get the realized target growth
+    realized_growth = df_test_year_2.groupby('HE')['Test_Year_2_Diff'].mean().reset_index()
+    realized_growth = realized_growth.rename(columns={'Test_Year_2_Diff': 'Absolute_Growth'})
+    
+    # Calculate the percentage growth
+    avg_adjusted_pred_by_hour = df_test_year_2.groupby('HE')['Adjusted_Predictions'].mean().reset_index()
+    merged = realized_growth.merge(avg_adjusted_pred_by_hour, on='HE')
+    merged['Percent_Growth'] = (merged['Absolute_Growth'] / merged['Adjusted_Predictions']) * 100
+    
+    # Prepare the final result dataframe
+    result_df = merged.set_index('HE')[['Absolute_Growth', 'Percent_Growth']]
+    
+    return result_df
