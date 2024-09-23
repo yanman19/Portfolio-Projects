@@ -1,0 +1,24 @@
+import numpy as np
+import pandas as pd
+
+def adjust_column_to_target(df, column, target_value, max_deviation_percent):
+    # Get the original column values
+    original_values = df[column].values
+    
+    # Calculate the current average
+    current_average = np.mean(original_values)
+    
+    # Scale the values so their new average matches the target value
+    scaling_factor = target_value / current_average
+    adjusted_values = original_values * scaling_factor
+    
+    # Calculate the allowable deviation from the new target average
+    allowable_deviation = target_value * (max_deviation_percent / 100)
+    
+    # Cap values so they don't deviate more than the allowed percentage from the target
+    adjusted_values = np.clip(adjusted_values, target_value - allowable_deviation, target_value + allowable_deviation)
+    
+    # Assign the adjusted values back to the DataFrame
+    df[column] = adjusted_values
+    
+    return df
