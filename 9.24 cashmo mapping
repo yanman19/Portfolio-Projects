@@ -1,0 +1,19 @@
+import pandas as pd
+
+def map_price_to_names(df_names, df_cml):
+    # Assuming df_names has a column 'Names' which has the list of names
+    # df_cml has columns 'data_cml' (matching names) and 'sheet_cml' (values to map)
+    
+    # Create a dictionary to map data_cml to sheet_cml
+    name_to_price_mapping = dict(zip(df_cml['data_cml'], df_cml['sheet_cml']))
+    
+    # Add Mapped_Price_CML column to df_names by mapping the 'Names' column using the dictionary
+    df_names['Mapped_Price_CML'] = df_names['Names'].map(name_to_price_mapping)
+    
+    return df_names
+
+# Example usage:
+# df_names = pd.DataFrame({'Names': ['Name1', 'Name2', 'Name3']})
+# df_cml = pd.DataFrame({'data_cml': ['Name1', 'Name2', 'Name3'], 'sheet_cml': [100, 200, 300]})
+# result_df = map_price_to_names(df_names, df_cml)
+# print(result_df)
