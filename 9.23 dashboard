@@ -1,0 +1,18 @@
+from flask import Flask, render_template
+import pandas as pd
+
+app = Flask(__name__)
+
+@app.route('/')
+def show_dataframe():
+    # Load the CSV file into a Pandas DataFrame
+    df = pd.read_csv('path_to_your_csv_file.csv')
+    
+    # Convert the DataFrame to HTML
+    table_html = df.to_html(classes='table table-striped')
+    
+    # Pass the HTML table to the template
+    return render_template('dashboard.html', table=table_html)
+
+if __name__ == '__main__':
+    app.run(debug=True)
