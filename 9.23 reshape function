@@ -1,0 +1,68 @@
+import pandas as pd
+
+def adjust_prices_to_target_avg(
+    df: pd.DataFrame,
+    column: str,
+    target_avg: float,
+    new_column: str = None
+) -> pd.DataFrame:
+    """
+    Adjusts the prices in the specified column of the DataFrame so that their average equals target_avg.
+    The adjustment is done by shifting all prices by a constant delta to minimize variance changes.
+
+    Parameters:
+    ----------
+    df : pd.DataFrame
+        The input DataFrame containing the price data.
+    column : str
+        The name of the column in df to adjust.
+    target_avg : float
+        The desired average value for the specified price column.
+    new_column : str, optional
+        The name for the new column with adjusted prices.
+        If None, defaults to 'Adjusted_{column}'.
+
+    Returns:
+    -------
+    pd.DataFrame
+        A new DataFrame with an additional column containing the adjusted prices.
+
+    Raises:
+    ------
+    ValueError
+        If the specified column does not exist or contains non-numeric data.
+    """
+
+    # Check if the specified column exists
+    if column not in df.columns:
+        raise ValueError(f"Column '{column}' does not exist in the DataFrame.")
+
+    # Check if the column contains numeric data
+    if not pd.api.types.is_numeric_dtype(df[column]):
+        raise ValueError(f"Column '{column}' must contain numeric data.")
+
+    # Calculate the current average, ignoring NaN values
+    current_avg = df[column].mean()
+    print(f"Current average of '{column}': {current_avg}")
+
+    # Compute the adjustment delta
+    delta = target_avg - current_avg
+    print(f"Delta to adjust: {delta}")
+
+    # Create a copy of the DataFrame to avoid modifying the original
+    adjusted_df = df.copy()
+
+    # Determine the name of the new column
+    if new_column is None:
+        adjusted_column_name = f"Adjusted_{column}"
+    else:
+        adjusted_column_name = new_column
+
+    # Adjust the prices by adding the delta
+    adjusted_df[adjusted_column_name] = adjusted_df[column] + delta
+
+    # Optional: Verify the new average
+    new_avg = adjusted_df[adjusted_column_name].mean()
+    print(f"New average of '{adjusted_column_name}': {new_avg}")
+
+    return adjusted_df
