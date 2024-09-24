@@ -1,0 +1,172 @@
+import dash
+from dash import dcc, html
+from dash.dependencies import Input, Output
+import dash_table
+import pandas as pd
+import os
+
+# Define the file path where all the CSVs are located
+CSV_PATH = '/path/to/csv/files'
+
+# Sample data for Cash Performance and Predictions DataFrames
+cash_performance = pd.DataFrame({
+    'Date': ['2024-01-01', '2024-01-02', '2024-01-03'],
+    'Price': [50, 55, 60]
+})
+
+predictions = pd.DataFrame({
+    'Date': ['2024-01-01', '2024-01-02', '2024-01-03'],
+    'Predicted Price': [52, 54, 61]
+})
+
+# Scenario tables for each year (dummy example)
+scenario_2024 = pd.DataFrame({'Scenario': ['A', 'B', 'C'], 'Value': [100, 150, 200]})
+scenario_2025 = pd.DataFrame({'Scenario': ['D', 'E', 'F'], 'Value': [110, 160, 210]})
+scenario_2026 = pd.DataFrame({'Scenario': ['G', 'H', 'I'], 'Value': [120, 170, 220]})
+scenario_2027 = pd.DataFrame({'Scenario': ['J', 'K', 'L'], 'Value': [130, 180, 230]})
+scenario_2028 = pd.DataFrame({'Scenario': ['M', 'N', 'O'], 'Value': [140, 190, 240]})
+
+# Initialize the app
+app = dash.Dash(__name__)
+
+# Define the layout
+app.layout = html.Div([
+    dcc.Location(id='url', refresh=False),
+    html.Div(id='page-content')
+])
+
+# Define YANUS layout (previously homepage) with links to NEPOOL, NYE, and NYW pages
+yanus_layout = html.Div([
+    html.H1('YANUS', style={'textAlign': 'center'}),
+    dcc.Link('Go to NEPOOL', href='/nepool', style={'display': 'block', 'textAlign': 'center'}),
+    dcc.Link('Go to NYE', href='/nye', style={'display': 'block', 'textAlign': 'center'}),
+    dcc.Link('Go to NYW', href='/nyw', style={'display': 'block', 'textAlign': 'center'})
+])
+
+# Define NEPOOL page layout with year links (2024-2028) and Cash Performance/Predictions tables
+nepool_layout = html.Div([
+    html.H1('NEPOOL Data', style={'textAlign': 'center'}),
+    
+    # Year links
+    html.Div([
+        dcc.Link('2024', href='/nepool/2024', style={'margin': '10px'}),
+        dcc.Link('2025', href='/nepool/2025', style={'margin': '10px'}),
+        dcc.Link('2026', href='/nepool/2026', style={'margin': '10px'}),
+        dcc.Link('2027', href='/nepool/2027', style={'margin': '10px'}),
+        dcc.Link('2028', href='/nepool/2028', style={'margin': '10px'})
+    ], style={'textAlign': 'center'}),
+    
+    html.Br(),
+    
+    # Cash Performance Table
+    html.H2('Cash Performance', style={'textAlign': 'center'}),
+    dash_table.DataTable(
+        id='cash-performance-table',
+        columns=[{"name": i, "id": i} for i in cash_performance.columns],
+        data=cash_performance.to_dict('records'),
+        sort_action="native",
+        filter_action="native",
+        style_table={'overflowX': 'auto', 'margin-left': 'auto', 'margin-right': 'auto'},
+        style_data={'whiteSpace': 'normal', 'height': 'auto'},
+        style_cell={'textAlign': 'left', 'minWidth': '150px', 'width': '150px', 'maxWidth': '150px'},
+    ),
+    
+    html.H2('Predictions', style={'textAlign': 'center'}),
+    dash_table.DataTable(
+        id='predictions-table',
+        columns=[{"name": i, "id": i} for i in predictions.columns],
+        data=predictions.to_dict('records'),
+        sort_action="native",
+        filter_action="native",
+        style_table={'overflowX': 'auto', 'margin-left': 'auto', 'margin-right': 'auto'},
+        style_data={'whiteSpace': 'normal', 'height': 'auto'},
+        style_cell={'textAlign': 'left', 'minWidth': '150px', 'width': '150px', 'maxWidth': '150px'},
+    )
+], style={'textAlign': 'center'})
+
+# Helper function to read CSV dynamically based on the year, month, and page type (Monthly, Daily, Hourly)
+def load_csv(year, month, frequency):
+    file_name = f'NEPOOL_Scenarios_{frequency}_{month}_{year}.csv'
+    file_path = os.path.join(CSV_PATH, file_name)
+    if os.path.exists(file_path):
+        return pd.read_csv(file_path)
+    else:
+        return pd.DataFrame({'Error': [f'File {file_name} not found.']})
+
+# Function to generate a table for a CSV file
+def generate_table(df):
+    return dash_table.DataTable(
+        columns=[{"name": i, "id": i} for i in df.columns],
+        data=df.to_dict('records'),
+        sort_action="native",
+        filter_action="native",
+        style_table={'overflowX': 'auto', 'margin-left': 'auto', 'margin-right': 'auto'},
+        style_data={'whiteSpace': 'normal', 'height': 'auto'},
+        style_cell={'textAlign': 'left', 'minWidth': '150px', 'width': '150px', 'maxWidth': '150px'},
+    )
+
+# Function to generate the layout for Monthly, Daily, and Hourly pages
+def generate_time_layout(year, month, frequency):
+    df = load_csv(year, month, frequency)
+    return html.Div([
+        html.H1(f'{frequency} Data for Year {year}, Month {month}', style={'textAlign': 'center'}),
+        generate_table(df),
+        html.Br(),
+        dcc.Link('Go back to Month', href=f'/nepool/{year}/month/{month}', style={'textAlign': 'center'})
+    ], style={'textAlign': 'center'})
+
+# Function to generate the layout for each month with links to Monthly, Daily, and Hourly data
+def generate_month_layout(year, month):
+    return html.Div([
+        html.H1(f'Year {year} - Month {month}', style={'textAlign': 'center'}),
+        
+        # Links to Monthly, Daily, Hourly pages
+        html.Div([
+            dcc.Link('Monthly', href=f'/nepool/{year}/month/{month}/monthly', style={'margin': '10px'}),
+            dcc.Link('Daily', href=f'/nepool/{year}/month/{month}/daily', style={'margin': '10px'}),
+            dcc.Link('Hourly', href=f'/nepool/{year}/month/{month}/hourly', style={'margin': '10px'}),
+        ], style={'textAlign': 'center'}),
+        
+        html.Br(),
+        dcc.Link('Go back to Year Page', href=f'/nepool/{year}', style={'textAlign': 'center'})
+    ], style={'textAlign': 'center'})
+
+# Function to generate a layout for each year with a scenario table
+def generate_year_layout(year, scenario_df):
+    return html.Div([
+        html.H1(f'Scenario Data for Year {year}', style={'textAlign': 'center'}),
+        
+        # Display scenario data for the year
+        dash_table.DataTable(
+            id=f'scenario-table-{year}',
+            columns=[{"name": i, "id": i} for i in scenario_df.columns],
+            data=scenario_df.to_dict('records'),
+            sort_action="native",
+            filter_action="native",
+            style_table={'overflowX': 'auto', 'margin-left': 'auto', 'margin-right': 'auto'},
+            style_data={'whiteSpace': 'normal', 'height': 'auto'},
+            style_cell={'textAlign': 'left', 'minWidth': '150px', 'width': '150px', 'maxWidth': '150px'},
+        ),
+        
+        html.Br(),
+        dcc.Link('Go back to NEPOOL', href='/nepool', style={'textAlign': 'center'})
+    ], style={'textAlign': 'center'})
+
+# Define the callback to update the page content
+@app.callback(Output('page-content', 'children'),
+              [Input('url', 'pathname')])
+def display_page(pathname):
+    # NEPOOL page with year links
+    if pathname == '/nepool':
+        return nepool_layout
+    
+    # Handle year pages
+    elif pathname == '/nepool/2024':
+        return generate_year_layout(2024, scenario_2024)
+    elif pathname == '/nepool/2025':
+        return generate_year_layout(2025, scenario_2025)
+    elif pathname == '/nepool/2026':
+        return generate_year_layout(2026, scenario_2026)
+    elif pathname == '/nepool/2027':
+        return generate_year_layout(2027, scenario_2027)
+    elif pathname == '/nepool/2028':
