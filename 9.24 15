@@ -1,0 +1,40 @@
+def chart_zone_layout():
+    return html.Div([
+        yanus_button(),  # Add the YANUS button at the top-left
+        html.H1('Chart Zone', style={'textAlign': 'center'}),
+
+        # X Variable Dropdown
+        html.Label('Select X Variable:', style={'display': 'block', 'textAlign': 'center'}),
+        dcc.Dropdown(
+            id='x-variable-dropdown',
+            placeholder='Select X variable',
+            searchable=True,  # Allow typing in the dropdown
+            style={'width': '50%', 'margin': '0 auto'}
+        ),
+
+        # Y Variable Dropdown
+        html.Label('Select Y Variable:', style={'display': 'block', 'textAlign': 'center'}),
+        dcc.Dropdown(
+            id='y-variable-dropdown',
+            placeholder='Select Y variable',
+            searchable=True,  # Allow typing in the dropdown
+            style={'width': '50%', 'margin': '0 auto'}
+        ),
+
+        # List of Months Input
+        html.Label('Select Months (comma-separated):', style={'display': 'block', 'textAlign': 'center'}),
+        dcc.Input(id='months-input', type='text', placeholder='e.g. 1, 2, 3', style={'display': 'block', 'margin': '0 auto'}),
+
+        # List of Years Input
+        html.Label('Select Years (comma-separated):', style={'display': 'block', 'textAlign': 'center'}),
+        dcc.Input(id='years-input', type='text', placeholder='e.g. 2024, 2025', style={'display': 'block', 'margin': '0 auto'}),
+
+        # Run Button
+        html.Br(),
+        html.Button('Run', id='run-button', n_clicks=0, style={'display': 'block', 'margin': '0 auto'}),
+        
+        html.Br(),
+        
+        # Placeholder for the scatter plot image
+        html.Img(id='scatter-plot')  # The id must match the one in the callback output
+    ])
