@@ -1,0 +1,2 @@
+html.Div([
+    dcc.Link('YANUS', href='/', style={'position': 'absolute', 'top': '10px', 'left': '10px', 'fontSize': '20px', 'padding': '10px', 'border': '2px solid black', 'borderRadius': '5px', 'text
