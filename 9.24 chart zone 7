@@ -1,0 +1,16 @@
+def chart_zone_layout():
+    return html.Div([
+        yanus_button(),  # Add the YANUS button at the top-left
+        html.H1('Chart Zone', style={'textAlign': 'center'}),
+
+        # X Variable Dropdown
+        html.Label('Select X Variable:', style={'display': 'block', 'textAlign': 'center'}),
+        dcc.Dropdown(
+            id='x-variable-dropdown',
+            placeholder='Select X variable',
+            searchable=True,  # Allow typing in the dropdown
+            style={'width': '50%', 'margin': '0 auto'}
+        ),
+
+        # Y Variable Dropdown
+        html.Label('Select Y Variable:', style
