@@ -1,0 +1,145 @@
+import dash
+from dash import dcc, html
+from dash.dependencies import Input, Output
+import dash_table
+import pandas as pd
+import os
+
+# Define the file path where all the CSVs are located
+CSV_PATH = '/path/to/csv/files'
+
+# Initialize the app
+app = dash.Dash(__name__)
+
+# Define the layout
+app.layout = html.Div([
+    dcc.Location(id='url', refresh=False),
+    html.Div(id='page-content')
+])
+
+# Define YANUS layout (previously homepage) with links to NEPOOL, NYE, and NYW pages
+yanus_layout = html.Div([
+    html.H1('YANUS', style={'textAlign': 'center'}),
+    dcc.Link('Go to NEPOOL', href='/nepool', style={'display': 'block', 'textAlign': 'center'}),
+    dcc.Link('Go to NYE', href='/nye', style={'display': 'block', 'textAlign': 'center'}),
+    dcc.Link('Go to NYW', href='/nyw', style={'display': 'block', 'textAlign': 'center'})
+])
+
+# Define NEPOOL page layout with year links (2024-2028)
+nepool_layout = html.Div([
+    html.H1('NEPOOL Data', style={'textAlign': 'center'}),
+    
+    # Year links
+    html.Div([
+        dcc.Link('2024', href='/nepool/2024', style={'margin': '10px'}),
+        dcc.Link('2025', href='/nepool/2025', style={'margin': '10px'}),
+        dcc.Link('2026', href='/nepool/2026', style={'margin': '10px'}),
+        dcc.Link('2027', href='/nepool/2027', style={'margin': '10px'}),
+        dcc.Link('2028', href='/nepool/2028', style={'margin': '10px'})
+    ], style={'textAlign': 'center'}),
+])
+
+# Helper function to read CSV dynamically based on the year, month, and page type (Monthly, Daily, Hourly)
+def load_csv(year, month, frequency):
+    file_name = f'NEPOOL_Scenarios_{frequency}_{month}_{year}.csv'
+    file_path = os.path.join(CSV_PATH, file_name)
+    if os.path.exists(file_path):
+        return pd.read_csv(file_path)
+    else:
+        return pd.DataFrame({'Error': [f'File {file_name} not found.']})
+
+# Function to generate a table for a CSV file
+def generate_table(df):
+    return dash_table.DataTable(
+        columns=[{"name": i, "id": i} for i in df.columns],
+        data=df.to_dict('records'),
+        sort_action="native",
+        filter_action="native",
+        style_table={'overflowX': 'auto', 'margin-left': 'auto', 'margin-right': 'auto'},
+        style_data={'whiteSpace': 'normal', 'height': 'auto'},
+        style_cell={'textAlign': 'left', 'minWidth': '150px', 'width': '150px', 'maxWidth': '150px'},
+    )
+
+# Function to generate the layout for Monthly, Daily, and Hourly pages
+def generate_time_layout(year, month, frequency):
+    df = load_csv(year, month, frequency)
+    return html.Div([
+        html.H1(f'{frequency} Data for Year {year}, Month {month}', style={'textAlign': 'center'}),
+        generate_table(df),
+        html.Br(),
+        dcc.Link('Go back to Month', href=f'/nepool/{year}/month/{month}', style={'textAlign': 'center'})
+    ], style={'textAlign': 'center'})
+
+# Function to generate the layout for each month with links to Monthly, Daily, and Hourly data
+def generate_month_layout(year, month):
+    return html.Div([
+        html.H1(f'Year {year} - Month {month}', style={'textAlign': 'center'}),
+        
+        # Links to Monthly, Daily, Hourly pages
+        html.Div([
+            dcc.Link('Monthly', href=f'/nepool/{year}/month/{month}/monthly', style={'margin': '10px'}),
+            dcc.Link('Daily', href=f'/nepool/{year}/month/{month}/daily', style={'margin': '10px'}),
+            dcc.Link('Hourly', href=f'/nepool/{year}/month/{month}/hourly', style={'margin': '10px'}),
+        ], style={'textAlign': 'center'}),
+        
+        html.Br(),
+        dcc.Link('Go back to Year Page', href=f'/nepool/{year}', style={'textAlign': 'center'})
+    ], style={'textAlign': 'center'})
+
+# Function to generate a layout for each year with links to months (1-12)
+def generate_year_layout(year):
+    return html.Div([
+        html.H1(f'Select a Month for Year {year}', style={'textAlign': 'center'}),
+        
+        # Links to months (1-12)
+        html.Div([
+            dcc.Link(f'{month}', href=f'/nepool/{year}/month/{month}', style={'margin': '10px'}) for month in range(1, 13)
+        ], style={'textAlign': 'center'}),
+        
+        html.Br(),
+        dcc.Link('Go back to NEPOOL', href='/nepool', style={'textAlign': 'center'})
+    ], style={'textAlign': 'center'})
+
+# Define the callback to update the page content
+@app.callback(Output('page-content', 'children'),
+              [Input('url', 'pathname')])
+def display_page(pathname):
+    # NEPOOL page with year links
+    if pathname == '/nepool':
+        return nepool_layout
+    
+    # Handle year pages
+    elif pathname == '/nepool/2024':
+        return generate_year_layout(2024)
+    elif pathname == '/nepool/2025':
+        return generate_year_layout(2025)
+    elif pathname == '/nepool/2026':
+        return generate_year_layout(2026)
+    elif pathname == '/nepool/2027':
+        return generate_year_layout(2027)
+    elif pathname == '/nepool/2028':
+        return generate_year_layout(2028)
+    
+    # Handle month-specific pages with links to Monthly, Daily, Hourly
+    elif pathname.startswith('/nepool/2024/month/'):
+        month = pathname.split('/')[-1]
+        return generate_month_layout(2024, month)
+    
+    # Handle the Monthly, Daily, Hourly pages for any year/month
+    elif 'monthly' in pathname:
+        year, month = pathname.split('/')[2:4]
+        return generate_time_layout(year, month, 'Monthly')
+    elif 'daily' in pathname:
+        year, month = pathname.split('/')[2:4]
+        return generate_time_layout(year, month, 'Daily')
+    elif 'hourly' in pathname:
+        year, month = pathname.split('/')[2:4]
+        return generate_time_layout(year, month, 'Hourly')
+    
+    # Return the homepage as default
+    else:
+        return yanus_layout
+
+# Run the app
+if __name__ == '__main__':
+    app.run_server(debug=True, port=8051)
