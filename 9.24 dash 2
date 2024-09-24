@@ -1,0 +1,66 @@
+import dash
+from dash import dcc, html
+from dash.dependencies import Input, Output
+import dash_table
+import pandas as pd
+
+# Sample data for Cash Performance and Predictions DataFrames
+cash_performance = pd.DataFrame({
+    'Date': ['2024-01-01', '2024-01-02', '2024-01-03'],
+    'Price': [50, 55, 60]
+})
+
+predictions = pd.DataFrame({
+    'Date': ['2024-01-01', '2024-01-02', '2024-01-03'],
+    'Predicted Price': [52, 54, 61]
+})
+
+# Initialize the app
+app = dash.Dash(__name__)
+
+# Define the layout
+app.layout = html.Div([
+    dcc.Location(id='url', refresh=False),
+    html.Div(id='page-content')
+])
+
+# Define homepage layout
+homepage_layout = html.Div([
+    html.H1('Homepage'),
+    dcc.Link('Go to NEPOOL', href='/nepool')
+])
+
+# Define NEPOOL page layout with two interactive tables
+nepool_layout = html.Div([
+    html.H1('NEPOOL Data'),
+    html.H2('Cash Performance'),
+    dash_table.DataTable(
+        id='cash-performance-table',
+        columns=[{"name": i, "id": i} for i in cash_performance.columns],
+        data=cash_performance.to_dict('records'),
+        page_size=10,
+        sort_action="native"  # Enable sorting on columns
+    ),
+    html.H2('Predictions'),
+    dash_table.DataTable(
+        id='predictions-table',
+        columns=[{"name": i, "id": i} for i in predictions.columns],
+        data=predictions.to_dict('records'),
+        page_size=10,
+        sort_action="native"  # Enable sorting on columns
+    ),
+    dcc.Link('Go back to Homepage', href='/')
+])
+
+# Callback to update the page content
+@app.callback(Output('page-content', 'children'),
+              [Input('url', 'pathname')])
+def display_page(pathname):
+    if pathname == '/nepool':
+        return nepool_layout
+    else:
+        return homepage_layout
+
+# Run the app
+if __name__ == '__main__':
+    app.run_server(debug=True, port=8051)
