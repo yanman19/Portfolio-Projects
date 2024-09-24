@@ -1,0 +1,64 @@
+@app.callback(
+    Output('scatter-plot', 'src'),
+    Input('run-button', 'n_clicks'),
+    [Input('x-variable-dropdown', 'value'),
+     Input('y-variable-dropdown', 'value'),
+     Input('months-input', 'value'),
+     Input('years-input', 'value')]
+)
+def update_scatter_plot(n_clicks, x_variable, y_variable, months, years):
+    if n_clicks > 0:
+        # Convert comma-separated strings into lists of integers for months and years
+        months = [int(m.strip()) for m in months.split(',')] if months else []
+        years = [int(y.strip()) for y in years.split(',')] if years else []
+
+        # Extract months and years from Datetime1 column
+        scatter_df['month'] = scatter_df['Datetime1'].dt.month
+        scatter_df['year'] = scatter_df['Datetime1'].dt.year
+
+        # Filter the dataframe based on the selected months and years
+        filtered_df = scatter_df[
+            scatter_df['month'].isin(months) &
+            scatter_df['year'].isin(years)
+        ]
+
+        # Get x and y values
+        x = filtered_df[[x_variable]].values
+        y = filtered_df[[y_variable]].values
+
+        # Polynomial transformation and linear regression model
+        degree = 2
+        poly = PolynomialFeatures(degree=degree)
+        x_poly = poly.fit_transform(x)
+        model = LinearRegression()
+        model.fit(x_poly, y)
+
+        # Predictions for the polynomial model
+        y_pred = model.predict(x_poly)
+        filtered_df['y_pred'] = y_pred
+
+        # Generate the plot using your chart style
+        plt.figure(figsize=(12, 8))
+        sns.scatterplot(data=filtered_df, x=x_variable, y=y_variable, hue='year', palette='colorblind')
+
+        # Sort by x-values and plot the polynomial fit
+        sorted_indices = np.argsort(x[:, 0])
+        plt.plot(x[sorted_indices], y_pred[sorted_indices], color='red', label=f'Polynomial Fit')
+
+        plt.legend()
+        plt.xlabel(x_variable)
+        plt.ylabel(y_variable)
+        plt.title(f'{x_variable} vs {y_variable}')
+        plt.grid(True)
+
+        # Convert matplotlib plot to PNG image for Dash
+        buf = BytesIO()
+        plt.savefig(buf, format="png")
+        buf.seek(0)
+        encoded_image = base64.b64encode(buf.getvalue()).decode("utf-8")
+        plt.close()
+
+        return "data:image/png;base64,{}".format(encoded_image)
+
+    # Return a blank image if not clicked yet
+    return ""
