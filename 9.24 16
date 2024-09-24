@@ -1,0 +1,18 @@
+@app.callback(
+    Output('scatter-plot', 'src'),  # Output must match the 'id' of the Img component
+    Input('run-button', 'n_clicks'),
+    [Input('x-variable-dropdown', 'value'),
+     Input('y-variable-dropdown', 'value'),
+     Input('months-input', 'value'),
+     Input('years-input', 'value')]
+)
+def update_scatter_plot(n_clicks, x_variable, y_variable, months, years):
+    if n_clicks > 0:
+        # Your plot generation code here...
+        # After generating the plot, return the Base64 image
+
+        # Assuming the plot generation is successful and encoded as a base64 string
+        return "data:image/png;base64,{}".format(encoded_image)
+
+    # Return an empty string if no plot
+    return ""
