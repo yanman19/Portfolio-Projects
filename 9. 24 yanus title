@@ -1,0 +1,16 @@
+def yanus_title():
+    return html.H1([
+        html.Span('Y', style={'color': '#4285F4', 'fontSize': '48px'}),  # Blue
+        html.Span('A', style={'color': '#DB4437', 'fontSize': '48px'}),  # Red
+        html.Span('N', style={'color': '#F4B400', 'fontSize': '48px'}),  # Yellow
+        html.Span('U', style={'color': '#4285F4', 'fontSize': '48px'}),  # Blue
+        html.Span('S', style={'color': '#0F9D58', 'fontSize': '48px'})   # Green
+    ], style={'textAlign': 'center', 'fontWeight': 'bold', 'marginTop': '50px'})
+
+def yanus_layout():
+    return html.Div([
+        yanus_title(),  # The styled YANUS logo
+        dcc.Link('Go to NEPOOL', href='/nepool', style={'display': 'block', 'textAlign': 'center'}),
+        dcc.Link('Go to NYE', href='/nye', style={'display': 'block', 'textAlign': 'center'}),
+        dcc.Link('Go to NYW', href='/nyw', style={'display': 'block', 'textAlign': 'center'})
+    ])
