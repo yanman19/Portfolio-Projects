@@ -1,0 +1,10 @@
+# Handle the Monthly, Daily, Hourly pages for any year/month
+elif 'monthly' in pathname:
+    year, month = pathname.split('/')[2], pathname.split('/')[4]  # Extract year and month
+    return generate_time_layout(year, month, 'Monthly')
+elif 'daily' in pathname:
+    year, month = pathname.split('/')[2], pathname.split('/')[4]  # Extract year and month
+    return generate_time_layout(year, month, 'Daily')
+elif 'hourly' in pathname:
+    year, month = pathname.split('/')[2], pathname.split('/')[4]  # Extract year and month
+    return generate_time_layout(year, month, 'Hourly')
