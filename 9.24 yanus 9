@@ -1,0 +1,20 @@
+# Function to generate a layout for each year with a scenario table
+def generate_year_layout(year, scenario_df):
+    return html.Div([
+        html.H1(f'Scenario Data for Year {year}', style={'textAlign': 'center'}),
+        
+        # Display scenario data for the year
+        dash_table.DataTable(
+            id=f'scenario-table-{year}',
+            columns=[{"name": i, "id": i} for i in scenario_df.columns],
+            data=scenario_df.to_dict('records'),
+            sort_action="native",
+            filter_action="native",
+            style_table={'overflowX': 'auto', 'margin-left': 'auto', 'margin-right': 'auto'},
+            style_data={'whiteSpace': 'normal', 'height': 'auto'},
+            style_cell={'textAlign': 'left', 'minWidth': '150px', 'width': '150px', 'maxWidth': '150px'},
+        ),
+        
+        html.Br(),
+        dcc.Link('Go back to NEPOOL', href='/nepool', style={'textAlign': 'center'})
+    ], style={'textAlign': 'center'})
