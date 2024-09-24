@@ -1,0 +1,64 @@
+import dash
+from dash import dcc, html
+from dash.dependencies import Input, Output
+import dash_table
+import pandas as pd
+
+# Create example data for NEPOOL_cash and NEPOOL_stack
+NEPOOL_cash = pd.DataFrame({
+    'Date': ['2024-01-01', '2024-01-02', '2024-01-03'],
+    'Price': [50, 55, 60]
+})
+
+NEPOOL_stack = pd.DataFrame({
+    'Fuel Type': ['Natural Gas', 'Nuclear', 'Coal'],
+    'Percentage': [40, 30, 30]
+})
+
+# Initialize the app
+app = dash.Dash(__name__)
+
+# Define the layout
+app.layout = html.Div([
+    dcc.Location(id='url', refresh=False),
+    html.Div(id='page-content')
+])
+
+# Define homepage layout
+homepage_layout = html.Div([
+    html.H1('Homepage'),
+    dcc.Link('Go to NEPOOL', href='/nepool')
+])
+
+# Define NEPOOL page layout
+nepool_layout = html.Div([
+    html.H1('NEPOOL Data'),
+    html.H2('NEPOOL_cash DataFrame'),
+    dash_table.DataTable(
+        id='nepool-cash-table',
+        columns=[{"name": i, "id": i} for i in NEPOOL_cash.columns],
+        data=NEPOOL_cash.to_dict('records'),
+        page_size=10
+    ),
+    html.H2('NEPOOL_stack DataFrame'),
+    dash_table.DataTable(
+        id='nepool-stack-table',
+        columns=[{"name": i, "id": i} for i in NEPOOL_stack.columns],
+        data=NEPOOL_stack.to_dict('records'),
+        page_size=10
+    ),
+    dcc.Link('Go back to Homepage', href='/')
+])
+
+# Callback to update the page content
+@app.callback(Output('page-content', 'children'),
+              [Input('url', 'pathname')])
+def display_page(pathname):
+    if pathname == '/nepool':
+        return nepool_layout
+    else:
+        return homepage_layout
+
+# Run the app
+if __name__ == '__main__':
+    app.run_server(debug=True)
