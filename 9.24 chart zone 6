@@ -1,0 +1,10 @@
+import matplotlib.pyplot as plt
+import seaborn as sns
+from io import BytesIO
+import base64
+import pandas as pd
+
+# Necessary imports for the scatter_df and callback structure
+import numpy as np
+from sklearn.preprocessing import PolynomialFeatures
+from sklearn.linear_model import LinearRegression
