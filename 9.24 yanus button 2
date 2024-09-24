@@ -1,0 +1,13 @@
+def yanus_button():
+    return html.Div([
+        dcc.Link([
+            html.Span('Y', style={'color': '#4285F4', 'fontSize': '24px'}),  # Blue
+            html.Span('A', style={'color': '#DB4437', 'fontSize': '24px'}),  # Red
+            html.Span('N', style={'color': '#F4B400', 'fontSize': '24px'}),  # Yellow
+            html.Span('U', style={'color': '#4285F4', 'fontSize': '24px'}),  # Blue
+            html.Span('S', style={'color': '#0F9D58', 'fontSize': '24px'})   # Green
+        ], href='/', style={
+            'position': 'absolute', 'top': '10px', 'left': '10px',
+            'textDecoration': 'none', 'padding': '10px', 'fontWeight': 'bold'
+        })
+    ])
