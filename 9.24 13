@@ -1,0 +1,5 @@
+# Handle month-specific pages for any year with links to Monthly, Daily, Hourly
+elif '/month/' in pathname and len(pathname.split('/')) == 5:
+    year = pathname.split('/')[2]
+    month = pathname.split('/')[4]
+    return generate_month_layout(year, month)
