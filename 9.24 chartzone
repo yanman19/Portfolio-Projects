@@ -1,0 +1,122 @@
+def chart_zone_layout():
+    return html.Div([
+        yanus_button(),  # Add the YANUS button at the top-left
+        html.H1('Chart Zone', style={'textAlign': 'center'}),
+
+        # X Variable Dropdown
+        html.Label('Select X Variable:', style={'display': 'block', 'textAlign': 'center'}),
+        dcc.Dropdown(
+            id='x-variable-dropdown',
+            placeholder='Select X variable',
+            searchable=True,  # Allow typing in the dropdown
+            style={'width': '50%', 'margin': '0 auto'}
+        ),
+
+        # Y Variable Dropdown
+        html.Label('Select Y Variable:', style={'display': 'block', 'textAlign': 'center'}),
+        dcc.Dropdown(
+            id='y-variable-dropdown',
+            placeholder='Select Y variable',
+            searchable=True,  # Allow typing in the dropdown
+            style={'width': '50%', 'margin': '0 auto'}
+        ),
+
+        # List of Months Input
+        html.Label('Select Months (comma-separated):', style={'display': 'block', 'textAlign': 'center'}),
+        dcc.Input(id='months-input', type='text', placeholder='e.g. 1, 2, 3', style={'display': 'block', 'margin': '0 auto'}),
+
+        # List of Years Input
+        html.Label('Select Years (comma-separated):', style={'display': 'block', 'textAlign': 'center'}),
+        dcc.Input(id='years-input', type='text', placeholder='e.g. 2024, 2025', style={'display': 'block', 'margin': '0 auto'}),
+
+        # Run Button
+        html.Br(),
+        html.Button('Run', id='run-button', n_clicks=0, style={'display': 'block', 'margin': '0 auto'}),
+        
+        html.Br(),
+        
+        # Placeholder for the scatter plot
+        dcc.Graph(id='scatter-plot')
+    ])
+
+
+import numpy as np
+import plotly.express as px
+
+# Example scatter_df with Datetime1 column
+scatter_df = pd.DataFrame({
+    'Datetime1': pd.date_range('2024-01-01', periods=100, freq='M'),  # Example datetime
+    'x_variable': np.random.randn(100),
+    'y_variable': np.random.randn(100),
+    'other_variable': np.random.randn(100)
+})
+
+# Callback to populate the X and Y variable dropdowns
+@app.callback(
+    [Output('x-variable-dropdown', 'options'),
+     Output('y-variable-dropdown', 'options')],
+    Input('url', 'pathname')  # Populate when page is loaded
+)
+def populate_dropdowns(_):
+    columns = scatter_df.columns
+    options = [{'label': col, 'value': col} for col in columns if col != 'Datetime1']
+    return options, options
+
+# Scatter plot callback
+@app.callback(
+    Output('scatter-plot', 'figure'),
+    Input('run-button', 'n_clicks'),
+    [Input('x-variable-dropdown', 'value'),
+     Input('y-variable-dropdown', 'value'),
+     Input('months-input', 'value'),
+     Input('years-input', 'value')]
+)
+def update_scatter_plot(n_clicks, x_variable, y_variable, months, years):
+    if n_clicks > 0:
+        # Convert comma-separated strings into lists of integers for months and years
+        months = [int(m.strip()) for m in months.split(',')] if months else []
+        years = [int(y.strip()) for y in years.split(',')] if years else []
+
+        # Extract months and years from Datetime1 column
+        scatter_df['month'] = scatter_df['Datetime1'].dt.month
+        scatter_df['year'] = scatter_df['Datetime1'].dt.year
+
+        # Filter the dataframe based on the selected months and years
+        filtered_df = scatter_df[
+            scatter_df['month'].isin(months) &
+            scatter_df['year'].isin(years)
+        ]
+        
+        # Create the scatter plot
+        fig = px.scatter(
+            filtered_df,
+            x=x_variable,
+            y=y_variable,
+            color='year',
+            title=f'{x_variable} vs {y_variable}',
+            labels={x_variable: x_variable, y_variable: y_variable}
+        )
+
+        # Add polynomial trendline (order 2)
+        fig.update_traces(mode='markers')
+        fig.add_traces(px.scatter(
+            filtered_df, 
+            x=x_variable, 
+            y=np.polyval(np.polyfit(filtered_df[x_variable], filtered_df[y_variable], 2), filtered_df[x_variable])
+        ).data)
+
+        # Add grid and legend in the top-right
+        fig.update_layout(
+            xaxis=dict(showgrid=True), 
+            yaxis=dict(showgrid=True),
+            legend=dict(
+                yanchor="top",
+                y=0.99,
+                xanchor="right",
+                x=0.99
+            )
+        )
+
+        return fig
+
+    return {}
