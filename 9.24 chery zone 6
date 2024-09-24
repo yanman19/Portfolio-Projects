@@ -1,0 +1,38 @@
+@app.callback(
+    Output('scatter-plot', 'src'),  # Ensure we update the 'src' attribute of the image
+    Input('run-button', 'n_clicks'),
+    [Input('x-variable-dropdown', 'value'),
+     Input('y-variable-dropdown', 'value'),
+     Input('months-input', 'value'),
+     Input('years-input', 'value')]
+)
+def update_scatter_plot(n_clicks, x_variable, y_variable, months, years):
+    if n_clicks > 0:
+        # Filtering and plotting logic as you already have
+
+        # Your existing code for generating the matplotlib plot
+        plt.figure(figsize=(12, 8))
+        sns.scatterplot(data=filtered_df, x=x_variable, y=y_variable, hue='year', palette='colorblind')
+
+        # Plot the polynomial fit
+        sorted_indices = np.argsort(x[:, 0])
+        plt.plot(x[sorted_indices], y_pred[sorted_indices], color='red', label=f'Polynomial Fit')
+
+        plt.legend()
+        plt.xlabel(x_variable)
+        plt.ylabel(y_variable)
+        plt.title(f'{x_variable} vs {y_variable}')
+        plt.grid(True)
+
+        # Convert matplotlib plot to PNG image for Dash
+        buf = BytesIO()
+        plt.savefig(buf, format="png")
+        buf.seek(0)
+        encoded_image = base64.b64encode(buf.getvalue()).decode("utf-8")
+        plt.close()
+
+        # Return the Base64-encoded image
+        return f"data:image/png;base64,{encoded_image}"
+
+    # Return an empty string if the button hasn't been clicked yet
+    return ""
