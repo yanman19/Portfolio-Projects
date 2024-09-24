@@ -1,0 +1,53 @@
+def yanus_button():
+    return dcc.Link([
+        html.Span('Y', style={'color': '#4285F4', 'fontSize': '24px'}),  # Blue
+        html.Span('A', style={'color': '#DB4437', 'fontSize': '24px'}),  # Red
+        html.Span('N', style={'color': '#F4B400', 'fontSize': '24px'}),  # Yellow
+        html.Span('U', style={'color': '#4285F4', 'fontSize': '24px'}),  # Blue
+        html.Span('S', style={'color': '#0F9D58', 'fontSize': '24px'})   # Green
+    ], href='/', style={
+        'position': 'absolute', 'top': '10px', 'left': '10px',
+        'textDecoration': 'none', 'padding': '10px', 'fontWeight': 'bold'
+    })
+
+def nepool_layout():
+    return html.Div([
+        yanus_button(),  # Add the YANUS button at the top left
+        html.H1('NEPOOL Data', style={'textAlign': 'center'}),
+        
+        # Year links
+        html.Div([
+            dcc.Link('2024', href='/nepool/2024', style={'margin': '10px'}),
+            dcc.Link('2025', href='/nepool/2025', style={'margin': '10px'}),
+            dcc.Link('2026', href='/nepool/2026', style={'margin': '10px'}),
+            dcc.Link('2027', href='/nepool/2027', style={'margin': '10px'}),
+            dcc.Link('2028', href='/nepool/2028', style={'margin': '10px'})
+        ], style={'textAlign': 'center'}),
+        
+        html.Br(),
+        
+        # Cash Performance Table
+        html.H2('Cash Performance', style={'textAlign': 'center'}),
+        dash_table.DataTable(
+            id='cash-performance-table',
+            columns=[{"name": i, "id": i} for i in cash_performance.columns],
+            data=cash_performance.to_dict('records'),
+            sort_action="native",
+            filter_action="native",
+            style_table={'overflowX': 'auto', 'margin-left': 'auto', 'margin-right': 'auto'},
+            style_data={'whiteSpace': 'normal', 'height': 'auto'},
+            style_cell={'textAlign': 'left', 'minWidth': '150px', 'width': '150px', 'maxWidth': '150px'},
+        ),
+        
+        html.H2('Predictions', style={'textAlign': 'center'}),
+        dash_table.DataTable(
+            id='predictions-table',
+            columns=[{"name": i, "id": i} for i in predictions.columns],
+            data=predictions.to_dict('records'),
+            sort_action="native",
+            filter_action="native",
+            style_table={'overflowX': 'auto', 'margin-left': 'auto', 'margin-right': 'auto'},
+            style_data={'whiteSpace': 'normal', 'height': 'auto'},
+            style_cell={'textAlign': 'left', 'minWidth': '150px', 'width': '150px', 'maxWidth': '150px'},
+        )
+    ], style={'textAlign': 'center'})
