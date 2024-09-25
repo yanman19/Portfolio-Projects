@@ -1,0 +1,19 @@
+for filename in os.listdir(directory):
+    if filename.startswith(f"NEPOOL_Scenarios_Monthly_") and year_in_question in filename:
+        parts = filename.split('_')
+        month = parts[3]
+        file_year = parts[4].split('.')[0]
+
+        file_path = os.path.join(directory, filename)
+        csv_df = pd.read_csv(file_path)
+
+        # Check column names to see if 'Hybrid price' exists
+        print(csv_df.columns)  # This will print the column names in each CSV
+
+        # Normalize column names to prevent case or space issues
+        csv_df.columns = csv_df.columns.str.strip().str.lower()
+
+        # Now access 'hybrid price' in lowercase
+        avg_hybrid_price = csv_df['hybrid price'].mean()
+
+        # The rest of your code goes here...
