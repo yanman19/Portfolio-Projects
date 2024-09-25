@@ -1,0 +1,110 @@
+import pandas as pd
+import os
+
+# Define the directory where your CSVs are stored and the year in question
+directory = "/path/to/your/csv/files"
+year_in_question = "2024"  # Define the year in question
+
+# Commodity letter to month mapping (assumes only valid months)
+commodity_mapping = {
+    'F': 1,  # January
+    'G': 2,  # February
+    'H': 3,  # March
+    'J': 4,  # April
+    'K': 5,  # May
+    'M': 6,  # June
+    'N': 7,  # July
+    'Q': 8,  # August
+    'U': 9,  # September
+    'V': 10, # October
+    'X': 11, # November
+    'Z': 12  # December
+}
+
+# Assuming `prices_df` is the existing DataFrame with commodity prices as the index
+# We define the column of interest (MASSHUB_PEAK)
+commodity_column = 'MASSHUB_PEAK'
+
+# Example of prices_df (ensure index is a string)
+prices_df = pd.DataFrame({'MASSHUB_PEAK': [100, 105, 110]}, index=['F24', 'G24', 'H24'])
+prices_df.index = prices_df.index.astype(str)  # Ensure the index is treated as string
+
+# Prepare an empty dictionary to store data for comparison
+comparison_data = {
+    'Month': [],
+    'Market Price': [],
+    'Fair Value': [],
+    'Difference': []
+}
+
+# Loop through each file in the directory
+for filename in os.listdir(directory):
+    if filename.startswith(f"NEPOOL_Scenarios_Monthly_") and year_in_question in filename:
+        parts = filename.split('_')
+        month = parts[3]
+        file_year = parts[4].split('.')[0]
+
+        file_path = os.path.join(directory, filename)
+        csv_df = pd.read_csv(file_path)
+
+        # Display all columns in the CSV to check for any hidden characters or issues
+        print(f"Columns in {filename}:")
+        for col in csv_df.columns:
+            print(f"'{col}'")
+
+        # Normalize column names to prevent case or space issues
+        csv_df.columns = csv_df.columns.str.strip().str.lower()
+
+        # Try to find a column that contains both 'hybrid' and 'price'
+        hybrid_price_col = None
+        for col in csv_df.columns:
+            if 'hybrid' in col and 'price' in col:
+                hybrid_price_col = col
+                break
+
+        if hybrid_price_col:
+            # Calculate the average from the matched column
+            avg_hybrid_price = csv_df[hybrid_price_col].mean()
+            print(f"Using column '{hybrid_price_col}' for Hybrid Price")
+
+            # Iterate over the index of prices_df to find the corresponding commodity
+            for commodity_key in prices_df.index:
+                # Extract the commodity letter and year (e.g., F24)
+                commodity_letter = commodity_key[0]  # First letter (e.g., 'F')
+                commodity_year = commodity_key[1:]   # Year part (e.g., '24')
+
+                # Convert commodity year to full year (assuming the year part is the last two digits)
+                full_year = f"20{commodity_year}"
+
+                # Map the commodity letter to the corresponding month
+                commodity_month = commodity_mapping.get(commodity_letter)
+
+                # Check if the commodity month and year match the current file being processed
+                if commodity_month == int(month) and full_year == file_year:
+                    # Extract the market price from the given column (MASSHUB_PEAK)
+                    market_price = prices_df.loc[commodity_key, commodity_column]
+
+                    # Calculate the difference
+                    difference = market_price - avg_hybrid_price
+
+                    # Append the results to the comparison_data dictionary
+                    comparison_data['Month'].append(month)
+                    comparison_data['Market Price'].append(market_price)
+                    comparison_data['Fair Value'].append(avg_hybrid_price)
+                    comparison_data['Difference'].append(difference)
+        else:
+            print(f"No matching 'Hybrid Price' column found in {filename}")
+            continue  # Skip this file if no matching column is found
+
+# Create a DataFrame from the comparison data
+comparison_df = pd.DataFrame(comparison_data)
+
+# Pivot the table to show months as columns and rows for 'Market Price', 'Fair Value', and 'Difference'
+final_df = pd.DataFrame({
+    'Market Price': comparison_df['Market Price'],
+    'Fair Value': comparison_df['Fair Value'],
+    'Difference': comparison_df['Difference']
+}, index=comparison_df['Month'].values).T
+
+# Display the final DataFrame
+import ace_tools as tools; tools.display_dataframe_to_user(name="Final Comparison", dataframe=final_df)
