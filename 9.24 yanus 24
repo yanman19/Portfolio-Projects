@@ -1,0 +1,99 @@
+import plotly.graph_objs as go
+from datetime import datetime, timedelta
+
+@app.callback(
+    [Output(f'input-tracker-graph-{i}', 'figure') for i in range(len(variables))],
+    Input('url', 'pathname')
+)
+def update_input_tracker(pathname):
+    if pathname == '/nepool/input-tracker':
+        figures = []
+        today = datetime.now()
+        start_date = today - timedelta(days=30)  # 30 days before today
+        end_date = today + timedelta(days=30)    # 30 days after today
+
+        # Debug: Print start and end date
+        print(f"Start Date: {start_date}, End Date: {end_date}")
+
+        # Filter the dataframe to show data for the current year and for past 4 years
+        scatter_df['market_day'] = scatter_df['Datetime1'].dt.dayofyear
+        scatter_df['date'] = scatter_df['Datetime1'].dt.date
+
+        # Filter data to be within the date range for the current year
+        current_year_df = scatter_df[(scatter_df['year'] == scatter_df['year'].max()) &
+                                     (scatter_df['Datetime1'] >= start_date) &
+                                     (scatter_df['Datetime1'] <= end_date)]
+        
+        # Debug: Print current year dataframe
+        print(f"Current Year Data: {current_year_df.head()}")
+
+        # Filter past 4 years data
+        past_4_years_df = scatter_df[(scatter_df['year'].isin(scatter_df['year'].unique()[-4:])) &
+                                     (scatter_df['Datetime1'] >= start_date) &
+                                     (scatter_df['Datetime1'] <= end_date)]
+
+        # Debug: Print past 4 years dataframe
+        print(f"Past 4 Years Data: {past_4_years_df.head()}")
+
+        for var in variables:
+            if var not in scatter_df.columns:
+                print(f"Variable {var} is not in scatter_df")
+                continue  # Skip if the variable is not in the dataframe
+
+            # Calculate min and max for the past 4 years for the given variable
+            min_max_df = past_4_years_df.groupby('market_day').agg({var: ['min', 'max']}).reset_index()
+            min_max_df.columns = ['market_day', 'min', 'max']
+
+            # Debug: Print min/max dataframe
+            print(f"Min/Max Data for {var}: {min_max_df.head()}")
+
+            # Line graph for the current year's data
+            trace_current_year = go.Scatter(
+                x=current_year_df['Datetime1'],
+                y=current_year_df[var],
+                mode='lines',
+                name=f'Current Year - {var}',
+                line=dict(color='blue')
+            )
+
+            # Band for the min/max over the past 4 years
+            trace_band_max = go.Scatter(
+                x=min_max_df['market_day'],
+                y=min_max_df['max'],
+                mode='lines',
+                fill=None,
+                line=dict(color='rgba(0,0,0,0)'),
+                showlegend=False
+            )
+
+            trace_band_min = go.Scatter(
+                x=min_max_df['market_day'],
+                y=min_max_df['min'],
+                mode='lines',
+                fill='tonexty',  # Fill between the min and max
+                fillcolor='rgba(0,100,80,0.2)',  # Semi-transparent green
+                line=dict(color='rgba(0,0,0,0)'),
+                showlegend=False
+            )
+
+            # Create the figure with the line and band
+            fig = go.Figure(data=[trace_current_year, trace_band_max, trace_band_min])
+            
+            # Set layout options
+            fig.update_layout(
+                title=f'{var} over Market Day',
+                xaxis_title='Market Day',
+                yaxis_title=var,
+                template='plotly_white',
+                xaxis=dict(
+                    range=[start_date, end_date],  # Show 30 days before and after today
+                    title='Market Day'
+                )
+            )
+
+            figures.append(fig)
+
+        return figures
+
+    # Return empty figures if not on the InputTracker page
+    return [go.Figure() for _ in variables]
