@@ -1,0 +1,176 @@
+#1 
+def nepool_layout():
+    return html.Div([
+        yanus_button(),  # YANUS button at the top-left
+        html.H1('NEPOOL Data', style={'textAlign': 'center'}),
+        
+        # Year links
+        html.Div([
+            dcc.Link('2024', href='/nepool/2024', style={'margin': '10px'}),
+            dcc.Link('2025', href='/nepool/2025', style={'margin': '10px'}),
+            dcc.Link('2026', href='/nepool/2026', style={'margin': '10px'}),
+            dcc.Link('2027', href='/nepool/2027', style={'margin': '10px'}),
+            dcc.Link('2028', href='/nepool/2028', style={'margin': '10px'}),
+        ], style={'textAlign': 'center'}),
+        
+        html.Br(),
+
+        # Links to Chart Zone and InputTracker
+        dcc.Link('Go to Chart Zone', href='/nepool/chart-zone', style={'display': 'inline-block', 'textAlign': 'center', 'margin': '20px'}),
+        dcc.Link('Go to InputTracker', href='/nepool/input-tracker', style={'display': 'inline-block', 'textAlign': 'center', 'margin': '20px'}),  # New InputTracker link
+        
+        html.Br(),
+        
+        # Cash Performance Table (this part should be already in your layout)
+        html.H2('Cash Performance', style={'textAlign': 'center'}),
+        dash_table.DataTable(
+            id='cash-performance-table',
+            columns=[{"name": i, "id": i} for i in cash_performance.columns],
+            data=cash_performance.to_dict('records'),
+            sort_action="native",
+            filter_action="native",
+            style_table={'overflowX': 'auto', 'margin-left': 'auto', 'margin-right': 'auto'},
+            style_data={'whiteSpace': 'normal', 'height': 'auto'},
+            style_cell={'textAlign': 'left', 'minWidth': '150px', 'width': '150px', 'maxWidth': '150px'},
+        ),
+        
+        html.H2('Predictions', style={'textAlign': 'center'}),
+        dash_table.DataTable(
+            id='predictions-table',
+            columns=[{"name": i, "id": i} for i in predictions.columns],
+            data=predictions.to_dict('records'),
+            sort_action="native",
+            filter_action="native",
+            style_table={'overflowX': 'auto', 'margin-left': 'auto', 'margin-right': 'auto'},
+            style_data={'whiteSpace': 'normal', 'height': 'auto'},
+            style_cell={'textAlign': 'left', 'minWidth': '150px', 'width': '150px', 'maxWidth': '150px'},
+        )
+    ], style={'textAlign': 'center'})
+
+#2 
+
+def input_tracker_layout(variables):
+    graphs = []
+    for i, var in enumerate(variables):
+        graph_id = f'input-tracker-graph-{i}'
+        
+        # Add graph to the layout
+        graphs.append(html.Div([
+            dcc.Graph(id=graph_id)
+        ], style={'display': 'inline-block', 'width': '45%', 'margin': '2.5%'}))  # Two graphs per row
+    
+    return html.Div([
+        yanus_button(),  # Add the YANUS button at the top-left
+        html.H1('InputTracker', style={'textAlign': 'center'}),
+        html.Div(graphs)  # Display the graphs in rows
+    ])
+
+#3 
+
+import plotly.graph_objs as go
+from datetime import datetime, timedelta
+
+@app.callback(
+    [Output(f'input-tracker-graph-{i}', 'figure') for i in range(len(variables))],
+    Input('url', 'pathname')
+)
+def update_input_tracker(pathname):
+    if pathname == '/nepool/input-tracker':
+        figures = []
+        today = datetime.now()
+        start_date = today - timedelta(days=30)  # 30 days before today
+        end_date = today + timedelta(days=30)    # 30 days after today
+
+        # Filter the dataframe to show data for the current year and for past 4 years
+        scatter_df['market_day'] = scatter_df['Datetime1'].dt.dayofyear
+        scatter_df['date'] = scatter_df['Datetime1'].dt.date
+
+        # Filter data to be within the date range
+        current_year_df = scatter_df[(scatter_df['year'] == scatter_df['year'].max()) &
+                                     (scatter_df['Datetime1'] >= start_date) &
+                                     (scatter_df['Datetime1'] <= end_date)]
+        
+        # Filter past 4 years data
+        past_4_years_df = scatter_df[(scatter_df['year'].isin(scatter_df['year'].unique()[-4:])) &
+                                     (scatter_df['Datetime1'] >= start_date) &
+                                     (scatter_df['Datetime1'] <= end_date)]
+
+        for var in variables:
+            # Calculate min and max for the past 4 years for the given variable
+            min_max_df = past_4_years_df.groupby('market_day').agg({var: ['min', 'max']}).reset_index()
+            min_max_df.columns = ['market_day', 'min', 'max']
+
+            # Line graph for the current year's data
+            trace_current_year = go.Scatter(
+                x=current_year_df['Datetime1'],
+                y=current_year_df[var],
+                mode='lines',
+                name=f'Current Year - {var}',
+                line=dict(color='blue')
+            )
+
+            # Band for the min/max over the past 4 years
+            trace_band_max = go.Scatter(
+                x=min_max_df['market_day'],
+                y=min_max_df['max'],
+                mode='lines',
+                fill=None,
+                line=dict(color='rgba(0,0,0,0)'),
+                showlegend=False
+            )
+
+            trace_band_min = go.Scatter(
+                x=min_max_df['market_day'],
+                y=min_max_df['min'],
+                mode='lines',
+                fill='tonexty',  # Fill between the min and max
+                fillcolor='rgba(0,100,80,0.2)',  # Semi-transparent green
+                line=dict(color='rgba(0,0,0,0)'),
+                showlegend=False
+            )
+
+            # Create the figure with the line and band
+            fig = go.Figure(data=[trace_current_year, trace_band_max, trace_band_min])
+            
+            # Set layout options
+            fig.update_layout(
+                title=f'{var} over Market Day',
+                xaxis_title='Market Day',
+                yaxis_title=var,
+                template='plotly_white',
+                xaxis=dict(
+                    range=[start_date, end_date],  # Show 30 days before and after today
+                    title='Market Day'
+                )
+            )
+
+            figures.append(fig)
+
+        return figures
+
+    # Return empty figures if not on the InputTracker page
+    return [go.Figure() for _ in variables]
+
+#4
+
+@app.callback(Output('page-content', 'children'),
+              [Input('url', 'pathname')])
+def display_page(pathname):
+    if pathname == '/nepool':
+        return nepool_layout()
+    
+    elif pathname == '/nepool/chart-zone':
+        return chart_zone_layout()
+    
+    elif pathname == '/nepool/input-tracker':
+        return input_tracker_layout(variables)  # Pass the list of variables here
+    
+    # Handle year pages
+    elif pathname == '/nepool/2024':
+        return generate_year_layout(2024)
+    # Other year pages...
+
+#5 
+
+# Define the list of variables to plot in InputTracker
+variables = ['var1', 'var2', 'var3', 'var4', 'var5']  # Replace these with the actual column
