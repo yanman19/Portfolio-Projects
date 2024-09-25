@@ -1,0 +1,36 @@
+import os
+
+# Assuming you have already defined plot_polynomial_regression as per the previous step
+
+# Define the constant file path where the images will be saved
+base_path = "/your/constant/file/path"  # Replace this with the actual path
+
+# Define the months and years
+months = range(1, 13)  # Months 1 to 12
+years = [2024, 2023, 2022, 2021]  # The years to loop through
+
+# Define the variables you want to plot
+variables = ['Slack.Slack', 'HR_adj']  # The two variables to plot
+
+# Loop through each month and year
+for month in months:
+    for year in years:
+        for var in variables:
+            # Define a file name based on the month, year, and variable
+            file_name = f"{var}_{year}_Month_{month}.png"
+            save_path = os.path.join(base_path, file_name)
+
+            # Call the function to generate the polynomial plot and save it
+            curve_df = plot_polynomial_regression(
+                df=scatter_df,  # Your DataFrame
+                x_col='your_x_column',  # Replace with the actual x-axis column
+                y_col=var,  # Use the variable (Slack.Slack or HR_adj)
+                date_col='Datetime1',  # Your date column
+                months=[month],  # Filter for the specific month
+                years=[year],  # Filter for the specific year
+                degree=2,  # Polynomial degree (adjust if necessary)
+                save_as=save_path  # Save the plot to the defined path
+            )
+
+            # Optionally print a message for each saved file
+            print(f"Saved plot: {save_path}")
