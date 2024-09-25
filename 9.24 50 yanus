@@ -1,0 +1,84 @@
+import plotly.graph_objs as go
+from datetime import datetime, timedelta
+import pandas as pd
+
+@app.callback(
+    [Output(f'input-tracker-graph-{i}', 'figure') for i in range(len(variables))],
+    Input('url', 'pathname')
+)
+def update_input_tracker(pathname):
+    if pathname == '/nepool/input-tracker':
+        figures = []
+        today = datetime.now()
+        start_date = today - timedelta(days=30)  # 30 days before today
+        end_date = today + timedelta(days=30)    # 30 days after today
+
+        # Ensure that Datetime1 is properly formatted
+        scatter_df['Datetime1'] = pd.to_datetime(scatter_df['Datetime1'])
+
+        # Filter the dataframe to show data for the current year and for past 4 years
+        scatter_df['market_day'] = scatter_df['Datetime1'].dt.dayofyear
+        scatter_df['date'] = scatter_df['Datetime1'].dt.date
+
+        # Filter data to be within the date range for the current year
+        current_year_df = scatter_df[(scatter_df['year'] == scatter_df['year'].max()) &
+                                     (scatter_df['Datetime1'] >= start_date) &
+                                     (scatter_df['Datetime1'] <= end_date)]
+
+        # Filter data for the past 4 years
+        past_4_years_df = scatter_df[(scatter_df['year'].isin(scatter_df['year'].unique()[-4:])) &
+                                     (scatter_df['Datetime1'] >= start_date) &
+                                     (scatter_df['Datetime1'] <= end_date)]
+
+        for var in variables:
+            if var not in scatter_df.columns:
+                print(f"Variable {var} is not in scatter_df")
+                continue  # Skip if the variable is not in the dataframe
+
+            # Line graph for the current year's data
+            trace_current_year = go.Scatter(
+                x=current_year_df['Datetime1'],
+                y=current_year_df[var],
+                mode='lines',
+                name=f'Current Year - {var}',
+                line=dict(color='blue')
+            )
+
+            # List to store past 4 years traces
+            traces_past_years = []
+
+            # Iterate over the past 4 years and create a line trace for each year
+            for year in scatter_df['year'].unique()[-4:]:
+                year_df = past_4_years_df[past_4_years_df['year'] == year]
+
+                trace_past_year = go.Scatter(
+                    x=year_df['Datetime1'],
+                    y=year_df[var],
+                    mode='lines',
+                    name=f'{year} - {var}',
+                    line=dict(dash='dash')  # Use a dashed line for previous years
+                )
+
+                traces_past_years.append(trace_past_year)
+
+            # Create the figure with the current year and past 4 years
+            fig = go.Figure(data=[trace_current_year] + traces_past_years)
+            
+            # Set layout options
+            fig.update_layout(
+                title=f'{var} over Market Day',
+                xaxis_title='Market Day',
+                yaxis_title=var,
+                template='plotly_white',
+                xaxis=dict(
+                    range=[start_date, end_date],  # Show 30 days before and after today
+                    title='Market Day'
+                )
+            )
+
+            figures.append(fig)
+
+        return figures
+
+    # Return empty figures if not on the InputTracker page
+    return [go.Figure() for _ in variables]
