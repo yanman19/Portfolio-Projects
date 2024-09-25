@@ -1,0 +1,73 @@
+import pandas as pd
+from dash import dcc, html
+import dash_table
+import os
+
+CSV_PATH = "/path/to/your/csv/files"
+
+def generate_color_scale(value, max_value):
+    """Generate a darker color intensity for negative (green) and positive (red) values."""
+    # Calculate the intensity based on how far the value is from zero
+    intensity = abs(value) / max_value
+
+    # Cap the intensity between 0.1 (lightest) and 1.0 (darkest)
+    intensity = min(max(intensity, 0.1), 1.0)
+
+    if value < 0:
+        # Negative value: Darker green as the value gets more negative
+        # Adjust the green color (0, 128, 0) to get darker shades as it gets more negative
+        green_intensity = int(128 * (1 - intensity))  # Scale from dark green to lighter
+        return f'rgb(0, {128 + green_intensity}, 0)'  # Darker green at extreme negative
+    else:
+        # Positive value: Darker red as the value gets more positive
+        # Adjust the red color (128, 0, 0) to get darker shades as it gets more positive
+        red_intensity = int(128 * (1 - intensity))  # Scale from dark red to lighter
+        return f'rgb({128 + red_intensity}, 0, 0)'  # Darker red at extreme positive
+
+def generate_year_layout(year):
+    # Define the path to the CSV for the corresponding year
+    csv_file = os.path.join(CSV_PATH, f'FV_Market_{year}.csv')
+
+    # Load the DataFrame from the CSV
+    df = pd.read_csv(csv_file)
+
+    # Find the max absolute difference for color scaling
+    max_diff = df['Difference'].abs().max()
+
+    # Create a list of conditional styles with color gradients
+    style_data_conditional = []
+    for index, row in df.iterrows():
+        color = generate_color_scale(row['Difference'], max_diff)
+        style_data_conditional.append({
+            'if': {
+                'filter_query': f'{{Difference}} = {row["Difference"]}',  # Filter based on the exact row
+                'column_id': 'Difference'
+            },
+            'backgroundColor': color,
+            'color': 'black'
+        })
+
+    # Layout containing the month links, back button, and table
+    return html.Div([
+        html.H1(f'Select a Month for Year {year}'),
+        
+        # Links for each month
+        html.Div([
+            html.A(str(i), href=f'/nepool/{year}/month/{i}', style={'margin-right': '10px'}) for i in range(1, 13)
+        ]),
+        
+        # Add a button or link to go back to NEPOOL
+        html.Div([
+            html.A('Go back to NEPOOL', href='/nepool')
+        ], style={'margin-bottom': '20px'}),
+
+        # Display the table with conditional formatting on the "Difference" column
+        dash_table.DataTable(
+            id='table',
+            columns=[{"name": i, "id": i} for i in df.columns],
+            data=df.to_dict('records'),
+            style_data_conditional=style_data_conditional,
+            style_cell={'textAlign': 'left'},
+            style_table={'overflowX': 'auto'},
+        ),
+    ])
