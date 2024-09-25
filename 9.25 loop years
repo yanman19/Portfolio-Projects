@@ -1,0 +1,53 @@
+import os
+from datetime import datetime
+
+# Define the constant file path where the images will be saved
+file_path = "/your/constant/file/path"  # Replace with the actual path
+
+# Get the current month
+current_month = datetime.now().month
+
+# Define the months and years
+months = range(1, 13)  # Months 1 to 12
+
+# Loop through each month
+for month in months:
+    
+    # Conditional logic for years list
+    if current_month <= month:
+        years = [2024, 2023, 2022, 2021]
+    else:
+        years = [2023, 2022, 2021]
+    
+    # Define a file name based on the month and variable
+    file_name = f"slack_hr_month_{month}.png"
+    save_path = os.path.join(file_path, file_name)
+    
+    # Call the function to generate the polynomial plot for both variables 'Slack.Slack' and 'HR_adj'
+    
+    # One for Slack.Slack
+    plot_polynomial_regression(
+        df=scatter_df,  # Your DataFrame
+        x_col='your_x_column',  # Replace with the actual x-axis column
+        y_col='Slack.Slack',  # Plot for Slack.Slack
+        date_col='Datetime1',  # Your date column
+        months=[month],  # Filter for the specific month
+        years=years,  # Use the dynamically selected years
+        degree=2,  # Polynomial degree (adjust if necessary)
+        save_as=save_path.replace('.png', '_slack.png')  # Save the plot with _slack in the name
+    )
+    
+    # One for HR_adj
+    plot_polynomial_regression(
+        df=scatter_df,  # Your DataFrame
+        x_col='your_x_column',  # Replace with the actual x-axis column
+        y_col='HR_adj',  # Plot for HR_adj
+        date_col='Datetime1',  # Your date column
+        months=[month],  # Filter for the specific month
+        years=years,  # Use the dynamically selected years
+        degree=2,  # Polynomial degree (adjust if necessary)
+        save_as=save_path.replace('.png', '_hr_adj.png')  # Save the plot with _hr_adj in the name
+    )
+
+    # Optionally print a message for each saved file
+    print(f"Saved plots for month {month}: {save_path}")
