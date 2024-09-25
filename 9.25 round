@@ -1,0 +1,1 @@
+comparison_df.loc[:, comparison_df.columns != 'Month'] = comparison_df.loc[:, comparison_df.columns != 'Month'].round(2)
