@@ -1,0 +1,67 @@
+import matplotlib.pyplot as plt
+import seaborn as sns
+import numpy as np
+import pandas as pd
+from sklearn.preprocessing import PolynomialFeatures
+from sklearn.linear_model import LinearRegression
+
+def plot_polynomial_regression(df, x_col, y_col, date_col, months, years, degree=2, save_as='plot.png'):
+    """
+    Plots a polynomial regression and saves it as an image.
+
+    Parameters:
+    - df: pandas DataFrame containing the data
+    - x_col: The column name for the x-axis
+    - y_col: The column name for the y-axis
+    - date_col: The column name for the date
+    - months: List of months to filter the data
+    - years: List of years to filter the data
+    - degree: Degree of the polynomial regression (default is 2)
+    - save_as: File name to save the plot as (default is 'plot.png')
+
+    Returns:
+    - The curve_df DataFrame containing the x and predicted y values
+    """
+
+    # Convert date_col to datetime and filter the data by months and years
+    df[date_col] = pd.to_datetime(df[date_col])
+    df = df[df[date_col].dt.month.isin(months) & df[date_col].dt.year.isin(years)]
+    df['year'] = df[date_col].dt.year
+
+    # Prepare x and y values for polynomial regression
+    x = df[[x_col]].values
+    y = df[[y_col]].values
+
+    # Polynomial transformation and linear regression model
+    poly = PolynomialFeatures(degree=degree)
+    x_poly = poly.fit_transform(x)
+    model = LinearRegression()
+    model.fit(x_poly, y)
+
+    # Generate predicted y values
+    y_pred = model.predict(x_poly)
+
+    # Create the curve DataFrame for plotting and saving
+    curve_df = pd.DataFrame({x_col: df[x_col], 'y_hat': y_pred.flatten()})
+
+    # Plot the data
+    plt.figure(figsize=(12, 8))
+    sns.scatterplot(data=df, x=x_col, y=y_col, hue='year', palette='colorblind')
+
+    # Plot the polynomial fit line
+    sorted_indices = np.argsort(x[:, 0])
+    plt.plot(x[sorted_indices], y_pred[sorted_indices], color='red', label=f'Polynomial Fit (Degree {degree})')
+
+    # Add labels and titles
+    plt.legend()
+    plt.xlabel(x_col)
+    plt.ylabel(y_col)
+    plt.title(f'{x_col} vs {y_col} ({months} months)')
+    plt.grid(True)
+
+    # Save the plot as an image
+    plt.savefig(save_as, format='png')
+    plt.close()
+
+    # Return the curve DataFrame for further use
+    return curve_df
