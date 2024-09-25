@@ -1,0 +1,18 @@
+def generate_color_scale(value, max_value):
+    """Generate a darker color intensity for negative (green) and positive (red) values."""
+    # Calculate the intensity based on how far the value is from zero
+    intensity = abs(value) / max_value
+
+    # Cap the intensity between 0.1 (lightest) and 1.0 (darkest)
+    intensity = min(max(intensity, 0.1), 1.0)
+
+    if value < 0:
+        # Negative value: Darker green as the value gets more negative
+        # Adjust the green color (0, 128, 0) to get darker shades as it gets more negative
+        green_intensity = int(128 * (1 - intensity))  # Scale from dark green to lighter
+        return f'rgb(0, {128 + green_intensity}, 0)'  # Darker green at extreme negative
+    else:
+        # Positive value: Darker red as the value gets more positive
+        # Adjust the red color (128, 0, 0) to get darker shades as it gets more positive
+        red_intensity = int(128 * (1 - intensity))  # Scale from dark red to lighter
+        return f'rgb({128 + red_intensity}, 0, 0)'  # Darker red at extreme positive
