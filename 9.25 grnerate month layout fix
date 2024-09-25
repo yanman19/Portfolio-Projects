@@ -1,0 +1,23 @@
+def generate_month_layout(year, month):
+    # Define the path to the PNG file for the given month
+    image_path = f'/assets/slack_hr_month_{month}_slack.png'
+
+    # Layout containing the Monthly, Daily, Hourly options and the image
+    return html.Div([
+        html.H1(f'Year {year} - Month {month}'),
+        
+        # Display links for Monthly, Daily, Hourly options
+        html.Div([
+            html.A('Monthly', href=f'/nepool/{year}/month/{month}', style={'margin-right': '10px'}),
+            html.A('Daily', href=f'/nepool/{year}/day/{month}', style={'margin-right': '10px'}),
+            html.A('Hourly', href=f'/nepool/{year}/hour/{month}'),
+        ], style={'margin-bottom': '20px'}),
+        
+        # Add a button or link to go back to the Year page
+        html.Div([
+            html.A('Go back to Year Page', href=f'/nepool/{year}')
+        ], style={'margin-bottom': '20px'}),
+        
+        # Insert the image
+        html.Img(src=image_path, style={'width': '100%', 'height': 'auto'}),
+    ])
