@@ -1,0 +1,29 @@
+@app.callback(
+    dash.dependencies.Output('page-content', 'children'),
+    [dash.dependencies.Input('url', 'pathname')]
+)
+def display_page(pathname):
+    # Extract the year and month from the URL (assuming URL structure: /nepool/<year>/month/<month>)
+    if pathname.startswith('/nepool/'):
+        parts = pathname.split('/')
+        year = parts[2]  # e.g., 2024
+        if len(parts) > 4 and parts[3] == 'month':
+            month = int(parts[4])  # Extract the month part from URL
+
+            # Define the file path for the chart corresponding to the selected month
+            slack_chart = os.path.join(charts_base_path, f"slack_hr_month_{month}_slack.png")
+
+            # Check if the chart exists
+            if os.path.exists(slack_chart):
+                chart_img = html.Img(src=f"/assets/{os.path.basename(slack_chart)}", style={'width': '100%'})
+            else:
+                chart_img = html.Div(f"No chart available for month {month}", style={'textAlign': 'center', 'color': 'red'})
+
+            # Return the layout for the month page, showing the chart
+            return html.Div([
+                html.H1(f'NEPOOL Data for Month {month}', style={'textAlign': 'center'}),
+                html.Div(chart_img, style={'textAlign': 'center'}),
+            ])
+
+    # Fallback content if URL does not match
+    return html.Div("Page not found", style={'textAlign': 'center'})
