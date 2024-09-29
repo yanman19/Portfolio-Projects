@@ -1,0 +1,54 @@
+def display_page(pathname):
+    # Print the pathname for debugging purposes
+    print(f"Current URL Path: {pathname}")
+
+    # Handle NEPOOL page with year links
+    if pathname == '/nepool':
+        print("Navigating to NEPOOL page.")
+        return nepool_layout()
+
+    if pathname == '/nepool/chart-zone':
+        print("Navigating to Chart Zone page.")
+        return chart_zone_layout()
+
+    elif pathname == '/nepool/input-tracker':
+        print("Navigating to Input Tracker page.")
+        return input_tracker_layout(variables)  # Pass the list of variables here
+
+    # Handle year pages
+    elif pathname == '/nepool/2024':
+        print("Navigating to 2024 year layout.")
+        return generate_year_layout(2024)
+    elif pathname == '/nepool/2025':
+        print("Navigating to 2025 year layout.")
+        return generate_year_layout(2025)
+    elif pathname == '/nepool/2026':
+        print("Navigating to 2026 year layout.")
+        return generate_year_layout(2026)
+    elif pathname == '/nepool/2027':
+        print("Navigating to 2027 year layout.")
+        return generate_year_layout(2027)
+    elif pathname == '/nepool/2028':
+        print("Navigating to 2028 year layout.")
+        return generate_year_layout(2028)
+
+    # Handle the new Model Error Page overview with horizontal links
+    elif pathname == '/nepool/model-error':
+        print("Navigating to Model Error Overview page.")
+        return model_error_overview_layout()  # Display links for all 12 months
+
+    # Handle specific month selection in the Model Error Page (e.g., /nepool/model-error/1)
+    # Using .startswith and length checks for precise URL matching
+    elif pathname.startswith('/nepool/model-error/') and len(pathname.split('/')) == 5:
+        try:
+            # Extract and validate the month parameter from the URL
+            month = int(pathname.split('/')[4])  # Extract month from URL
+            print(f"Navigating to Model Error page for Month {month}.")
+            return model_error_layout(month)  # Display error summary and hourly error for the selected month
+        except ValueError:
+            print("Invalid month format in URL.")
+            return html.Div("Invalid month format", style={'textAlign': 'center', 'color': 'red'})
+
+    # If none of the above conditions are met, return the homepage as default
+    print("Navigating to home page (default).")
+    return yanus_layout()
