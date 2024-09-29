@@ -1,0 +1,128 @@
+#1 
+
+# Modify your NEPOOL page layout function to include the Model Error button
+
+def nepool_layout():
+    return html.Div([
+        html.H1("NEPOOL Page", style={'textAlign': 'center'}),
+        
+        # Year links (assuming they are already defined)
+        dcc.Link("2024", href="/nepool/2024"),
+        dcc.Link("2025", href="/nepool/2025"),
+        dcc.Link("2026", href="/nepool/2026"),
+        dcc.Link("2027", href="/nepool/2027"),
+        dcc.Link("2028", href="/nepool/2028"),
+
+        # Add the Model Error Button here
+        html.Button("Model Error", id="model-error-button", style={'margin': '20px', 'display': 'block'}),
+
+        # Chart Zone link (assuming it is defined below the button)
+        dcc.Link("Chart Zone", href="/nepool/chart-zone"),
+    ])
+
+#2
+
+# Callback to navigate to the Model Error Page
+@app.callback(
+    dash.dependencies.Output('url', 'pathname'),
+    dash.dependencies.Input('model-error-button', 'n_clicks'),
+    prevent_initial_call=True
+)
+def go_to_model_error_page(n_clicks):
+    if n_clicks:
+        return '/nepool/model-error'
+
+#3
+
+def model_error_layout(month):
+    # File paths for the CSV files based on the selected month
+    error_summary_filepath = f"NEPOOL_Scenarios_error_summary_{month}_2023.csv"
+    hourly_error_filepath = f"NEPOOL_Scenarios_error_d_{month}_2023.csv"
+
+    # Check if the files exist before loading
+    error_summary_df = pd.read_csv(error_summary_filepath) if os.path.exists(error_summary_filepath) else pd.DataFrame()
+    hourly_error_df = pd.read_csv(hourly_error_filepath) if os.path.exists(hourly_error_filepath) else pd.DataFrame()
+
+    # Build the layout for the error page
+    return html.Div([
+        html.H1(f'Model Error for Month {month}', style={'textAlign': 'center'}),
+        html.H2('2023 Error Summary:', style={'textAlign': 'center'}),
+        
+        # Dynamically display the Error Summary DataFrame as a table
+        dcc.Graph(
+            figure={
+                'data': [{'type': 'table',
+                          'header': {'values': list(error_summary_df.columns)},
+                          'cells': {'values': [error_summary_df[col] for col in error_summary_df.columns]}
+                          }]
+            }
+        ) if not error_summary_df.empty else html.Div("No data available for this month", style={'color': 'red', 'textAlign': 'center'}),
+        
+        # Title for the Hourly Error section
+        html.H2('Hourly Error:', style={'textAlign': 'center'}),
+
+        # Dynamically display the Hourly Error DataFrame as a table
+        dcc.Graph(
+            figure={
+                'data': [{'type': 'table',
+                          'header': {'values': list(hourly_error_df.columns)},
+                          'cells': {'values': [hourly_error_df[col] for col in hourly_error_df.columns]}
+                          }]
+            }
+        ) if not hourly_error_df.empty else html.Div("No data available for this month", style={'color': 'red', 'textAlign': 'center'}),
+        
+        # Back link
+        dcc.Link("Go back to NEPOOL", href="/nepool", style={'display': 'block', 'textAlign': 'center', 'margin': '20px'}),
+    ])
+
+
+#4
+
+def display_page(pathname):
+    # Handle NEPOOL page with year links
+    if pathname == '/nepool':
+        return nepool_layout()
+
+    if pathname == '/nepool/chart-zone':
+        return chart_zone_layout()
+
+    elif pathname == '/nepool/input-tracker':
+        return input_tracker_layout(variables)  # Pass the list of variables here
+
+    # Handle year pages
+    elif pathname == '/nepool/2024':
+        return generate_year_layout(2024)
+    elif pathname == '/nepool/2025':
+        return generate_year_layout(2025)
+    elif pathname == '/nepool/2026':
+        return generate_year_layout(2026)
+    elif pathname == '/nepool/2027':
+        return generate_year_layout(2027)
+    elif pathname == '/nepool/2028':
+        return generate_year_layout(2028)
+
+    # Handle month-specific pages with links to Monthly, Daily, Hourly pages for any year/month
+    elif '/month' in pathname and len(pathname.split('/')) == 5:
+        year = pathname.split('/')[2]
+        month = pathname.split('/')[4]
+        return generate_month_layout(year, month)  # Handle month-specific page
+
+    # Handle the new Model Error Page
+    elif '/nepool/model-error' in pathname:
+        # Extract month from the URL if available
+        if len(pathname.split('/')) == 5 and pathname.split('/')[4].isdigit():
+            month = pathname.split('/')[4]  # Extract month from URL
+            return model_error_layout(month)
+
+        # Default model error page if no month is specified
+        return html.Div([
+            html.H1("Model Error Page", style={'textAlign': 'center'}),
+            html.P("Please select a month to view error details.", style={'textAlign': 'center'}),
+        ])
+
+    # Return the homepage as default
+    else:
+        return yanus_layout()
+
+
+
