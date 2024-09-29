@@ -51,3 +51,49 @@ def display_page(pathname):
     # If none of the above, return the homepage as default
     print("Navigating to home page (default).")
     return yanus_layout()
+
+#2
+def model_error_layout(month):
+    print(f"Loading data for Model Error page, Month: {month}")  # Debugging print
+    # Use the existing CSV_path variable for constructing the file paths dynamically
+    error_summary_filepath = os.path.join(CSV_path, f"NEPOOL_Scenarios_error_summary_{month}_2023.csv")
+    hourly_error_filepath = os.path.join(CSV_path, f"NEPOOL_Scenarios_error_df_{month}_2023.csv")  # Updated the filepath for hourly error
+
+    # Debugging: Check if files exist
+    print(f"Error Summary File: {error_summary_filepath}, Exists: {os.path.exists(error_summary_filepath)}")
+    print(f"Hourly Error File: {hourly_error_filepath}, Exists: {os.path.exists(hourly_error_filepath)}")
+
+    # Check if the files exist before loading
+    error_summary_df = pd.read_csv(error_summary_filepath) if os.path.exists(error_summary_filepath) else pd.DataFrame()
+    hourly_error_df = pd.read_csv(hourly_error_filepath) if os.path.exists(hourly_error_filepath) else pd.DataFrame()
+
+    # Display the layout with the titles and corresponding dataframes
+    return html.Div([
+        html.H1(f'2023 Error Summary for Month {month}', style={'textAlign': 'center'}),
+        
+        # Dynamically display the Error Summary DataFrame as a table
+        dcc.Graph(
+            figure={
+                'data': [{'type': 'table',
+                          'header': {'values': list(error_summary_df.columns)},
+                          'cells': {'values': [error_summary_df[col] for col in error_summary_df.columns]}
+                          }]
+            }
+        ) if not error_summary_df.empty else html.Div("No data available for this month", style={'color': 'red', 'textAlign': 'center'}),
+        
+        # Title for the Hourly Error section
+        html.H2('2023 Hourly Error:', style={'textAlign': 'center'}),
+
+        # Dynamically display the Hourly Error DataFrame as a table
+        dcc.Graph(
+            figure={
+                'data': [{'type': 'table',
+                          'header': {'values': list(hourly_error_df.columns)},
+                          'cells': {'values': [hourly_error_df[col] for col in hourly_error_df.columns]}
+                          }]
+            }
+        ) if not hourly_error_df.empty else html.Div("No data available for this month", style={'color': 'red', 'textAlign': 'center'}),
+        
+        # Back link to go back to the Model Error overview page
+        dcc.Link("Go back to Model Error Overview", href="/nepool/model-error", style={'display': 'block', 'textAlign': 'center', 'margin': '20px'}),
+    ])
