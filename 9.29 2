@@ -1,0 +1,57 @@
+#1
+
+def model_error_layout(month):
+    # Use the existing CSV_path variable for constructing the file paths
+    error_summary_filepath = os.path.join(CSV_path, f"NEPOOL_Scenarios_error_summary_{month}_2023.csv")
+    hourly_error_filepath = os.path.join(CSV_path, f"NEPOOL_Scenarios_error_d_{month}_2023.csv")
+
+    # Check if the files exist before loading
+    error_summary_df = pd.read_csv(error_summary_filepath) if os.path.exists(error_summary_filepath) else pd.DataFrame()
+    hourly_error_df = pd.read_csv(hourly_error_filepath) if os.path.exists(hourly_error_filepath) else pd.DataFrame()
+
+    # Build the layout for the error page
+    return html.Div([
+        html.H1(f'Model Error for Month {month}', style={'textAlign': 'center'}),
+        html.H2('2023 Error Summary:', style={'textAlign': 'center'}),
+        
+        # Dynamically display the Error Summary DataFrame as a table
+        dcc.Graph(
+            figure={
+                'data': [{'type': 'table',
+                          'header': {'values': list(error_summary_df.columns)},
+                          'cells': {'values': [error_summary_df[col] for col in error_summary_df.columns]}
+                          }]
+            }
+        ) if not error_summary_df.empty else html.Div("No data available for this month", style={'color': 'red', 'textAlign': 'center'}),
+        
+        # Title for the Hourly Error section
+        html.H2('Hourly Error:', style={'textAlign': 'center'}),
+
+        # Dynamically display the Hourly Error DataFrame as a table
+        dcc.Graph(
+            figure={
+                'data': [{'type': 'table',
+                          'header': {'values': list(hourly_error_df.columns)},
+                          'cells': {'values': [hourly_error_df[col] for col in hourly_error_df.columns]}
+                          }]
+            }
+        ) if not hourly_error_df.empty else html.Div("No data available for this month", style={'color': 'red', 'textAlign': 'center'}),
+        
+        # Back link to go back to NEPOOL page
+        dcc.Link("Go back to NEPOOL", href="/nepool", style={'display': 'block', 'textAlign': 'center', 'margin': '20px'}),
+    ])
+
+#2 
+
+# Add this block for handling the Model Error Page inside the display_page function
+elif '/nepool/model-error' in pathname:
+    # Extract month from the URL if available
+    if len(pathname.split('/')) == 5 and pathname.split('/')[4].isdigit():
+        month = pathname.split('/')[4]  # Extract month from URL
+        return model_error_layout(month)
+
+    # Default model error page if no month is specified
+    return html.Div([
+        html.H1("Model Error Page", style={'textAlign': 'center'}),
+        html.P("Please select a month to view error details.", style={'textAlign': 'center'}),
+    ])
