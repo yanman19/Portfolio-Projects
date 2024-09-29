@@ -1,0 +1,119 @@
+#1 
+
+# Add this new button in your NEPOOL page layout definition (above Chart Zone link and below the years)
+def nepool_layout():
+    return html.Div([
+        html.H1("NEPOOL Page", style={'textAlign': 'center'}),
+        
+        # Year links (assuming they are already defined)
+        dcc.Link("2024", href="/nepool/2024"),
+        dcc.Link("2025", href="/nepool/2025"),
+        dcc.Link("2026", href="/nepool/2026"),
+        dcc.Link("2027", href="/nepool/2027"),
+        dcc.Link("2028", href="/nepool/2028"),
+        
+        # New Model Error Button
+        dcc.Link("Model Error", href="/nepool/model-error", style={'margin': '20px', 'display': 'block'}),
+
+        # Chart Zone link (assuming it is defined below the button)
+        dcc.Link("Chart Zone", href="/nepool/chart-zone"),
+    ])
+
+#2 
+
+def model_error_overview_layout():
+    # Create a list of links for the 12 months
+    month_links = []
+    for month in range(1, 13):
+        month_links.append(
+            dcc.Link(f"Month {month}", href=f"/nepool/model-error/{month}", style={'display': 'block', 'textAlign': 'center', 'margin': '10px'})
+        )
+
+    # Return the layout with all month links
+    return html.Div([
+        html.H1("Model Error Overview", style={'textAlign': 'center'}),
+        html.Div(month_links, style={'textAlign': 'center'}),  # Display the links in a centered manner
+        dcc.Link("Go back to NEPOOL", href="/nepool", style={'display': 'block', 'textAlign': 'center', 'margin': '20px'}),
+    ])
+
+#3
+def model_error_layout(month):
+    # Use the existing CSV_path variable for constructing the file paths
+    error_summary_filepath = os.path.join(CSV_path, f"NEPOOL_Scenarios_error_summary_{month}_2023.csv")
+    hourly_error_filepath = os.path.join(CSV_path, f"NEPOOL_Scenarios_error_d_{month}_2023.csv")
+
+    # Check if the files exist before loading
+    error_summary_df = pd.read_csv(error_summary_filepath) if os.path.exists(error_summary_filepath) else pd.DataFrame()
+    hourly_error_df = pd.read_csv(hourly_error_filepath) if os.path.exists(hourly_error_filepath) else pd.DataFrame()
+
+    # Build the layout for the error page
+    return html.Div([
+        html.H1(f'Model Error for Month {month}', style={'textAlign': 'center'}),
+        html.H2('2023 Error Summary:', style={'textAlign': 'center'}),
+        
+        # Dynamically display the Error Summary DataFrame as a table
+        dcc.Graph(
+            figure={
+                'data': [{'type': 'table',
+                          'header': {'values': list(error_summary_df.columns)},
+                          'cells': {'values': [error_summary_df[col] for col in error_summary_df.columns]}
+                          }]
+            }
+        ) if not error_summary_df.empty else html.Div("No data available for this month", style={'color': 'red', 'textAlign': 'center'}),
+        
+        # Title for the Hourly Error section
+        html.H2('Hourly Error:', style={'textAlign': 'center'}),
+
+        # Dynamically display the Hourly Error DataFrame as a table
+        dcc.Graph(
+            figure={
+                'data': [{'type': 'table',
+                          'header': {'values': list(hourly_error_df.columns)},
+                          'cells': {'values': [hourly_error_df[col] for col in hourly_error_df.columns]}
+                          }]
+            }
+        ) if not hourly_error_df.empty else html.Div("No data available for this month", style={'color': 'red', 'textAlign': 'center'}),
+        
+        # Back link to go back to the Model Error overview page
+        dcc.Link("Go back to Model Error Overview", href="/nepool/model-error", style={'display': 'block', 'textAlign': 'center', 'margin': '20px'}),
+    ])
+
+#4
+def display_page(pathname):
+    # Handle NEPOOL page with year links
+    if pathname == '/nepool':
+        return nepool_layout()
+
+    if pathname == '/nepool/chart-zone':
+        return chart_zone_layout()
+
+    elif pathname == '/nepool/input-tracker':
+        return input_tracker_layout(variables)  # Pass the list of variables here
+
+    # Handle year pages
+    elif pathname == '/nepool/2024':
+        return generate_year_layout(2024)
+    elif pathname == '/nepool/2025':
+        return generate_year_layout(2025)
+    elif pathname == '/nepool/2026':
+        return generate_year_layout(2026)
+    elif pathname == '/nepool/2027':
+        return generate_year_layout(2027)
+    elif pathname == '/nepool/2028':
+        return generate_year_layout(2028)
+
+    # Handle the new Model Error Page overview
+    elif pathname == '/nepool/model-error':
+        return model_error_overview_layout()  # Display links for all 12 months
+
+    # Handle specific month selection in the Model Error Page (e.g., /nepool/model-error/1)
+    elif '/nepool/model-error' in pathname and len(pathname.split('/')) == 5:
+        # Extract month from the URL if available
+        if pathname.split('/')[4].isdigit():
+            month = pathname.split('/')[4]  # Extract month from URL
+            return model_error_layout(month)
+
+    # Return the homepage as default
+    else:
+        return yanus_layout()
+
