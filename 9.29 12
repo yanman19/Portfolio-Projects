@@ -1,0 +1,36 @@
+def yanus_layout():
+    return html.Div([
+        # Styled YANUS title at the top of the page
+        yanus_title(),  # Existing title layout
+
+        # Create buttons instead of links for NEPOOL, NYE, and NYW
+        html.Div([
+            dcc.Link(
+                html.Button("Go to NEPOOL", style={
+                    'backgroundColor': '#4285F4', 'color': 'white', 'fontSize': '24px',
+                    'padding': '10px 20px', 'margin': '10px', 'borderRadius': '5px',
+                    'border': 'none', 'cursor': 'pointer'
+                }),
+                href='/nepool',
+                style={'display': 'inline-block', 'textAlign': 'center'}
+            ),
+            dcc.Link(
+                html.Button("Go to NYE", style={
+                    'backgroundColor': '#DB4437', 'color': 'white', 'fontSize': '24px',
+                    'padding': '10px 20px', 'margin': '10px', 'borderRadius': '5px',
+                    'border': 'none', 'cursor': 'pointer'
+                }),
+                href='/nye',
+                style={'display': 'inline-block', 'textAlign': 'center'}
+            ),
+            dcc.Link(
+                html.Button("Go to NYW", style={
+                    'backgroundColor': '#F4B400', 'color': 'white', 'fontSize': '24px',
+                    'padding': '10px 20px', 'margin': '10px', 'borderRadius': '5px',
+                    'border': 'none', 'cursor': 'pointer'
+                }),
+                href='/nyw',
+                style={'display': 'inline-block', 'textAlign': 'center'}
+            )
+        ], style={'textAlign': 'center', 'marginTop': '50px'})
+    ])
