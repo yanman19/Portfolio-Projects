@@ -1,0 +1,115 @@
+#1
+
+def display_page(pathname):
+    # Print the pathname for debugging purposes
+    print(f"Current URL Path: {pathname}")
+
+    # Handle specific month selection in the Model Error Page (e.g., /nepool/model-error/1)
+    if pathname.startswith('/nepool/model-error/') and len(pathname.split('/')) == 5:
+        try:
+            # Extract and validate the month parameter from the URL
+            month = int(pathname.split('/')[4])  # Extract month from URL
+            print(f"Navigating to Model Error page for Month {month}.")  # Debugging statement
+            # Call the model_error_layout and confirm the return value
+            layout = model_error_layout(month)
+            print(f"model_error_layout({month}) returned layout: {layout}")  # Debugging statement
+            return layout  # Return the layout for the selected month
+        except ValueError:
+            print("Invalid month format in URL.")
+            return html.Div("Invalid month format", style={'textAlign': 'center', 'color': 'red'})
+
+    # Handle the new Model Error Page overview with horizontal links
+    elif pathname == '/nepool/model-error':
+        print("Navigating to Model Error Overview page.")
+        return model_error_overview_layout()  # Call the function to return the layout
+
+    # Handle NEPOOL page with year links
+    elif pathname == '/nepool':
+        print("Navigating to NEPOOL page.")
+        return nepool_layout()  # Call the function to return the layout
+
+    # Check for other routes like /nepool/chart-zone, etc.
+    if pathname == '/nepool/chart-zone':
+        print("Navigating to Chart Zone page.")
+        return chart_zone_layout()  # Call the function to return the layout
+
+    elif pathname == '/nepool/input-tracker':
+        print("Navigating to Input Tracker page.")
+        return input_tracker_layout(variables)  # Pass the list of variables here and call the function
+
+    # Handle year pages
+    elif pathname == '/nepool/2024':
+        print("Navigating to 2024 year layout.")
+        return generate_year_layout(2024)  # This is a function, so it needs parentheses
+    elif pathname == '/nepool/2025':
+        print("Navigating to 2025 year layout.")
+        return generate_year_layout(2025)
+    elif pathname == '/nepool/2026':
+        print("Navigating to 2026 year layout.")
+        return generate_year_layout(2026)
+    elif pathname == '/nepool/2027':
+        print("Navigating to 2027 year layout.")
+        return generate_year_layout(2027)
+    elif pathname == '/nepool/2028':
+        print("Navigating to 2028 year layout.")
+        return generate_year_layout(2028)
+
+    # Handle month-specific pages with links to Monthly, Daily, Hourly pages
+    elif '/month' in pathname and len(pathname.split('/')) == 5:
+        print(f"Handling month-specific page for pathname: {pathname}")
+        year = pathname.split('/')[2]
+        month = pathname.split('/')[4]
+        return generate_month_layout(year, month)  # This is a function, so it needs parentheses
+
+    # Handle the Monthly, Daily, Hourly pages for any year/month
+    elif 'monthly' in pathname:
+        year, month = pathname.split('/')[2], pathname.split('/')[4]
+        print(f"Navigating to Monthly page for Year: {year}, Month: {month}")
+        return generate_time_layout(year, month, 'Monthly')  # This is a function, so it needs parentheses
+    elif 'daily' in pathname:
+        year, month = pathname.split('/')[2], pathname.split('/')[4]
+        print(f"Navigating to Daily page for Year: {year}, Month: {month}")
+        return generate_time_layout(year, month, 'Daily')  # This is a function, so it needs parentheses
+    elif 'hourly' in pathname:
+        year, month = pathname.split('/')[2], pathname.split('/')[4]
+        print(f"Navigating to Hourly page for Year: {year}, Month: {month}")
+        return generate_time_layout(year, month, 'Hourly')  # This is a function, so it needs parentheses
+
+    # Return the homepage as default if no condition is met
+    else:
+        print("Navigating to home page (default).")
+        return yanus_layout()  # Call the function to return the layout
+
+#2
+
+def model_error_layout(month):
+    print(f"model_error_layout called with month: {month}")  # Debugging statement
+    # Construct file paths
+    error_summary_filepath = os.path.join(CSV_path, f"NEPOOL_Scenarios_error_summary_{month}_2023.csv")
+    hourly_error_filepath = os.path.join(CSV_path, f"NEPOOL_Scenarios_error_df_{month}_2023.csv")
+
+    # Check file existence
+    print(f"Checking existence of: {error_summary_filepath}")
+    print(f"Checking existence of: {hourly_error_filepath}")
+
+    # Load data
+    if os.path.exists(error_summary_filepath):
+        error_summary_df = pd.read_csv(error_summary_filepath)
+        print(f"Loaded Error Summary DataFrame with shape: {error_summary_df.shape}")
+    else:
+        error_summary_df = pd.DataFrame()
+        print(f"File not found: {error_summary_filepath}")
+
+    if os.path.exists(hourly_error_filepath):
+        hourly_error_df = pd.read_csv(hourly_error_filepath)
+        print(f"Loaded Hourly Error DataFrame with shape: {hourly_error_df.shape}")
+    else:
+        hourly_error_df = pd.DataFrame()
+        print(f"File not found: {hourly_error_filepath}")
+
+    # Return layout
+    return html.Div([
+        html.H1(f'2023 Error Summary for Month {month}', style={'textAlign': 'center'}),
+        # Debugging statement to confirm function reached here
+        html.Div("Successfully reached model_error_layout", style={'color': 'green', 'textAlign': 'center'}),
+    ])
