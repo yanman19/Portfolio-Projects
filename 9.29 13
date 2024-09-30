@@ -1,0 +1,12 @@
+# Define month and year
+defined_month = 6
+defined_year = 2026
+
+# Current month and year (can be replaced with variables or input)
+current_month = 9
+current_year = 2024
+
+# Define stack variable based on the condition
+stack = 1.2 if (current_year > defined_year or (current_year == defined_year and current_month > defined_month)) else 0
+
+print(stack)
