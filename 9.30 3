@@ -1,0 +1,47 @@
+import pandas as pd
+import matplotlib.pyplot as plt
+
+def update_month_in_code(month_number):
+    # Load the data files dynamically with the month number
+    allData = pd.read_csv(f'allData_raw.csv')
+    df_predict = pd.read_csv(f'NEPOOL_Scenarios_Hourly_{month_number}_2025.csv')
+    
+    # Modify columns using the correct column names
+    df_predict['MassHub'] = 0.5 * df_predict[f'RGGI'] + 0.5 * df_predict['Mass Carbon'] - 4.5 + df_predict['ALGCG']
+    df_predict['Backed into HR'] = df_predict['MassHub'] - df_predict['Backed into HR']
+    df_predict['Datetime1'] = pd.to_datetime(df_predict['Datetime1'])
+    
+    # Further processing using the month number
+    if month_number in [1, 2, 3]:
+        Keyname = 'List'
+        MassHub = 'Backed into HR' if month_number > 1 else 'MassHub'
+    else:
+        MassHub = df_predict['Backed into HR'] + df_predict['ALGCG']
+
+    # Concatenate and process data
+    df_concat_test = pd.concat([df_predict, allData], axis=1)
+    
+    # Final column modifications
+    allData['Datetime1'] = df_concat_test['Datetime1']
+    df_concat_test_daily = df_concat_test.groupby('Datetime1').mean().reset_index()
+
+    # Define the column names to be plotted
+    x = df_concat_test_daily['MARKETDAY']
+    y1 = df_concat_test_daily['Slack.Slack']
+    y2 = df_concat_test_daily['Backed into HR']
+
+    # Generate the polynomial plot
+    fig, ax = plt.subplots(figsize=(10, 6))
+    ax.plot(x, y1, label='Slack.Slack', color='blue')
+    ax.plot(x, y2, label='Backed into HR', color='green')
+    ax.set_title(f'Polynomial Regression Plot for Month {month_number}')
+    ax.set_xlabel('MARKETDAY')
+    ax.set_ylabel('Values')
+    ax.legend()
+
+    # Return the figure
+    return fig
+
+# Example usage with month 3
+chart = update_month_in_code(3)
+chart.show()
