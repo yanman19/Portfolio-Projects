@@ -1,0 +1,46 @@
+from sklearn.linear_model import LinearRegression
+import pandas as pd
+
+def update_year(df, year):
+    # Example: Adds a new column 'year' or updates existing column 'year' in the dataframe
+    df['year'] = year
+    return df
+
+def apply_split_regression(train_df, test_dict, inflection_point_x, x_var, target_var, input_year):
+    # Separate the training data based on the inflection point
+    train_df_1 = train_df[train_df[x_var] <= inflection_point_x]
+    train_df_2 = train_df[train_df[x_var] > inflection_point_x]
+    
+    # Initialize and train the first regression model
+    model_1 = LinearRegression()
+    model_1.fit(train_df_1[[x_var]], train_df_1[target_var])
+    
+    # Initialize and train the second regression model
+    model_2 = LinearRegression()
+    model_2.fit(train_df_2[[x_var]], train_df_2[target_var])
+    
+    # Create a copy of test_dict to store predictions
+    result_dict = {}
+    
+    # Apply the models to each dataframe in test_dict
+    for key, df in test_dict.items():
+        df = df.copy()  # To avoid modifying the original test_dict dataframes
+
+        # Update the dataframe with the input year
+        df = update_year(df, input_year)
+        
+        # Create a copy of the target variable column to store predictions
+        df[target_var] = 0
+        
+        # Apply model_1 to rows where x_var <= inflection_point_x
+        mask_1 = df[x_var] <= inflection_point_x
+        df.loc[mask_1, target_var] = model_1.predict(df.loc[mask_1, [x_var]])
+        
+        # Apply model_2 to rows where x_var > inflection_point_x
+        mask_2 = df[x_var] > inflection_point_x
+        df.loc[mask_2, target_var] = model_2.predict(df.loc[mask_2, [x_var]])
+        
+        # Store the modified dataframe in the result dictionary
+        result_dict[key] = df
+    
+    return result_dict
