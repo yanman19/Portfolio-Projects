@@ -1,0 +1,44 @@
+import matplotlib.pyplot as plt
+import seaborn as sns
+import numpy as np
+import pandas as pd
+from sklearn.preprocessing import PolynomialFeatures
+from sklearn.linear_model import LinearRegression
+
+def plot_polynomial_regression(df_new, x_col, y_col, date_col, months, years, oil_thres1=None, oil_thres2=None, degree=2, y_axis=None):
+    """
+    Plots data points and optional vertical lines based on given thresholds.
+
+    Parameters:
+    - df_new: pandas DataFrame containing the data
+    - x_col: The column name for the x-axis
+    - y_col: The column name for the y-axis
+    - date_col: The column name for the date
+    - months: List of months to filter the data
+    - years: List of years to filter the data
+    - oil_thres1: The first x-value to plot a vertical line (default is None)
+    - oil_thres2: The second x-value to plot a vertical line (default is None)
+    - degree: Degree of the polynomial regression (default is 2) (not used here)
+    - y_axis: Fixed maximum value for the y-axis (default is None)
+
+    Returns:
+    - The curve_df DataFrame containing the x and predicted y values
+    """
+
+    # Convert date_col to datetime and filter the data by months and years
+    df_new[date_col] = pd.to_datetime(df_new[date_col])
+    df_new = df_new[df_new[date_col].dt.month.isin(months) & df_new[date_col].dt.year.isin(years)]
+    
+    # Create a new 'month' column for coloring
+    df_new['month'] = df_new[date_col].dt.month
+
+    # Prepare x and y values for plotting
+    x = df_new[[x_col]].values
+    y = df_new[[y_col]].values
+
+    # Create the curve DataFrame for potential further use
+    curve_df = pd.DataFrame({x_col: df_new[x_col], y_col: df_new[y_col]})
+
+    # Plot the data points, using the 'month' column for color
+    plt.figure(figsize=(12, 8))
+    sns.scatterplot(data=df_new, x=x_col, y=y_col
