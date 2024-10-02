@@ -1,0 +1,67 @@
+from sklearn.linear_model import LinearRegression
+import pandas as pd
+
+def update_year(df, year):
+    # Example function that updates or adds a 'year' column to the dataframe
+    df['year'] = year
+    return df
+
+def apply_split_regression(train_df, test_dict, inflection_point_x, x_var, target_var, input_year):
+    # Separate the training data based on the inflection point
+    train_df_1 = train_df[train_df[x_var] <= inflection_point_x]
+    train_df_2 = train_df[train_df[x_var] > inflection_point_x]
+    
+    # Initialize models
+    model_1 = LinearRegression()
+    model_2 = LinearRegression()
+    
+    # Train model_1 on data <= inflection_point_x if not empty
+    model_1_fitted = False
+    if train_df_1.shape[0] > 0:
+        model_1.fit(train_df_1[[x_var]], train_df_1[target_var])
+        model_1_fitted = True
+    
+    # Train model_2 on data > inflection_point_x if not empty
+    model_2_fitted = False
+    if train_df_2.shape[0] > 0:
+        model_2.fit(train_df_2[[x_var]], train_df_2[target_var])
+        model_2_fitted = True
+    
+    # Create a copy of test_dict to store predictions
+    result_dict = {}
+    
+    # Apply the models to each dataframe in test_dict
+    for key, df in test_dict.items():
+        df = df.copy()  # To avoid modifying the original test_dict dataframes
+
+        # Update the dataframe with the input year
+        df = update_year(df, input_year)
+        
+        # Create a copy of the target variable column to store predictions
+        df[target_var] = 0
+        
+        # Check if there are any rows with x_var <= inflection_point_x
+        mask_1 = df[x_var] <= inflection_point_x
+        mask_2 = ~mask_1  # Complement mask_1 to get rows with x_var > inflection_point_x
+        
+        # If model_1 is fitted, apply it to rows with x_var <= inflection_point_x
+        if model_1_fitted and mask_1.any():
+            df.loc[mask_1, target_var] = model_1.predict(df.loc[mask_1, [x_var]])
+        
+        # If model_2 is fitted, apply it to rows with x_var > inflection_point_x
+        if model_2_fitted and mask_2.any():
+            df.loc[mask_2, target_var] = model_2.predict(df.loc[mask_2, [x_var]])
+        
+        # Handle cases where one segment is empty in test data
+        # If there's no data <= inflection point, use model_2 predictions
+        if not mask_1.any() and model_2_fitted:
+            df[target_var] = model_2.predict(df[[x_var]])
+        
+        # If there's no data > inflection point, use model_1 predictions
+        if not mask_2.any() and model_1_fitted:
+            df[target_var] = model_1.predict(df[[x_var]])
+        
+        # Store the modified dataframe in the result dictionary
+        result_dict[key] = df
+    
+    return result_dict
