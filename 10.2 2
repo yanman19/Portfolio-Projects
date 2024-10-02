@@ -1,0 +1,67 @@
+import matplotlib.pyplot as plt
+import seaborn as sns
+import numpy as np
+import pandas as pd
+from sklearn.preprocessing import PolynomialFeatures
+from sklearn.linear_model import LinearRegression
+
+def plot_polynomial_regression_by_month1(df_new, x_col, y_col, date_col, months, years, oil_thres1=None, oil_thres2=None, y_axis=None, degree=2):
+    """
+    Plots data points and optional vertical lines based on given thresholds, and allows setting a fixed y-axis limit.
+
+    Parameters:
+    - df_new: pandas DataFrame containing the data
+    - x_col: The column name for the x-axis
+    - y_col: The column name for the y-axis
+    - date_col: The column name for the date
+    - months: List of months to filter the data
+    - years: List of years to filter the data
+    - oil_thres1: The first x-value to plot a vertical line (default is None)
+    - oil_thres2: The second x-value to plot a vertical line (default is None)
+    - y_axis: A float value to set a fixed maximum limit for the y-axis (default is None)
+    - degree: Degree of the polynomial regression (default is 2) (not used here)
+
+    Returns:
+    - The curve_df DataFrame containing the x and predicted y values
+    """
+
+    # Convert date_col to datetime and filter the data by months and years
+    df_new[date_col] = pd.to_datetime(df_new[date_col])
+    df_new = df_new[df_new[date_col].dt.month.isin(months) & df_new[date_col].dt.year.isin(years)]
+    
+    # Create a new 'month' column for coloring
+    df_new['month'] = df_new[date_col].dt.month
+
+    # Prepare x and y values for plotting
+    x = df_new[[x_col]].values
+    y = df_new[[y_col]].values
+
+    # Create the curve DataFrame for potential further use
+    curve_df = pd.DataFrame({x_col: df_new[x_col], y_col: df_new[y_col]})
+
+    # Plot the data points, using the 'month' column for color
+    plt.figure(figsize=(12, 8))
+    sns.scatterplot(data=df_new, x=x_col, y=y_col, hue='month', palette='viridis', legend='full')
+
+    # Plot vertical lines at oil_thres1 and oil_thres2 if provided
+    if oil_thres1 is not None:
+        plt.axvline(x=oil_thres1, color='green', linestyle='--', label=f'Oil Thresh 1: {oil_thres1}')
+    if oil_thres2 is not None:
+        plt.axvline(x=oil_thres2, color='blue', linestyle='--', label=f'Oil Thresh 2: {oil_thres2}')
+
+    # Add labels and titles
+    plt.legend(title='Month')
+    plt.xlabel(x_col)
+    plt.ylabel(y_col)
+    plt.title(f'{x_col} vs {y_col} ({months} months)')
+    plt.grid(True)
+
+    # Set y-axis limit if y_axis parameter is provided
+    if y_axis is not None:
+        plt.ylim(top=y_axis)
+
+    # Show the plot instead of saving
+    plt.show()
+
+    # Return the curve DataFrame for further use
+    return curve_df
