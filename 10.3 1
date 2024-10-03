@@ -1,0 +1,58 @@
+import matplotlib.pyplot as plt
+from sklearn.linear_model import LinearRegression
+import pandas as pd
+import numpy as np
+
+def split_and_plot(train_df, x_col, target_col, input_year, inflection_point_x):
+    # Step 1: Update the 'Datetime1' column with the input_year
+    train_df['Datetime1'] = train_df['Datetime1'].apply(lambda x: x.replace(year=input_year))
+    
+    # Extract the year from the 'Datetime1' column for color coding
+    train_df['Year'] = train_df['Datetime1'].dt.year
+    
+    # Step 2: Split the training data based on the inflection point
+    train_left = train_df[train_df[x_col] <= inflection_point_x]
+    train_right = train_df[train_df[x_col] > inflection_point_x]
+    
+    # Step 3: Initialize and train models
+    model_left = LinearRegression()
+    model_right = LinearRegression()
+    
+    if not train_left.empty:
+        model_left.fit(train_left[[x_col]], train_left[target_col])
+    
+    if not train_right.empty:
+        model_right.fit(train_right[[x_col]], train_right[target_col])
+    
+    # Step 4: Create scatter plot
+    plt.figure(figsize=(10, 6))
+    
+    # Scatter plot by year
+    for year in train_df['Year'].unique():
+        subset = train_df[train_df['Year'] == year]
+        plt.scatter(subset[x_col], subset[target_col], label=f'Year {year}', alpha=0.6)
+    
+    # Step 5: Plot the regression lines
+    # Generate x values for plotting the regression lines
+    x_values = np.linspace(train_df[x_col].min(), train_df[x_col].max(), 100)
+    
+    # Plot the left model line if trained
+    if not train_left.empty:
+        left_y_values = model_left.predict(x_values[x_values <= inflection_point_x].reshape(-1, 1))
+        plt.plot(x_values[x_values <= inflection_point_x], left_y_values, color='green', label=f'Left Model (x <= {inflection_point_x})')
+    
+    # Plot the right model line if trained
+    if not train_right.empty:
+        right_y_values = model_right.predict(x_values[x_values > inflection_point_x].reshape(-1, 1))
+        plt.plot(x_values[x_values > inflection_point_x], right_y_values, color='red', label=f'Right Model (x > {inflection_point_x})')
+    
+    # Step 6: Visual adjustments
+    plt.axvline(x=inflection_point_x, color='black', linestyle='--', label='Inflection Point')
+    plt.xlabel(x_col)
+    plt.ylabel(target_col)
+    plt.title(f'{x_col} vs {target_col} with Linear Regression Lines')
+    plt.legend()
+    plt.grid(True)
+    
+    # Display the plot
+    plt.show()
