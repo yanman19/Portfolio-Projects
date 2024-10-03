@@ -1,0 +1,44 @@
+from sklearn.linear_model import LinearRegression
+import pandas as pd
+
+def split_and_predict(train_df, test_dict, x_col, target_col, input_year, inflection_point_x):
+    # Step 1: Split the training data based on the inflection point
+    train_left = train_df[train_df[x_col] <= inflection_point_x]
+    train_right = train_df[train_df[x_col] > inflection_point_x]
+    
+    # Step 2: Initialize models
+    model_left = LinearRegression()
+    model_right = LinearRegression()
+    
+    # Step 3: Train models separately for each segment
+    if not train_left.empty:
+        model_left.fit(train_left[[x_col]], train_left[target_col])
+    
+    if not train_right.empty:
+        model_right.fit(train_right[[x_col]], train_right[target_col])
+    
+    # Step 4: Iterate through the dictionary of dataframes and apply predictions
+    for key, df in test_dict.items():
+        # Make a copy of the dataframe to avoid modifying the original
+        df = df.copy()
+        
+        # Update the year in 'Datetime1' column using input_year
+        df['Datetime1'] = df['Datetime1'].apply(lambda x: x.replace(year=input_year))
+        
+        # Create masks for rows to the left and right of the inflection point
+        mask_left = df[x_col] <= inflection_point_x
+        mask_right = df[x_col] > inflection_point_x
+        
+        # Apply model_left to rows where x_col <= inflection_point_x
+        if not train_left.empty and mask_left.any():
+            df.loc[mask_left, target_col] = model_left.predict(df.loc[mask_left, [x_col]])
+        
+        # Apply model_right to rows where x_col > inflection_point_x
+        if not train_right.empty and mask_right.any():
+            df.loc[mask_right, target_col] = model_right.predict(df.loc[mask_right, [x_col]])
+        
+        # Update the dictionary with the modified dataframe
+        test_dict[key] = df
+    
+    # Step 5: Return the modified dictionary of dataframes
+    return test_dict
