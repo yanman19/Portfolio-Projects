@@ -1,0 +1,23 @@
+import seaborn as sns
+import matplotlib.pyplot as plt
+
+def scatter_two_dataframes(df1, df2, x_col, y_col):
+    # Create a figure and axis
+    plt.figure(figsize=(10, 6))
+    
+    # Plot df1 (Prediction) in one color
+    sns.scatterplot(data=df1, x=x_col, y=y_col, color='blue', label='Prediction')
+    
+    # Plot df2 (Realized) in another color
+    sns.scatterplot(data=df2, x=x_col, y=y_col, color='orange', label='Realized')
+    
+    # Set the title and labels
+    plt.title(f'Scatter Plot of {x_col} vs {y_col}')
+    plt.xlabel(x_col)
+    plt.ylabel(y_col)
+    
+    # Show legend
+    plt.legend()
+    
+    # Show plot
+    plt.show()
