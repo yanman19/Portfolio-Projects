@@ -1,0 +1,42 @@
+import pandas as pd
+from sklearn.linear_model import LinearRegression
+
+def split_and_predict_shoulders(df_dict, x_col, target_col):
+    # Function to split dataframe into two based on the value of x_col being less than or greater than 1
+    def split_df(df):
+        left_df = df[df[x_col] < 1]
+        right_df = df[df[x_col] >= 1]
+        return left_df, right_df
+
+    # Train two linear regressions on the split dataframes
+    def train_regressions(train_df, x_col, target_col):
+        # Split train_df into left and right dataframes
+        left_df, right_df = split_df(train_df)
+        
+        # Train linear regression for left and right dataframes
+        left_reg = LinearRegression().fit(left_df[[x_col]], left_df[target_col])
+        right_reg = LinearRegression().fit(right_df[[x_col]], right_df[target_col])
+        
+        return left_reg, right_reg
+
+    # Get a sample train_df to be used for training (assuming the input format)
+    sample_train_df = next(iter(df_dict.values()))  # Using the first dataframe in the dictionary for training
+    left_reg, right_reg = train_regressions(sample_train_df, x_col, target_col)
+
+    # Iterate through each dataframe in the dictionary and make predictions
+    for name, df in df_dict.items():
+        # Initialize an empty column for predictions
+        predictions = []
+        
+        # Make predictions based on the value of x_col
+        for _, row in df.iterrows():
+            if row[x_col] < 1:
+                pred = left_reg.predict([[row[x_col]]])[0]
+            else:
+                pred = right_reg.predict([[row[x_col]]])[0]
+            predictions.append(pred)
+        
+        # Add the predictions to the dataframe as a new column with the same name as target_col
+        df[target_col] = predictions
+    
+    return df_dict
