@@ -1,0 +1,26 @@
+import pandas as pd
+import pickle
+import bz2
+
+# Function to load a .pbz2 file and return its contents
+def load_pbz2(file_path):
+    with bz2.BZ2File(file_path, 'rb') as file:
+        data = pickle.load(file)
+    return data
+
+# Specify the path to your .pbz2 file
+file_path = 'your_file.pbz2'
+
+# Load the data from the .pbz2 file
+data = load_pbz2(file_path)
+
+# If the data is already a DataFrame, you can use it directly
+# If it's a dictionary or other structure, you might need to convert it
+if isinstance(data, pd.DataFrame):
+    df = data
+else:
+    # Convert the data into a DataFrame (assuming it's in a format that can be converted)
+    df = pd.DataFrame(data)
+
+# Display the first few rows of the DataFrame
+print(df.head())
