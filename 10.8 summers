@@ -1,0 +1,42 @@
+import pandas as pd
+import numpy as np
+from sklearn.linear_model import LinearRegression
+
+def split_and_predict_summers(df_dict, x_col, target_col):
+    # Function to split dataframe into two based on the value of x_col being less than or greater than 1
+    def split_df(df):
+        left_df = df[df[x_col] < 1]
+        right_df = df[df[x_col] >= 1]
+        return left_df, right_df
+
+    # Create a line equation based on the points (-2, 150) and (0, 15.3)
+    def line_equation(x):
+        # Calculate the slope (m) and intercept (c) of the line
+        slope = (15.3 - 150) / (0 - (-2))
+        intercept = 15.3 - (slope * 0)
+        return slope * x + intercept
+
+    # Iterate through each dataframe in the dictionary and make predictions
+    for name, df in df_dict.items():
+        # Split the current dataframe into left and right based on x_col
+        left_df, right_df = split_df(df)
+
+        # Initialize columns for target predictions and predict price
+        df[target_col] = np.nan
+        df['Predict Price'] = np.nan
+
+        # Update the target_col for the right side of the split (values >= 1) to NaN
+        for idx, row in df.iterrows():
+            if row[x_col] < 1:
+                # For values left of 1, target_col should be NaN
+                df.at[idx, target_col] = np.nan
+                # Predict price using the line equation
+                predict_price = line_equation(row[x_col])
+                df.at[idx, 'Predict Price'] = predict_price
+            else:
+                # For values >= 1, predict target_col using linear regression on the right side
+                # Placeholder, this part could include another regression if needed
+                df.at[idx, target_col] = np.nan
+                df.at[idx, 'Predict Price'] = np.nan  # Ensure 'Predict Price' is NaN for right side
+
+    return df_dict
