@@ -4,8 +4,8 @@ from sklearn.linear_model import LinearRegression
 def split_and_predict_shoulders(df_dict, x_col, target_col):
     # Function to split dataframe into two based on the value of x_col being less than or greater than 1
     def split_df(df):
-        left_df = df[df[x_col] < 1]
-        right_df = df[df[x_col] >= 1]
+        left_df = df[df[x_col] < 2.5]
+        right_df = df[df[x_col] >= 2.5]
         return left_df, right_df
 
     # Train two linear regressions on the split dataframes
