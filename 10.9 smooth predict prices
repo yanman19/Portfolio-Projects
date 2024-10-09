@@ -1,0 +1,22 @@
+import pandas as pd
+
+# Example DataFrame structure for demonstration
+data = {'slack': [0.8, 0.9, 1.2, 0.7, 0.6, 1.1],
+        'predictPrice': [100, 105, 120, 95, 90, 115]}
+df = pd.DataFrame(data)
+
+# Lambda function to apply smoothing
+def smooth_predict_prices(df):
+    # Find the first predictPrice where slack > 1
+    target_price = df.loc[df['slack'] > 1, 'predictPrice'].iloc[0]
+    
+    # Create a mask to identify rows where slack < 1 and predictPrice < target_price
+    condition = (df['slack'] < 1) & (df['predictPrice'] < target_price)
+    
+    # Apply the target_price to those rows
+    df['predictPrice'] = df.apply(lambda row: target_price if condition.loc[row.name] else row['predictPrice'], axis=1)
+    return df
+
+# Applying the function to the DataFrame
+smoothed_df = smooth_predict_prices(df)
+print(smoothed_df)
