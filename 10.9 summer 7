@@ -1,0 +1,61 @@
+import pandas as pd
+import numpy as np
+from sklearn.linear_model import LinearRegression
+
+def inflection_point_model(train_df, test_df, x_col, target_col, inflection_point):
+    # Step 1: Filter the train_df to only include rows where x_col is greater than the inflection point
+    train_df_filtered = train_df[train_df[x_col] > inflection_point]
+
+    # Step 2: Define the feature and target variables for training
+    X_train = train_df_filtered[[x_col]].values
+    y_train = train_df_filtered[target_col].values
+
+    # Step 3: Train a linear regression model on the filtered data
+    model = LinearRegression()
+    model.fit(X_train, y_train)
+
+    # Step 4: Predict the target value for the inflection point
+    inflection_point_pred = model.predict([[inflection_point]])[0]
+
+    # Step 5: Create a new variable called inflection_point_price using the formula
+    # inflection_point_pred * ALGCG
+    if 'ALGCG' in test_df.columns:
+        inflection_point_price = inflection_point_pred * test_df['ALGCG'].iloc[0]
+    else:
+        raise ValueError("Column 'ALGCG' not found in test_df.")
+
+    # Step 6: Split test_df into right_test (>= inflection point) and left_test (< inflection point)
+    right_test = test_df[test_df[x_col] >= inflection_point].copy()
+    left_test = test_df[test_df[x_col] < inflection_point].copy()
+
+    # Step 7: Predict the target values for the right_test subset
+    X_right_test = right_test[[x_col]].values
+    right_test['predicted_' + target_col] = model.predict(X_right_test)
+
+    # Step 8: Define a line (reg_left) from (inflection_point, inflection_point_price) to (-2, 150)
+    # Calculate slope and intercept of the line
+    x1, y1 = inflection_point, inflection_point_price
+    x2, y2 = -2, 150
+
+    slope = (y2 - y1) / (x2 - x1)
+    intercept = y1 - slope * x1
+
+    # Step 9: Predict the price for left_test using the line equation y = mx + c
+    left_test['predicted_price'] = slope * left_test[x_col] + intercept
+
+    # Step 10: Add a column for target_col on left_test with NaN values
+    left_test[target_col] = np.nan
+
+    # Step 11: Add a column for 'predicted_price' on right_test with NaN values
+    right_test['predicted_price'] = np.nan
+
+    # Step 12: Concatenate left_test and right_test
+    concated_df = pd.concat([left_test, right_test])
+
+    # Step 13: Sort the concatenated DataFrame by 'MARKETDAY' column with oldest dates at the top
+    if 'MARKETDAY' in concated_df.columns:
+        concated_df.sort_values(by='MARKETDAY', ascending=True, inplace=True)
+    else:
+        raise ValueError("Column 'MARKETDAY' not found in test_df.")
+
+    return concated_df
