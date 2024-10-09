@@ -1,0 +1,27 @@
+import pandas as pd
+from sklearn.linear_model import LinearRegression
+
+def inflection_point_model(train_df, test_df, x_col, target_col, inflection_point):
+    # Filter the train_df to only include rows where x_col is greater than the inflection point
+    train_df_filtered = train_df[train_df[x_col] > inflection_point]
+
+    # Define the feature and target variables for training
+    X_train = train_df_filtered[[x_col]].values
+    y_train = train_df_filtered[target_col].values
+
+    # Train a linear regression model on the filtered data
+    model = LinearRegression()
+    model.fit(X_train, y_train)
+
+    # Predict the target value for the inflection point
+    inflection_point_pred = model.predict([[inflection_point]])[0]
+
+    # Split test_df into right_test (>= inflection point) and left_test (< inflection point)
+    right_test = test_df[test_df[x_col] >= inflection_point]
+    left_test = test_df[test_df[x_col] < inflection_point]
+
+    # Predict the target values for the right_test subset
+    X_right_test = right_test[[x_col]].values
+    right_test['predicted_' + target_col] = model.predict(X_right_test)
+
+    return right_test, inflection_point_pred
