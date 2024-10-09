@@ -1,0 +1,69 @@
+import pandas as pd
+import numpy as np
+from sklearn.linear_model import LinearRegression
+
+def split_and_predict_summers(df_dict, train_df, x_col, target_col):
+    # Split dataframe into left and right based on the value of x_col being less than or greater than/equal to 1
+    def split_df(df):
+        left_df = df[df[x_col] < 1]
+        right_df = df[df[x_col] >= 1]
+        return left_df, right_df
+
+    # Calculate the slope and intercept of the line connecting the inflection point to (-2, 150)
+    def get_line_from_point_to_negative_2(inflection_x, inflection_y):
+        slope = (150 - inflection_y) / (-2 - inflection_x)
+        intercept = inflection_y - (slope * inflection_x)
+        return slope, intercept
+
+    # Get inflection point based on the logic for the dictionary of dataframes
+    def get_inflection_point(df):
+        inflection_df = df[df[x_col] == 1]
+        if not inflection_df.empty:
+            inflection_value = inflection_df.iloc[0][target_col] * inflection_df.iloc[0]['ALGCG']
+            return 1, inflection_value  # Return inflection point as (x = 1, y = calculated value)
+        else:
+            raise ValueError("Inflection point at x = 1 not found in the dataframe.")
+
+    # Train a linear regression model using only the right side of the train_df (x_col >= 1)
+    def train_right_regression(train_df, x_col, target_col):
+        # Filter training data to only include rows where x_col >= 1
+        right_train_df = train_df[train_df[x_col] >= 1]
+        right_reg = LinearRegression().fit(right_train_df[[x_col]], right_train_df[target_col])
+        return right_reg
+
+    # Train the regression model for the right side using train_df
+    right_reg = train_right_regression(train_df, x_col, target_col)
+
+    # Iterate through each dataframe in the dictionary
+    for name, df in df_dict.items():
+        # Get the inflection point for the current dataframe
+        inflection_x, inflection_y = get_inflection_point(df)
+
+        # Calculate slope and intercept for the line extending left from the inflection point to (-2, 150)
+        slope, intercept = get_line_from_point_to_negative_2(inflection_x, inflection_y)
+
+        # Define a function to calculate the predict price based on the line equation
+        def left_line_equation(x):
+            return slope * x + intercept
+
+        # Split the current dataframe into left and right parts based on x_col
+        left_df, right_df = split_df(df)
+
+        # Initialize columns for target predictions and predict price
+        df[target_col] = np.nan
+        df['Predict Price'] = np.nan
+
+        # Calculate 'Predict Price' for x_col values less than 1 (left side)
+        for idx, row in left_df.iterrows():
+            predict_price = left_line_equation(row[x_col])
+            df.at[idx, 'Predict Price'] = predict_price
+            df.at[idx, target_col] = np.nan  # No target_col value for left side
+
+        # Calculate 'target_col' using the trained right regression model for x_col values >= 1 (right side)
+        for idx, row in right_df.iterrows():
+            # Predict the target_col using the right regression model
+            target_pred = right_reg.predict([[row[x_col]]])[0]
+            df.at[idx, target_col] = target_pred
+            df.at[idx, 'Predict Price'] = np.nan  # No Predict Price for right side
+
+    return df_dict
