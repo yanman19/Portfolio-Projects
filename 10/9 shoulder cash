@@ -1,0 +1,41 @@
+import pandas as pd
+from sklearn.linear_model import LinearRegression
+
+def split_and_predict_shoulders_cash(df, x_col, target_col):
+    # Function to split dataframe into two based on the value of x_col being less than or greater than 1
+    def split_df(df):
+        left_df = df[df[x_col] < 1]
+        right_df = df[df[x_col] >= 1]
+        return left_df, right_df
+
+    # Train a linear regression only for the right-side data
+    def train_right_regression(train_df, x_col, target_col):
+        _, right_df = split_df(train_df)  # Get only the right-side data (x_col >= 1)
+        right_reg = LinearRegression().fit(right_df[[x_col]], right_df[target_col])
+        return right_reg
+
+    # Use the line equation -6.2x + 25 for the left-side regression
+    def left_line_equation(x):
+        return -6.2 * x + 25
+
+    # Get the training data from the input DataFrame (assuming it's already part of df)
+    train_df = df  # Use the input DataFrame for training purposes as well
+    right_reg = train_right_regression(train_df, x_col, target_col)
+
+    # Initialize an empty column for predictions
+    predictions = []
+
+    # Make predictions based on the value of x_col
+    for _, row in df.iterrows():
+        if row[x_col] < 1:
+            # Use the left line equation for values left of 1
+            pred = left_line_equation(row[x_col])
+        else:
+            # Use the right regression model for values >= 1
+            pred = right_reg.predict([[row[x_col]]])[0]
+        predictions.append(pred)
+
+    # Add the predictions to the dataframe as a new column with the same name as target_col
+    df[target_col] = predictions
+    
+    return df
