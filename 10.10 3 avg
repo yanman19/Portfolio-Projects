@@ -1,0 +1,17 @@
+import pandas as pd
+
+# Assuming you have a dataframe named `df`
+# Select only numeric columns
+numeric_cols = df.select_dtypes(include='number')
+
+# Calculate the average of all numeric columns
+averages = numeric_cols.mean()
+
+# Create a new dataframe with the averages and column names
+result_df = pd.DataFrame(averages).transpose()
+
+# Rename the row index to 'avg'
+result_df.index = ['avg']
+
+# Display the new dataframe
+print(result_df)
