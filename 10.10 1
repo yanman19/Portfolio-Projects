@@ -1,0 +1,22 @@
+def adjust_distribution(df, x_col, target_mean, target_std):
+    # Copy the original DataFrame to avoid modifying it directly
+    filtered_df = df.copy()
+    
+    # Calculate the original mean and standard deviation
+    original_mean = filtered_df[x_col].mean()
+    original_std = filtered_df[x_col].std()
+    
+    # Step 1: Adjust to set the mean to target_mean
+    # Calculate adjustment factor to set mean
+    mean_adjustment_factor = target_mean / original_mean
+    filtered_df[x_col] *= mean_adjustment_factor
+    
+    # Step 2: Adjust to set the standard deviation to target_std
+    # Calculate new standard deviation after mean adjustment
+    new_std = filtered_df[x_col].std()
+    
+    # Calculate the factor to adjust the standard deviation to target_std
+    std_adjustment_factor = target_std / new_std
+    filtered_df[x_col] = (filtered_df[x_col] - target_mean) * std_adjustment_factor + target_mean
+    
+    return filtered_df
