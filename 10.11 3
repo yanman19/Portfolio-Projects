@@ -1,0 +1,31 @@
+import pandas as pd
+import numpy as np
+
+# Example dictionary of DataFrames (replace with your actual dictionary)
+df_dict = {
+    'df_hourly': pd.DataFrame({'Predict Price': [np.nan, 50, 70], 'HR_adj': [100, 200, 300], 'Gas': [10, 20, 30]}),
+    'df_daily': pd.DataFrame({'Predict Price': [80, np.nan, 120], 'HR_adj': [150, 250, 350], 'Gas': [15, 25, 35]}),
+    'df_monthly': pd.DataFrame({'Predict Price': [90, 100, np.nan], 'HR_adj': [110, 210, 310], 'Gas': [12, 22, 32]})
+}
+
+# Function to create 'predict HR' column for each DataFrame in a dictionary
+def create_predict_hr(df_dict):
+    for key, df in df_dict.items():
+        # Check if the current item is a DataFrame
+        if isinstance(df, pd.DataFrame):
+            if all(col in df.columns for col in ['Predict Price', 'HR_adj', 'Gas']):
+                # Create the new 'predict HR' column
+                df['predict HR'] = np.where(df['Predict Price'].isna(), 
+                                            df['HR_adj'], 
+                                            df['Predict Price'] - df['Gas'])
+            else:
+                print(f"DataFrame '{key}' is missing one or more required columns.")
+        else:
+            print(f"Item '{key}' in the dictionary is not a DataFrame. It is of type {type(df)}")
+
+# Apply the function to the dictionary of DataFrames
+create_predict_hr(df_dict)
+
+# Display the updated DataFrames to verify the results
+for key, df in df_dict.items():
+    print(f"DataFrame '{key}':\n{df}\n")
