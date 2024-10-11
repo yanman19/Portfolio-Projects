@@ -1,0 +1,17 @@
+import os
+
+# Example file path (replace with your actual file path)
+file_path = 'your_directory_path_here'  # Replace with the directory path where your CSV files are located
+
+# Function to save each DataFrame in the dictionary to its corresponding CSV file
+def save_dfs_to_csv(df_dict, file_path):
+    for file_name, df in df_dict.items():
+        # Construct the full file path for each CSV
+        csv_file_path = os.path.join(file_path, f"{file_name}.csv")
+
+        # Save the DataFrame back to its CSV file (overwrite existing file)
+        df.to_csv(csv_file_path, index=False)
+        print(f"Saved DataFrame '{file_name}' to {csv_file_path}")
+
+# Call the function with your dictionary of DataFrames and file path
+save_dfs_to_csv(df_dict, file_path)
