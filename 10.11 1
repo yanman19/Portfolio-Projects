@@ -1,0 +1,20 @@
+import pandas as pd
+import numpy as np
+
+# Sample list of DataFrames (Replace these with your actual DataFrames)
+dfs = [pd.DataFrame({'Predict Price': [np.nan, 50, 70], 'HR_adj': [100, 200, 300], 'Gas': [10, 20, 30]}),
+       pd.DataFrame({'Predict Price': [80, np.nan, 120], 'HR_adj': [150, 250, 350], 'Gas': [15, 25, 35]})]
+
+# Function to create 'predict HR' column in each DataFrame
+def create_predict_hr(dfs):
+    for df in dfs:
+        df['predict HR'] = np.where(pd.isna(df['Predict Price']), 
+                                    df['HR_adj'], 
+                                    df['Predict Price'] - df['Gas'])
+
+# Apply the function to the list of DataFrames
+create_predict_hr(dfs)
+
+# Display the updated DataFrames to verify the results
+for i, df in enumerate(dfs):
+    print(f"DataFrame {i}:\n{df}\n")
