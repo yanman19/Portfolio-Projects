@@ -1,0 +1,14 @@
+import os
+import pandas as pd
+
+# Define the file path
+file_path = 'your_directory_path_here'  # Replace with your directory path
+
+# Create a list of CSV files that start with 'NEPOOL_Scenarios'
+csv_files = [f for f in os.listdir(file_path) if f.startswith('NEPOOL_Scenarios') and f.endswith('.csv')]
+
+# Read the CSV files into a dictionary of DataFrames
+df_dict = {file: pd.read_csv(os.path.join(file_path, file)) for file in csv_files}
+
+# Display the keys of the dictionary to confirm
+print(f"Loaded CSVs: {list(df_dict.keys())}")
