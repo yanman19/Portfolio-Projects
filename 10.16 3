@@ -1,0 +1,21 @@
+def generate_time_layout(year, month, view_type, base_path):
+    if base_path == '/nepool':
+        if view_type == 'Monthly':
+            dataframe = load_monthly_dataframe_nepool(year, month)
+        elif view_type == 'Daily':
+            dataframe = load_daily_dataframe_nepool(year, month)
+        elif view_type == 'Hourly':
+            dataframe = load_hourly_dataframe_nepool(year, month)
+    elif base_path == '/nye':
+        if view_type == 'Monthly':
+            dataframe = load_monthly_dataframe_nye(year, month)
+        elif view_type == 'Daily':
+            dataframe = load_daily_dataframe_nye(year, month)
+        elif view_type == 'Hourly':
+            dataframe = load_hourly_dataframe_nye(year, month)
+
+    return html.Div([
+        dcc.Graph(
+            figure=generate_graph_from_dataframe(dataframe)
+        )
+    ])
