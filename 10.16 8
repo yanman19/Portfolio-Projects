@@ -1,0 +1,12 @@
+@app.callback(Output('page-content', 'children'), [Input('url', 'pathname')])
+def display_page(pathname):
+    # Call NEPOOL page display function for NEPOOL paths
+    if pathname.startswith('/nepool'):
+        return display_page_nep(pathname)
+    
+    # Call NYE page display function for NYE paths
+    elif pathname.startswith('/nye'):
+        return display_page_nye(pathname)
+
+    # Default case to return yanus_layout
+    return yanus_layout
