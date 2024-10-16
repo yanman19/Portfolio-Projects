@@ -1,0 +1,18 @@
+@app.callback(Output('page-content', 'children'),
+              [Input('url', 'pathname')])
+def display_page(pathname):
+    if '/nepool/' in pathname or '/nye/' in pathname:
+        base_path = '/nepool' if 'nepool' in pathname else '/nye'
+
+        # Handle the Monthly, Daily, Hourly pages
+        if 'monthly' in pathname:
+            year, month = pathname.split('/')[2], pathname.split('/')[4]
+            return generate_time_layout(year, month, 'Monthly')
+        
+        elif 'daily' in pathname:
+            year, month = pathname.split('/')[2], pathname.split('/')[4]
+            return generate_time_layout(year, month, 'Daily')
+
+        elif 'hourly' in pathname:
+            year, month = pathname.split('/')[2], pathname.split('/')[4]
+            return generate_time_layout(year, month, 'Hourly')
