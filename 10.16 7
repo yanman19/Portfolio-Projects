@@ -1,0 +1,72 @@
+def display_page(pathname):
+    # First check for /nye/ paths
+    if '/nye/' in pathname:
+        if pathname == '/nye':
+            return nye_layout
+        elif '/chart-zone' in pathname:
+            return chart_zone_layout_nye()
+        elif '/input-tracker' in pathname:
+            return input_tracker_layout(variables)
+        elif '/2024' in pathname:
+            return generate_year_layout_nye(2024)
+        elif '/2025' in pathname:
+            return generate_year_layout_nye(2025)
+        elif '/2026' in pathname:
+            return generate_year_layout_nye(2026)
+        elif '/2027' in pathname:
+            return generate_year_layout_nye(2027)
+        elif '/2028' in pathname:
+            return generate_year_layout_nye(2028)
+        elif '/month' in pathname and len(pathname.split('/')) == 5:
+            year = pathname.split('/')[2]
+            month = pathname.split('/')[4]
+            return generate_month_layout_nye(year, month)
+        elif '/monthly' in pathname:
+            year, month = pathname.split('/')[2], pathname.split('/')[4]
+            return generate_time_layout_nye(year, month, 'Monthly')
+        elif '/daily' in pathname:
+            year, month = pathname.split('/')[2], pathname.split('/')[4]
+            return generate_time_layout_nye(year, month, 'Daily')
+        elif '/hourly' in pathname:
+            year, month = pathname.split('/')[2], pathname.split('/')[4]
+            return generate_time_layout_nye(year, month, 'Hourly')
+        else:
+            return yanus_layout  # Default fallback
+
+    # Then check for /nepool/ paths
+    if pathname == '/nepool':
+        return nepool_layout
+    elif '/chart-zone' in pathname:
+        return chart_zone_layout()
+    elif '/input-tracker' in pathname:
+        return input_tracker_layout(variables)
+    elif '/2024' in pathname:
+        return generate_year_layout(2024)
+    elif '/2025' in pathname:
+        return generate_year_layout(2025)
+    elif '/2026' in pathname:
+        return generate_year_layout(2026)
+    elif '/2027' in pathname:
+        return generate_year_layout(2027)
+    elif '/2028' in pathname:
+        return generate_year_layout(2028)
+    elif '/month' in pathname and len(pathname.split('/')) == 5:
+        year = pathname.split('/')[2]
+        month = pathname.split('/')[4]
+        return generate_month_layout(year, month)
+    elif '/monthly' in pathname:
+        year, month = pathname.split('/')[2], pathname.split('/')[4]
+        return generate_time_layout(year, month, 'Monthly')
+    elif '/daily' in pathname:
+        year, month = pathname.split('/')[2], pathname.split('/')[4]
+        return generate_time_layout(year, month, 'Daily')
+    elif '/hourly' in pathname:
+        year, month = pathname.split('/')[2], pathname.split('/')[4]
+        return generate_time_layout(year, month, 'Hourly')
+
+def generate_month_layout_nye(year, month):
+    """
+    Function to generate a layout specific to the 'nye' section based on the year and month.
+    This layout would be specific to the requirements of the /nye/ path.
+    """
+    return f"NYE layout for Year: {year}, Month: {month}"
