@@ -1,0 +1,28 @@
+def display_page(pathname):
+    print(f"Current URL Path: {pathname}")
+
+    # Handle NEPOOL paths
+    if pathname == '/nepool':
+        return nepool_layout()
+    elif pathname.startswith('/nepool/model-error') and len(pathname.split('/')) == 5:
+        month = int(pathname.split('/')[-1])
+        return model_error_layout(month)
+    elif pathname.startswith('/nepool/') and pathname.split('/')[2].isdigit():
+        year = pathname.split('/')[2]
+        return generate_year_layout(int(year))
+
+    # Handle NYE paths
+    elif pathname == '/nye':
+        return nye_layout()
+    elif pathname.startswith('/nye/model-error') and len(pathname.split('/')) == 5:
+        month = int(pathname.split('/')[-1])
+        return model_error_layout(month, prefix='NYE_Scenarios')  # Adjust prefix for NYE
+    elif pathname.startswith('/nye/') and pathname.split('/')[2].isdigit():
+        year = pathname.split('/')[2]
+        return generate_nye_year_layout(int(year))
+    elif '/month' in pathname and 'nye' in pathname:
+        year, month = pathname.split('/')[2], pathname.split('/')[-1]
+        return generate_nye_month_layout(int(year), int(month))
+
+    # Default to home page
+    return yanus_layout()
