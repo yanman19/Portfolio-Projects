@@ -1,0 +1,71 @@
+@app.callback(Output('page-content', 'children'),
+              [Input('url', 'pathname')])
+def display_page(pathname):
+    # Check for NEPOOL pages
+    if pathname == '/nepool':
+        return nepool_layout
+
+    elif pathname == '/nepool/chart-zone':
+        return chart_zone_layout()
+
+    elif pathname == '/nepool/input-tracker':
+        return input_tracker_layout(variables)
+
+    elif pathname == '/nepool/2024':
+        return generate_year_layout(2024)
+    
+    # Similar blocks for other NEPOOL years
+    elif pathname == '/nepool/2025':
+        return generate_year_layout(2025)
+
+    # Handles NEPOOL monthly, daily, hourly
+    elif 'monthly' in pathname:
+        year = pathname.split('/')[2]
+        month = pathname.split('/')[4]
+        return generate_time_layout(year, month, 'Monthly')
+
+    elif 'daily' in pathname:
+        year = pathname.split('/')[2]
+        month = pathname.split('/')[4]
+        return generate_time_layout(year, month, 'Daily')
+
+    elif 'hourly' in pathname:
+        year = pathname.split('/')[2]
+        month = pathname.split('/')[4]
+        return generate_time_layout(year, month, 'Hourly')
+
+    # Check for NYE pages
+    elif pathname == '/nye':
+        return nye_layout
+
+    elif pathname == '/nye/chart-zone':
+        return chart_zone_layout_nye()
+
+    elif pathname == '/nye/input-tracker':
+        return input_tracker_layout(variables)
+
+    elif pathname == '/nye/2024':
+        return generate_year_layout_nye(2024)
+
+    # Similar blocks for other NYE years
+    elif pathname == '/nye/2025':
+        return generate_year_layout_nye(2025)
+
+    # Handles NYE monthly, daily, hourly
+    elif 'monthly' in pathname:
+        year = pathname.split('/')[2]
+        month = pathname.split('/')[4]
+        return generate_time_layout_nye(year, month, 'Monthly')
+
+    elif 'daily' in pathname:
+        year = pathname.split('/')[2]
+        month = pathname.split('/')[4]
+        return generate_time_layout_nye(year, month, 'Daily')
+
+    elif 'hourly' in pathname:
+        year = pathname.split('/')[2]
+        month = pathname.split('/')[4]
+        return generate_time_layout_nye(year, month, 'Hourly')
+
+    else:
+        return default_layout
