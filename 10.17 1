@@ -1,0 +1,82 @@
+def inflection_point_model_dict(dict_df_test, x_col, target_col, inflection_point, gas, rggi, input_year):
+    file_path = r'V:\Commodities\Energy2\ficc_power\New Hierarchy\Fundamentals\New England\HRCOExercise\code\allData_NYE_daily.csv'
+    train_df = pd.read_csv(file_path, delimiter=',', skiprows=0)
+
+    train_df['MARKETDAY'] = pd.to_datetime(train_df['MARKETDAY'])
+
+    # Filter data for the specified year and months
+    train_df = train_df[(train_df['MARKETDAY'].dt.year == 2024)]
+    train_df = train_df[train_df['MARKETDAY'].dt.month.isin([6, 7, 8, 9])]
+
+    # Apply the input year to the MARKETDAY column
+    train_df['MARKETDAY'] = train_df['MARKETDAY'].apply(lambda x: x.replace(year=input_year))
+
+    # Filter the train_df to only include rows where x_col is greater than the inflection point
+    train_df_filtered = train_df[train_df[x_col] > inflection_point]
+
+    # Step 2: Define the feature and target variables for training
+    X_train = train_df_filtered[[x_col]].values
+    y_train = train_df_filtered[target_col].values
+
+    # Step 2a: Check if there is any data in the filtered sets
+    if len(X_train) == 0 or len(y_train) == 0:
+        print("No data available for training after filtering.")
+        return None  # Or handle accordingly based on your logic
+    
+    # Step 3: Train a linear regression model on the filtered data
+    model = LinearRegression()
+    model.fit(X_train, y_train)
+
+    # Step 4: Predict the target value for the inflection point
+    inflection_point_pred = model.predict([[inflection_point]])[0]
+
+    # Step 5: Create an empty dictionary to store updated test DataFrames
+    updated_dict_df_test = {}
+
+    # Step 6: Iterate through each test DataFrame in the dictionary
+    for key, test_df in dict_df_test.items():
+
+        # Step 7: Create a new variable called inflection_point_price using the formula
+        inflection_point_price = inflection_point_pred + gas * 0.5 + rggi * 4
+
+        # Step 8: Split test_df into right_test (>= inflection point) and left_test (< inflection point)
+        right_test = test_df[test_df[x_col] >= inflection_point].copy()
+        left_test = test_df[test_df[x_col] < inflection_point].copy()
+
+        # Step 9: Predict the target values for the right_test subset
+        X_right_test = right_test[[x_col]].values
+        right_test[target_col] = model.predict(X_right_test)
+
+        # Step 10: Define a line (reg_left) from (inflection_point, inflection_point_price) to (-2, 150)
+        y1 = inflection_point_price
+        y2 = 150
+        x1 = inflection_point
+        x2 = -2
+
+        # Calculate slope and intercept of the line
+        slope = (y2 - y1) / (x2 - x1)
+        intercept = y1 - slope * x1
+
+        # Step 11: Predict the price for left_test using the line equation y = mx + c
+        left_test['Predicted Price'] = (left_test[x_col] * slope) + intercept
+
+        # Step 12: Add a column for target_col on left_test with NaN values
+        left_test[target_col] = np.nan
+
+        # Step 13: Add a column for 'predicted_price' on right_test with NaN values
+        right_test['Predicted Price'] = np.nan
+
+        # Step 14: Concatenate left_test and right_test back into a single DataFrame
+        combined_test_df = pd.concat([left_test, right_test])
+
+        # Step 15: Sort the combined DataFrame by 'MARKETDAY'
+        if 'MARKETDAY' in combined_test_df.columns:
+            combined_test_df = combined_test_df.sort_values(by='MARKETDAY')
+        else:
+            print(f"Column 'MARKETDAY' not found in test_df for key {key}.")
+
+        # Step 16: Store the updated DataFrame back into the dictionary with the same key
+        updated_dict_df_test[key] = combined_test_df
+
+    # Step 17: Return the updated dictionary of DataFrames
+    return updated_dict_df_test
