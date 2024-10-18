@@ -1,0 +1,31 @@
+import pandas as pd
+
+def merge_dicts_on_market_day(dicts):
+    merged_dict = {}
+    for d in dicts:
+        # Filter each dictionary to remove keys containing '2024_10' and '2023_10'
+        filtered_dict = {k: v for k, v in d.items() if "2024_10" not in k and "2023_10" not in k}
+        
+        # Merge filtered dictionary into the merged_dict
+        merged_dict.update(filtered_dict)
+
+    # Extract all DataFrames from merged_dict and merge them on the 'MARKET_DAY' column
+    dfs = [df for df in merged_dict.values() if isinstance(df, pd.DataFrame)]
+    if dfs:
+        merged_df = dfs[0]
+        for df in dfs[1:]:
+            merged_df = pd.merge(merged_df, df, on='MARKET_DAY', how='outer')
+        return merged_df
+    return None
+
+# Example usage:
+dict1 = {'key1': pd.DataFrame({'MARKET_DAY': ['2024-10-01', '2024-09-30'], 'Value1': [100, 200]}),
+         '2024_10_key2': pd.DataFrame({'MARKET_DAY': ['2024-10-01', '2024-09-30'], 'Value2': [10, 20]})}
+dict2 = {'key3': pd.DataFrame({'MARKET_DAY': ['2024-09-30', '2024-09-29'], 'Value3': [300, 400]})}
+dict3 = {'key5': pd.DataFrame({'MARKET_DAY': ['2024-09-29', '2024-09-28'], 'Value5': [500, 600]})}
+dict4 = {'2023_10_key6': pd.DataFrame({'MARKET_DAY': ['2024-10-01', '2024-09-30'], 'Value6': [50, 60]})}
+dict5 = {'key7': pd.DataFrame({'MARKET_DAY': ['2024-09-28', '2024-09-27'], 'Value7': [700, 800]})}
+
+# Merging dictionaries
+result_df = merge_dicts_on_market_day([dict1, dict2, dict3, dict4, dict5])
+print(result_df)
