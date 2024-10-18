@@ -1,0 +1,13 @@
+import pandas as pd
+
+def apply_linear_regression(df_dict, x_col, target_col):
+    # Define the linear regression equation
+    def predict(x):
+        return -0.7 * x + 12.8
+    
+    # Iterate through each dataframe in the dictionary
+    for key, df in df_dict.items():
+        # Apply the linear regression to the x_col to predict the target_col
+        df[target_col] = df[x_col].apply(predict)
+    
+    return df_dict
