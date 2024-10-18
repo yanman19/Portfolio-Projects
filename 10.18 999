@@ -1,0 +1,17 @@
+def merge_dicts_without_key_patterns(dicts):
+    merged_dict = {}
+    for d in dicts:
+        filtered_dict = {k: v for k, v in d.items() if "2024_10" not in k and "2023_10" not in k}
+        merged_dict.update(filtered_dict)
+    return merged_dict
+
+# Example usage:
+dict1 = {'key1': 1, '2024_10_key2': 2}
+dict2 = {'key3': 3, '2023_10_key4': 4}
+dict3 = {'key5': 5}
+dict4 = {'2024_10_key6': 6, '2023_10_key7': 7}
+dict5 = {'key7': 7}
+
+# Merging dictionaries
+result = merge_dicts_without_key_patterns([dict1, dict2, dict3, dict4, dict5])
+print(result)
