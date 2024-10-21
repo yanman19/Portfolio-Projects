@@ -1,0 +1,17 @@
+def generate_table(df):
+    return dash_table.DataTable(
+        columns=[{"name": i, "id": i} for i in df.columns],
+        data=df.to_dict('records'),
+        sort_action="native",
+        filter_action="native",
+        style_data_conditional=[
+            {
+                'if': {
+                    'filter_query': '{year} > 2024'  # rows where 'year' column value is greater than 2024
+                },
+                'backgroundColor': 'lightblue',  # Light blue color for all columns in the row
+                'color': 'black'
+            }
+        ],
+        style_cell={'textAlign': 'left'}
+    )
