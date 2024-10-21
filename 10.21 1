@@ -1,0 +1,2 @@
+# Assuming df is your DataFrame
+df = df.drop(columns=[col for col in df.columns if any(suffix in col for suffix in ['.1', '.2', '.3'])])
