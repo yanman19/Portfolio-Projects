@@ -1,0 +1,26 @@
+def generate_table(df):
+    return dash_table.DataTable(
+        columns=[{"name": i, "id": i} for i in df.columns],
+        data=df.to_dict('records'),
+        sort_action="native",
+        filter_action="native",
+        style_data_conditional=[
+            {
+                'if': {
+                    'filter_query': '{difference} > 0',  # difference greater than 0
+                    'column_id': 'difference'
+                },
+                'backgroundColor': 'lightcoral',  # Light red
+                'color': 'black'
+            },
+            {
+                'if': {
+                    'filter_query': '{difference} < 0',  # difference less than 0
+                    'column_id': 'difference'
+                },
+                'backgroundColor': 'lightgreen',  # Light green
+                'color': 'black'
+            }
+        ],
+        style_cell={'textAlign': 'left'}  # No specific size set
+    )
