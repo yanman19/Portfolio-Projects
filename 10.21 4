@@ -1,0 +1,22 @@
+def generate_table(df):
+    return dash_table.DataTable(
+        columns=[{"name": i, "id": i} for i in df.columns],
+        data=df.to_dict('records'),
+        sort_action="native",
+        filter_action="native",
+        style_data_conditional=[
+            {
+                'if': {
+                    'filter_query': '{any_column} > 2024'  # Conditional for any value greater than 2024
+                },
+                'backgroundColor': 'lightblue',  # Light blue color for entire row
+                'color': 'black'
+            }
+        ],
+        style_cell={'textAlign': 'left'},
+        style_cell_conditional=[
+            {
+                'if': {'column_id': c},
+                'if': {
+                    'filter_query': 'max({%s}) > 2024' % c  # Apply if any column value exceeds 2024
+                    ]}
