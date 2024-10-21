@@ -1,0 +1,11 @@
+def reorder_columns(dataframes_dict):
+    # Define the order of columns
+    column_order = ['Age', 'Month', 'Year', 'Size']
+    
+    # Reorder columns for each dataframe in the dictionary
+    for key, df in dataframes_dict.items():
+        # Reorder only if all specified columns are in the dataframe
+        if all(col in df.columns for col in column_order):
+            dataframes_dict[key] = df[column_order]
+    
+    return dataframes_dict
