@@ -1,0 +1,24 @@
+import pandas as pd
+
+# Define the range of months and years
+months = range(4, 11)  # From April (4) to October (10)
+years = range(2025, 2026)  # From 2025 to 2025 (only one year in this case)
+
+# Loop through each month and year
+for year in years:
+    for month in months:
+        # Load the monthly scenario file
+        monthly_file = f"NEPOOL_Scenarios_Monthly_{month}_{year}.csv"
+        monthly_df = pd.read_csv(monthly_file)
+
+        # Get the inflection dataframe from memory using globals
+        inflection_df = globals()[f"NEPOOL_inflection_{month}_{year}"]
+
+        # Merge the inflection dataframe with the monthly dataframe on 'year' column
+        merged_df = pd.merge(monthly_df, inflection_df, on='year', how='left')
+
+        # Overwrite and save the merged dataframe with the same file name
+        merged_df.to_csv(monthly_file, index=False)
+
+        # Optionally, store the merged dataframe in memory if needed
+        globals()[f"NEPOOL_Merged_{month}_{year}"] = merged_df
