@@ -1,0 +1,22 @@
+def create_predict_hr(df_dict):
+    for key, df in df_dict.items():
+        # Check if the current item is a DataFrame
+        if isinstance(df, pd.DataFrame):
+            if all(col in df.columns for col in ['Predict Price', 'HR_adj', 'Predict Price', 'Mass Carbon', 'RGGT', 'ALCEC']):
+                
+                # Create the new 'Past Inflection' column
+                df['Past Inflection'] = np.where(df['Predict Price'].isna(), 0, 1)
+                
+                # Now create the 'Predict HR' column
+                df['Predict HR'] = np.where(
+                    df['Predict Price'].isna(),
+                    df['HR_adj'],
+                    ((df['Predict Price'] * 4.5 - 0.5 * df['Mass Carbon'] + 0.5 * df['RGGT']) / df['ALCEC'] * 1)
+                )
+                df['Predict HR'] = df['Predict HR'].round(2)
+            else:
+                print(f"'{key}' is missing one or more required columns.")
+        else:
+            print(f"Item '{key}' in the dictionary is not a DataFrame. It is of type {type(df)}.")
+    
+    return df_dict
