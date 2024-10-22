@@ -1,0 +1,27 @@
+import pandas as pd
+
+# Define the range of months and years
+months = range(4, 11)  # From April (4) to October (10)
+years = range(2025, 2026)  # From 2025 to 2025 (only one year in this case)
+
+# Loop through each month and year
+for year in years:
+    for month in months:
+        # Construct the filename for each file
+        file_name = f"NEPOOL_Scenarios_Daily_{month}_{year}.csv"
+        
+        # Load the data from the file (assuming CSV format)
+        df = pd.read_csv(file_name)
+        
+        # Create the 'inflection' column
+        df['inflection'] = df['HR_adj'].isnull().astype(int)
+
+        # Group by year and calculate the required metrics
+        result = df.groupby('year').agg(
+            non_inflection_HR=('HR_adj', lambda x: x.mean(skipna=True)),  # Average of non-null HR_adj
+            inflection_HR=('Predict HR', lambda x: x[df['inflection'] == 1].mean()),  # Average Predict HR where inflection is 1
+            inflection_days=('inflection', 'sum')  # Sum of inflection days (i.e., when HR_adj is NaN)
+        ).reset_index()
+
+        # Assign the result to a new variable with the required naming format
+        globals()[f"NEPOOL_inflection_{month}_{year}"] = result
