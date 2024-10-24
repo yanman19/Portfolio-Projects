@@ -1,0 +1,14 @@
+import pandas as pd
+
+def split_dataframe_by_month(df):
+    # Convert 'MARKETDAY' to datetime
+    df['MARKETDAY'] = pd.to_datetime(df['MARKETDAY'])
+
+    # Create an empty dictionary to store dataframes split by month
+    month_dict = {}
+
+    # Group the dataframe by the 'MARKETDAY' month and store each group in the dictionary
+    for month, group in df.groupby(df['MARKETDAY'].dt.month):
+        month_dict[month] = group
+
+    return month_dict
