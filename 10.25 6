@@ -1,0 +1,14 @@
+import urllib.request
+import pandas as pd
+import json
+
+# Load JSON from a URL
+url = "http://example.com/file.json"
+response = urllib.request.urlopen(url)
+data = json.loads(response.read())
+
+# Convert to DataFrame
+df = pd.json_normalize(data)
+
+# Display DataFrame
+print(df)
