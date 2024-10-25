@@ -1,0 +1,18 @@
+import base64
+
+def generate_month_layout(year, month):
+    # Define paths, read CSVs, etc.
+
+    # Convert the image to base64
+    image_filename = f'assets/in_sample_error_{month}.png'  # Replace with the actual path
+    encoded_image = base64.b64encode(open(image_filename, 'rb').read()).decode('ascii')
+
+    # Return the layout with the image embedded
+    return html.Div([
+        html.H1(f'{year} - Month {month}', style={'textAlign': 'center'}),
+        
+        # Other components...
+
+        # Embed image using base64
+        html.Img(src='data:image/png;base64,{}'.format(encoded_image), style={'width': '80%', 'display': 'block', 'margin-left': 'auto', 'margin-right': 'auto'})
+    ])
