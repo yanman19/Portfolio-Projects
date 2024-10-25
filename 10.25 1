@@ -1,0 +1,28 @@
+from sklearn.metrics import mean_absolute_error
+
+def scatter_two_dataframes(df1, df2, x_col, y_col, month, save_as):
+    # Create a figure and axis
+    plt.figure(figsize=(10, 6))
+    
+    # Calculate the MAE
+    mae_value = mean_absolute_error(df1[y_col], df2[y_col])
+
+    # Plot df1 (Prediction) in one color
+    sns.scatterplot(data=df1, x=x_col, y=y_col, color='blue', label=f'Prediction (MAE={mae_value:.2f})')
+    
+    # Plot df2 (Realized) in another color
+    sns.scatterplot(data=df2, x=x_col, y=y_col, color='orange', label='Realized')
+    
+    # Set the title and labels
+    plt.title(f'Scatter Plot of {x_col} vs {y_col} for month {month}')
+    plt.xlabel(x_col)
+    plt.ylabel(y_col)
+    
+    # Show legend
+    plt.legend()
+    
+    # Save plot
+    plt.savefig(save_as, format='png')
+    
+    # Show plot
+    plt.show()
