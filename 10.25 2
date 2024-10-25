@@ -1,0 +1,41 @@
+def generate_month_layout(year, month):
+    # Define the path to the PNG file for the given month
+    image_path = CSV_PATH + f'/nep_hist_fwd_{month}.csv'
+    df = pd.read_csv(image_path)
+    image_path_stack = CSV_PATH + f'/nep_stack_{month}.csv'
+    df1 = pd.read_csv(image_path_stack)
+    error_table = CSV_PATH + f'/in_sample_error_table_{month}.csv'
+    df_error_table = pd.read_csv(error_table)
+    image_path_image = CSV_PATH_IMAGE + f'/in_sample_error_{month}.png'
+
+    # Layout containing the Monthly, Daily, Hourly options and the image
+    return html.Div([
+        html.H1(f'{year} - Month {month}', style={'textAlign': 'center'}),
+        
+        # Display Links for Monthly, Daily, Hourly options
+        html.Div([
+            html.A(f'Monthly', href=f'/nepool/{year}/month/{month}/monthly', style={'margin-right': '10px'}),
+            html.A(f'Daily', href=f'/nepool/{year}/month/{month}/daily', style={'margin-right': '10px'}),
+            html.A(f'Hourly', href=f'/nepool/{year}/hour/month/{month}/hourly', style={'margin-right': '10px'}),
+        ], style={'textAlign': 'center'}),
+        
+        html.Br(),
+        
+        # Add a button or link to go back to the Year page
+        html.A(f'Go back to Year', href=f'/nepool/{year}', style={'textAlign': 'center'}),
+
+        html.Br(),
+        # Insert the tables
+        html.H2(f'Hist = Fwd', style={'textAlign': 'center'}),
+        generate_table_hist(df),
+        html.Br(),
+        html.H2(f'Stack', style={'textAlign': 'center'}),
+        generate_table_hist(df1),
+        html.Br(),
+        html.H2(f'Cal24 In-Sample Error', style={'textAlign': 'center'}),
+        generate_table_error_table(df_error_table),
+        
+        # Insert the image
+        html.Br(),
+        html.Img(src=image_path_image, style={'width': '80%', 'display': 'block', 'margin-left': 'auto', 'margin-right': 'auto'})
+    ])
