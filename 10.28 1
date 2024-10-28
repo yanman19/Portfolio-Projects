@@ -1,0 +1,52 @@
+def generate_table_best_trades(df):
+    return dash_table.DataTable(
+        columns=[{"name": i, "id": i} for i in df.columns],
+        data=df.to_dict('records'),
+        sort_action="native",
+        filter_action="native",
+        style_data_conditional=[
+            {
+                'if': {
+                    'filter_query': '{HR Diff} > 0',  
+                    'column_id': 'HR Diff'
+                },
+                'backgroundColor': 'lightcoral',  
+                'color': 'black'
+            },
+            {
+                'if': {
+                    'filter_query': '{HR Diff} < 0',  
+                    'column_id': 'HR Diff'
+                },
+                'backgroundColor': 'lightgreen',  
+                'color': 'black'
+            },
+            {
+                'if': {
+                    'filter_query': '{Region} = "NYW"',
+                    'column_id': 'Region'
+                },
+                'backgroundColor': 'yellow',  
+                'color': 'black'
+            },
+            {
+                'if': {
+                    'filter_query': '{Region} = "NYE"',
+                    'column_id': 'Region'
+                },
+                'backgroundColor': 'lightblue',  
+                'color': 'black'
+            },
+            {
+                'if': {
+                    'filter_query': '{Region} = "NEP"',
+                    'column_id': 'Region'
+                },
+                'backgroundColor': 'pink',  
+                'color': 'black'
+            }
+        ],
+        style_cell={
+            'textAlign': 'left', 'minWidth': '150px', 'width': '150px', 'maxWidth': '150px'
+        }
+    )
