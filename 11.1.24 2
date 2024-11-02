@@ -1,0 +1,23 @@
+import pandas as pd
+import numpy as np
+
+# Sample DataFrame with your data structure
+data = {
+    'month': [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12],
+    'year': [2024] * 12 + [2025] * 12,
+    'gas': [2, 1, 5, 2, 2.5, 6, 45, 3, 8, 3, 2, 133, 1, 1, 5, 8, 2, 385, 53, 35, 13, 5, 25, 5]
+}
+df = pd.DataFrame(data)
+
+# Calculate the average gas price for each year where month is between 6 and 9
+df['gas_grouped'] = df.groupby('year').apply(
+    lambda x: x.loc[x['month'].between(6, 9), 'gas'].transform('mean')
+).reindex(df.index)
+
+# Set NaN for rows where month is not between June (6) and September (9)
+df['gas_grouped'] = df.apply(
+    lambda row: row['gas_grouped'] if 6 <= row['month'] <= 9 else np.nan,
+    axis=1
+)
+
+print(df)
