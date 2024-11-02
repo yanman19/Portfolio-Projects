@@ -1,0 +1,23 @@
+import pandas as pd
+import numpy as np
+
+# Sample DataFrame
+data = {
+    'year': [2020, 2020, 2020, 2020, 2020, 2021, 2021, 2021, 2021],
+    'month': [5, 6, 7, 8, 10, 5, 6, 7, 9],
+    'gas_price': [3.5, 3.6, 3.8, 3.9, 4.0, 3.7, 3.6, 3.8, 4.1]
+}
+df = pd.DataFrame(data)
+
+# Filter for months between June (6) and September (9)
+df['gas_price_grouped'] = df.groupby('year').apply(
+    lambda x: x.loc[x['month'].between(6, 9), 'gas_price'].mean()
+).reindex(df.index)
+
+# Set NaN for rows where month is not between June (6) and September (9)
+df['gas_price_grouped'] = df.apply(
+    lambda row: row['gas_price_grouped'] if 6 <= row['month'] <= 9 else np.nan,
+    axis=1
+)
+
+print(df)
