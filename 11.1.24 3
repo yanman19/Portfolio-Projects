@@ -1,0 +1,20 @@
+import pandas as pd
+import numpy as np
+
+# Sample DataFrame with your data structure
+data = {
+    'month': [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12],
+    'year': [2024] * 12 + [2025] * 12,
+    'gas': [2, 1, 5, 2, 2.5, 6, 45, 3, 8, 3, 2, 133, 1, 1, 5, 8, 2, 385, 53, 35, 13, 5, 25, 5]
+}
+df = pd.DataFrame(data)
+
+# Calculate the mean of `gas` for months between 6 and 9 for each year
+# and apply it only to rows within that month range
+df['gas_grouped'] = df.apply(
+    lambda row: df[(df['year'] == row['year']) & (df['month'].between(6, 9))]['gas'].mean()
+    if row['month'] in range(6, 10) else np.nan,
+    axis=1
+)
+
+print(df)
