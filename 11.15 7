@@ -1,0 +1,41 @@
+style_data_conditional = [
+    # Strong Green for values > 1
+    {
+        'if': {
+            'filter_query': '{' + col + '} > 1',
+            'column_id': col
+        },
+        'backgroundColor': 'green',
+        'color': 'white'
+    } for col in last_four_columns
+] + [
+    # Light Green for values between 0 and 1 (inclusive)
+    {
+        'if': {
+            'filter_query': '0 < {' + col + '} <= 1',
+            'column_id': col
+        },
+        'backgroundColor': 'lightgreen',
+        'color': 'black'
+    } for col in last_four_columns
+] + [
+    # Light Red for values between -1 and 0 (inclusive)
+    {
+        'if': {
+            'filter_query': '-1 <= {' + col + '} < 0',
+            'column_id': col
+        },
+        'backgroundColor': 'lightcoral',
+        'color': 'black'
+    } for col in last_four_columns
+] + [
+    # Strong Red for values < -1
+    {
+        'if': {
+            'filter_query': '{' + col + '} < -1',
+            'column_id': col
+        },
+        'backgroundColor': 'red',
+        'color': 'white'
+    } for col in last_four_columns
+]
