@@ -1,0 +1,96 @@
+@app.callback(
+    Output('dataframe-output', 'children'),
+    Input('dropdown-select', 'value')
+)
+def display_selected_dataframe(selected_value):
+    if selected_value == 'fixed_price':
+        df = fixed_price_df
+    elif selected_value == 'heat_rate':
+        df = heat_rate_df
+    elif selected_value == 'spark':
+        df = spark_df
+    elif selected_value == 'gas_basis':
+        df = gas_basis_df
+    else:
+        return "Select a Market Type to view data."
+
+    # Identify the last four columns for conditional formatting
+    last_four_columns = df.columns[-4:]
+    first_column = df.columns[0]
+
+    # Define the conditional formatting rules for the last four columns
+    style_data_conditional = [
+        {
+            'if': {
+                'filter_query': f'{{{col}}} > 1',
+                'column_id': col
+            },
+            'backgroundColor': 'green',
+            'color': 'white'
+        } for col in last_four_columns
+    ] + [
+        {
+            'if': {
+                'filter_query': f'0 <= {{{col}}} <= 1',
+                'column_id': col
+            },
+            'backgroundColor': 'lightgreen',
+            'color': 'black'
+        } for col in last_four_columns
+    ] + [
+        {
+            'if': {
+                'filter_query': f'-1 < {{{col}}} < 0',
+                'column_id': col
+            },
+            'backgroundColor': 'lightcoral',
+            'color': 'black'
+        } for col in last_four_columns
+    ] + [
+        {
+            'if': {
+                'filter_query': f'{{{col}}} <= -1',
+                'column_id': col
+            },
+            'backgroundColor': 'red',
+            'color': 'white'
+        } for col in last_four_columns
+    ]
+
+    # Add conditional formatting for the first column based on specific values
+    style_data_conditional += [
+        {
+            'if': {
+                'filter_query': f'{{{first_column}}} = "NEP"',
+                'column_id': first_column
+            },
+            'backgroundColor': 'lightpink',
+            'color': 'black'
+        },
+        {
+            'if': {
+                'filter_query': f'{{{first_column}}} = "NYE"',
+                'column_id': first_column
+            },
+            'backgroundColor': 'lightblue',
+            'color': 'black'
+        },
+        {
+            'if': {
+                'filter_query': f'{{{first_column}}} = "NYW"',
+                'column_id': first_column
+            },
+            'backgroundColor': 'yellow',
+            'color': 'black'
+        }
+    ]
+
+    # Return a DataTable with conditional formatting
+    return dash_table.DataTable(
+        data=df.to_dict('records'),
+        columns=[{'name': i, 'id': i} for i in df.columns],
+        style_table={'overflowX': 'auto'},
+        style_cell={'textAlign': 'left', 'padding': '5px'},
+        style_header={'backgroundColor': 'lightgrey', 'fontWeight': 'bold'},
+        style_data_conditional=style_data_conditional  # Apply the conditional formatting
+    )
