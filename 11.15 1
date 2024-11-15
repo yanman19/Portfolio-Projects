@@ -1,0 +1,28 @@
+import pandas as pd
+
+# Example pivoted DataFrame
+data = {
+    '2024-11-14': [100, 200, 300],
+    '2024-11-13': [110, 210, 310],
+    '2024-11-10': [120, 220, 320],
+    '2024-10-15': [130, 230, 330],
+    '2024-08-15': [140, 240, 340],
+}
+df = pd.DataFrame(data)
+
+# Sort columns by datetime (most recent to oldest)
+df.columns = pd.to_datetime(df.columns)  # Ensure columns are datetime
+df = df.reindex(sorted(df.columns, ascending=False), axis=1)
+
+# Rename the columns
+rename_mapping = {
+    df.columns[0]: 'yesterday',
+    df.columns[1]: '1D',
+    df.columns[2]: '5D',
+    df.columns[3]: '1M',
+    df.columns[4]: '3M',
+}
+
+df = df.rename(columns=rename_mapping)
+
+print(df)
