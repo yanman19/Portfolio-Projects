@@ -1,0 +1,78 @@
+from dash import Dash, dash_table
+import pandas as pd
+
+app = Dash(__name__)
+
+# Sample DataFrames (replace with actual data)
+fixed_price_df = pd.DataFrame(...)  # Replace with actual data
+heat_rate_df = pd.DataFrame(...)    # Replace with actual data
+spark_df = pd.DataFrame(...)         # Replace with actual data
+gas_basis_df = pd.DataFrame(...)     # Replace with actual data
+
+@app.callback(
+    Output('dataframe-output', 'children'),
+    Input('dropdown-select', 'value')
+)
+def display_selected_dataframe(selected_value):
+    if selected_value == 'fixed_price':
+        df = fixed_price_df
+    elif selected_value == 'heat_rate':
+        df = heat_rate_df
+    elif selected_value == 'spark':
+        df = spark_df
+    elif selected_value == 'gas_basis':
+        df = gas_basis_df
+    else:
+        return "Select a Market Type to view data."
+
+    # Identify the last four columns for conditional formatting
+    last_four_columns = df.columns[-4:]
+    
+    # Define the conditional formatting rules
+    style_data_conditional = [
+        {
+            'if': {
+                'filter_query': f'{{{col}}} > 1',
+                'column_id': col
+            },
+            'backgroundColor': 'green',
+            'color': 'white'
+        } for col in last_four_columns
+    ] + [
+        {
+            'if': {
+                'filter_query': f'0 <= {{{col}}} <= 1',
+                'column_id': col
+            },
+            'backgroundColor': 'lightgreen',
+            'color': 'black'
+        } for col in last_four_columns
+    ] + [
+        {
+            'if': {
+                'filter_query': f'-1 < {{{col}}} < 0',
+                'column_id': col
+            },
+            'backgroundColor': 'lightcoral',
+            'color': 'black'
+        } for col in last_four_columns
+    ] + [
+        {
+            'if': {
+                'filter_query': f'{{{col}}} <= -1',
+                'column_id': col
+            },
+            'backgroundColor': 'red',
+            'color': 'white'
+        } for col in last_four_columns
+    ]
+
+    # Return a DataTable with conditional formatting
+    return dash_table.DataTable(
+        data=df.to_dict('records'),
+        columns=[{'name': i, 'id': i} for i in df.columns],
+        style_table={'overflowX': 'auto'},
+        style_cell={'textAlign': 'left', 'padding': '5px'},
+        style_header={'backgroundColor': 'lightgrey', 'fontWeight': 'bold'},
+        style_data_conditional=style_data_conditional  # Apply the conditional formatting
+    )
