@@ -1,0 +1,21 @@
+html.H2('Market Moves', style={'display': 'block', 'textAlign': 'center'}),
+html.Br(),
+
+# Dropdowns and DataFrame display section
+html.Div([
+    dcc.Dropdown(
+        id='dropdown-select',
+        options=[
+            {'label': 'Fixed Price', 'value': 'fixed_price'},
+            {'label': 'Heat Rate', 'value': 'heat_rate'},
+            {'label': 'Spark', 'value': 'spark'},
+            {'label': 'Gas Basis', 'value': 'gas_basis'}
+        ],
+        placeholder="Select a Market Type"
+    )
+], style={'width': '50%', 'margin': 'auto'}),
+
+html.Br(),
+
+# Placeholder for displaying the selected DataFrame
+html.Div(id='dataframe-output'),
