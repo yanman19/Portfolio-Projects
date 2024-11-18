@@ -1,0 +1,18 @@
+def adjust_to_closest_date_from_df(existing_date, df):
+    """
+    Adjusts the given date to the closest available date in a DataFrame by going backwards.
+
+    Parameters:
+    - existing_date: datetime, the date to adjust.
+    - df: DataFrame, must contain a column named 'market day' with available datetime values.
+
+    Returns:
+    - datetime, the closest available date in the DataFrame.
+    """
+    # Extract available dates from the 'market day' column
+    available_dates = pd.to_datetime(df['market day'])
+    
+    # Filter for dates less than or equal to the existing date
+    closest_date = available_dates[available_dates <= existing_date].max()
+    
+    return closest_date
