@@ -1,0 +1,29 @@
+def adjust_to_closest_date_from_df_sequential(existing_dates, df):
+    """
+    Adjusts a sequence of dates to the closest available dates in a DataFrame by going backwards.
+    Ensures that each adjusted date is earlier than the previous one.
+
+    Parameters:
+    - existing_dates: list of datetime, the dates to adjust in sequence.
+    - df: DataFrame, must contain a column named 'market day' with available datetime values.
+
+    Returns:
+    - list of datetime, the adjusted dates in sequential order.
+    """
+    # Extract available dates from the 'market day' column
+    available_dates = pd.to_datetime(df['market day']).sort_values()
+    
+    adjusted_dates = []
+    for existing_date in existing_dates:
+        # Filter for dates less than the current target date or the last adjusted date
+        valid_dates = available_dates[available_dates <= existing_date]
+        
+        if adjusted_dates:
+            # Ensure the current date is strictly earlier than the last adjusted date
+            valid_dates = valid_dates[valid_dates < adjusted_dates[-1]]
+        
+        # Find the closest date
+        closest_date = valid_dates.max() if not valid_dates.empty else None
+        adjusted_dates.append(closest_date)
+    
+    return adjusted_dates
