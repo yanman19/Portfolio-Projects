@@ -1,0 +1,24 @@
+import pandas as pd
+
+# Sample dataframe
+data = {'date': pd.date_range(start='2023-01-01', periods=10, freq='D'), 'value': range(10)}
+df = pd.DataFrame(data)
+
+# Example: Filtered dates and target date
+filtered_dates = ['2023-01-03', '2023-01-05', '2023-01-07']
+filtered_df = df[df['date'].isin(pd.to_datetime(filtered_dates))]
+
+# Target date
+one_date = pd.Timestamp('2023-01-05')
+
+# Get the date above one_date in the filtered dataframe
+if one_date in filtered_df['date'].values:
+    idx = filtered_df[filtered_df['date'] == one_date].index[0]
+    if idx > 0:  # Ensure there is a previous row
+        two_days = filtered_df.iloc[idx - 1]['date']
+    else:
+        two_days = None  # Handle case where there is no row above
+else:
+    two_days = None  # Handle case where one_date is not in filtered dates
+
+print(f"The date above {one_date} is {two_days}")
