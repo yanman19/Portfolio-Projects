@@ -1,0 +1,41 @@
+import random
+import os
+import base64
+from dash import html
+
+def YANUS_title(images_folder_path):
+    """
+    Generates an HTML component with a random image from the specified folder, encoded in base64.
+
+    Args:
+        images_folder_path (str): Path to the folder containing PNG images.
+
+    Returns:
+        dash.html.Div: A Dash HTML Div containing the randomly selected image.
+    """
+    # Get a list of all PNG files in the folder
+    image_files = [f for f in os.listdir(images_folder_path) if f.endswith('.png')]
+    
+    if not image_files:
+        raise ValueError("No PNG images found in the specified folder.")
+
+    # Randomly select one image
+    selected_image = random.choice(image_files)
+
+    # Construct the full image path
+    image_path = os.path.join(images_folder_path, selected_image)
+
+    # Encode the image in base64
+    with open(image_path, "rb") as image_file:
+        encoded_image = base64.b64encode(image_file.read()).decode('utf-8')
+    
+    # Return the Dash HTML component
+    return html.Div(
+        children=[
+            html.Img(
+                src=f"data:image/png;base64,{encoded_image}",
+                style={"max-width": "100%", "height": "auto"}
+            )
+        ],
+        style={"text-align": "center", "margin-bottom": "20px"}
+    )
