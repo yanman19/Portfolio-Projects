@@ -1,0 +1,59 @@
+import dash
+from dash import Dash, html, dcc, dash_table
+import pandas as pd
+import base64
+
+# Example DataFrames
+risk_data = pd.DataFrame({
+    "Category": ["Low", "Medium", "High"],
+    "Value": [10, 20, 30]
+})
+
+market_moves_data = pd.DataFrame({
+    "Market": ["US", "EU", "Asia"],
+    "Change": [1.2, -0.5, 0.8]
+})
+
+# Encode image to base64
+image_path = "path_to_your_image.jpg"  # Replace with your image path
+encoded_image = base64.b64encode(open(image_path, 'rb').read()).decode('ascii')
+
+# Initialize Dash app
+app = Dash(__name__)
+
+app.layout = html.Div([
+    # Title Section with Image
+    html.Div([
+        html.H1("Dashboard Title"),
+        html.Img(src=f'data:image/png;base64,{encoded_image}', style={'width': '300px'}),
+    ], style={'textAlign': 'center', 'marginBottom': '20px'}),
+    
+    # Risk Section
+    html.Div([
+        html.H2("Risk"),
+        dash_table.DataTable(
+            id='risk-table',
+            columns=[{"name": col, "id": col} for col in risk_data.columns],
+            data=risk_data.to_dict('records'),
+            sort_action="native",
+            filter_action="native",
+            style_table={'overflowX': 'auto'},
+        )
+    ], style={'marginBottom': '40px'}),
+
+    # Market Moves Section
+    html.Div([
+        html.H2("Market Moves"),
+        dash_table.DataTable(
+            id='market-moves-table',
+            columns=[{"name": col, "id": col} for col in market_moves_data.columns],
+            data=market_moves_data.to_dict('records'),
+            sort_action="native",
+            filter_action="native",
+            style_table={'overflowX': 'auto'},
+        )
+    ]),
+])
+
+if __name__ == '__main__':
+    app.run_server(debug=True)
