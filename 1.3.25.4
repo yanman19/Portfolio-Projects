@@ -1,0 +1,2 @@
+# Apply comma formatting to all numeric columns in the DataFrame
+df = df.applymap(lambda x: f"{x:,.0f}" if isinstance(x, (int, float)) else x)
