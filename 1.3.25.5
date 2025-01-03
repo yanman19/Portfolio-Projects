@@ -1,0 +1,18 @@
+import os
+from datetime import datetime
+
+# Example file path
+file_path = "data/reports/2025_01_02_report.csv"
+
+# Extract date from file name
+date_str = os.path.basename(file_path).split('_')[:3]
+date_str = "_".join(date_str)
+
+# Convert to datetime object
+last_updated = datetime.strptime(date_str, "%Y_%m_%d")
+
+# Format the date as "Last Updated: January 2, 2025"
+formatted_date = last_updated.strftime("Last Updated: %B %d, %Y")
+
+# Print or pass this to your dashboard
+print(formatted_date)
