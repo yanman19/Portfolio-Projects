@@ -1,0 +1,17 @@
+import os
+from datetime import datetime
+
+# File path
+file_path = "data/reports/example_report.csv"
+
+# Get the last modified time
+timestamp = os.path.getmtime(file_path)
+
+# Convert to a datetime object
+last_updated = datetime.fromtimestamp(timestamp)
+
+# Format the date for display
+formatted_date = last_updated.strftime("Last Updated: %B %d, %Y")
+
+# Print or pass this to your dashboard
+print(formatted_date)
