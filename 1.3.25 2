@@ -1,0 +1,6 @@
+# Sum rows where 'Contract' contains 'PA Tier 1'
+pa1_total = df[df['Contract'].str.contains('PA Tier 1')].sum(numeric_only=True)
+
+# Add a new row named 'PA1 Total' to the DataFrame
+df.loc['PA1 Total'] = pa1_total
+df.loc['PA1 Total', 'Contract'] = 'PA1 Total'
