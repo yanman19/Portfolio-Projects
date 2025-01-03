@@ -1,0 +1,69 @@
+import dash
+from dash import Dash, html, dash_table
+import pandas as pd
+import base64
+
+# Example DataFrames
+risk_data = pd.DataFrame({
+    "Contract": ["C1", "C2", "C3"],
+    "Category": ["Low", "Medium", "High"],
+    "Value": [10.0, 20.0, None]
+})
+
+market_moves_data = pd.DataFrame({
+    "Contract": ["M1", "M2", None],
+    "Market": ["US", "EU", "Asia"],
+    "Change": [1.2, -0.5, None]
+})
+
+# Ensure 'Contract' column is first
+risk_data = risk_data[["Contract", "Category", "Value"]]
+market_moves_data = market_moves_data[["Contract", "Market", "Change"]]
+
+# Replace NaN with empty strings and format numbers without decimals
+risk_data = risk_data.fillna("").astype(str).applymap(lambda x: x.split('.')[0] if x.replace('.', '', 1).isdigit() else x)
+market_moves_data = market_moves_data.fillna("").astype(str).applymap(lambda x: x.split('.')[0] if x.replace('.', '', 1).isdigit() else x)
+
+# Encode image to base64
+image_path = "path_to_your_image.jpg"  # Replace with your image path
+encoded_image = base64.b64encode(open(image_path, 'rb').read()).decode('ascii')
+
+# Initialize Dash app
+app = Dash(__name__)
+
+app.layout = html.Div([
+    # Title Section with Image
+    html.Div([
+        html.H1("Dashboard Title", style={'textAlign': 'center'}),
+        html.Img(src=f'data:image/png;base64,{encoded_image}', style={'width': '300px'}),
+    ], style={'textAlign': 'center', 'marginBottom': '20px'}),
+
+    # Risk Section
+    html.Div([
+        html.H2("Risk", style={'textAlign': 'center', 'marginBottom': '10px'}),
+        dash_table.DataTable(
+            id='risk-table',
+            columns=[{"name": col, "id": col} for col in risk_data.columns],
+            data=risk_data.to_dict('records'),
+            sort_action="native",
+            filter_action="native",
+            style_table={'overflowX': 'auto'},
+        )
+    ], style={'marginBottom': '40px', 'textAlign': 'center'}),
+
+    # Market Moves Section
+    html.Div([
+        html.H2("Market Moves", style={'textAlign': 'center', 'marginBottom': '10px'}),
+        dash_table.DataTable(
+            id='market-moves-table',
+            columns=[{"name": col, "id": col} for col in market_moves_data.columns],
+            data=market_moves_data.to_dict('records'),
+            sort_action="native",
+            filter_action="native",
+            style_table={'overflowX': 'auto'},
+        )
+    ], style={'textAlign': 'center'}),
+])
+
+if __name__ == '__main__':
+    app.run_server(debug=True)
