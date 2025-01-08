@@ -1,0 +1,93 @@
+import pandas as pd
+import numpy as np
+import seaborn as sns
+import matplotlib.pyplot as plt
+
+def find_nearest_date(date_series, target_date):
+    """Find the nearest date in a series to a target date."""
+    return date_series.iloc[(date_series - target_date).abs().argmin()]
+
+def calculate_strategy_metrics_with_seaborn(df, product, lot_size, sizing, start_date, end_date):
+    """
+    Calculates PNL, Sharpe Ratio, Max Drawdown, and Value at Risk for a given product and lot size over a defined period.
+    Incorporates old/new position logic, sizing convention, and nearest date adjustment. Returns Seaborn plot and result dataframe.
+    """
+    # Convert column names to lowercase
+    df.columns = df.columns.str.lower()
+
+    # Convert product name to lowercase to match the column names
+    product = product.lower()
+
+    # Convert date column and find nearest dates if needed
+    df['date'] = pd.to_datetime(df['date'])
+    unique_dates = df['date'].sort_values().unique()
+    start_date = pd.to_datetime(start_date)
+    end_date = pd.to_datetime(end_date)
+    if start_date not in unique_dates:
+        start_date = find_nearest_date(pd.Series(unique_dates), start_date)
+    if end_date not in unique_dates:
+        end_date = find_nearest_date(pd.Series(unique_dates), end_date)
+
+    # Filter the dataframe to the adjusted date range
+    df = df[(df['date'] >= start_date) & (df['date'] <= end_date)].set_index('date')
+
+    # Calculate price change
+    price_change = df[product].diff().dropna()
+
+    # Create a new dataframe to store results
+    result_df = price_change.to_frame(name='price_change')
+    result_df['price'] = df[product]
+    result_df['new_position'] = np.where(price_change > 0, sizing * lot_size, -sizing * lot_size)
+
+    # Set up old positions (lagged new position)
+    result_df['old_position'] = result_df['new_position'].shift(1).fillna(0)
+
+    # Calculate daily PNL using old position and price change
+    result_df['daily_pnl'] = result_df['old_position'] * result_df['price_change']
+    result_df['cumulative_pnl'] = result_df['daily_pnl'].cumsum()
+
+    # Calculate Sharpe Ratio
+    business_days = np.busday_count(df.index.min().date(), df.index.max().date())
+    sharpe_ratio = (result_df['daily_pnl'].mean() / result_df['daily_pnl'].std()) * np.sqrt(business_days)
+
+    # Calculate Max Drawdown
+    rolling_max = result_df['cumulative_pnl'].cummax()
+    drawdown = result_df['cumulative_pnl'] - rolling_max
+    max_drawdown = drawdown.min()
+
+    # Calculate Value at Risk (VaR) at 95% confidence level
+    var_95 = np.percentile(result_df['daily_pnl'], 5)
+
+    # Plot cumulative PNL using Seaborn
+    sns.set(style="whitegrid")
+    fig, ax = plt.subplots(figsize=(12, 6))
+    sns.lineplot(data=result_df, x=result_df.index, y='cumulative_pnl', ax=ax)
+    ax.set_title(f'Cumulative PNL for {product.upper()}', fontsize=16)
+    ax.set_xlabel('Date', fontsize=12)
+    ax.set_ylabel('Cumulative PNL', fontsize=12)
+
+    # Show the plot
+    plt.tight_layout()
+
+    # Return the results as a dictionary, result dataframe, and figure
+    return {
+        'Sharpe Ratio': sharpe_ratio,
+        'Max Drawdown': max_drawdown,
+        'PNL (Total)': result_df['cumulative_pnl'].iloc[-1],
+        'Value at Risk (95%)': var_95,
+        'Adjusted Start Date': start_date,
+        'Adjusted End Date': end_date
+    }, result_df, fig
+
+# Example usage
+# Replace this with your actual dataframe
+data = {
+    'date': pd.date_range(start='2023-01-01', periods=100, freq='B'),
+    'rggi': np.random.normal(100, 2, 100),
+    'cca': np.random.normal(150, 3, 100)
+}
+df = pd.DataFrame(data)
+
+# Call the function
+results, result_df, fig = calculate_strategy_metrics_with_seaborn(
+    df, product='rggi', lot_size=100, sizing=1.5, start_date='2023-01​⬤
