@@ -1,0 +1,26 @@
+# Function to calculate PnL for each item in the dictionaries
+def pnl_maker(mw, hours, dict1, dict2):
+    pnl_result = {}
+    
+    for asset in dict1:
+        # Ensure the asset exists in both dictionaries
+        if asset in dict2:
+            # Calculate the difference between cleared price and purchase price
+            price_diff = dict2[asset] - dict1[asset]
+            # Calculate PnL
+            pnl = price_diff * mw * hours
+            pnl_result[asset] = pnl
+
+    return pnl_result
+
+# Example usage
+dict1 = {'Asset1': 50, 'Asset2': 60, 'Asset3': 45}  # Average purchase prices
+dict2 = {'Asset1': 55, 'Asset2': 58, 'Asset3': 50}  # Cleared prices
+
+# Example parameters
+mw = 100  # Megawatts
+hours = 24  # Number of hours
+
+# Calculate PnL
+pnl_result = pnl_maker(mw, hours, dict1, dict2)
+print(pnl_result)
