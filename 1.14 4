@@ -1,0 +1,37 @@
+import pandas as pd
+
+# Function to calculate average price and buying period dates
+def calculate_avg_price(df, start_delta, end_delta):
+    avg_prices = {}
+    date_ranges = []
+
+    for col in df.columns:
+        if col != 'date':
+            end_index = -1
+            start_index = end_index - start_delta
+
+            # Calculate start and end dates
+            start_date = df['date'].iloc[start_index]
+            end_date = df['date'].iloc[end_index]
+
+            # Calculate the average price for the buying period
+            avg_price = df[col].iloc[start_index:end_index].mean()
+            avg_prices[col] = avg_price
+
+            # Store the date range for this column
+            date_ranges.append({
+                'Asset': col,
+                'Start Date': start_date,
+                'End Date': end_date
+            })
+
+    # Convert date ranges to a DataFrame
+    date_ranges_df = pd.DataFrame(date_ranges)
+
+    return avg_prices, date_ranges_df
+
+# Example usage
+# df = pd.read_csv('futures_data.csv')
+# avg_prices, date_ranges = calculate_avg_price(df, start_delta=30, end_delta=10)
+# print(avg_prices)
+# print(date_ranges)
