@@ -1,0 +1,27 @@
+import pandas as pd
+
+# Drop all NaN values from the DataFrame
+def clean_dataframe(df):
+    return df.dropna()
+
+# Function to calculate average price between start and end buying period
+def calculate_avg_price(df, start_delta, end_delta):
+    result = {}
+    
+    # Convert time deltas to integers (assuming they're in days, adjust as needed)
+    for col in df.columns:
+        if col != 'date':
+            end_index = -1
+            start_index = end_index - start_delta
+            end_index = end_index - end_delta
+            
+            # Slice the column and calculate the average
+            avg_price = df[col].iloc[start_index:end_index].mean()
+            result[col] = avg_price
+    
+    return result
+
+# Example usage:
+# df = pd.read_csv('futures_data.csv')
+# clean_df = clean_dataframe(df)
+# average_prices = calculate_avg_price(clean_df, start_delta=30, end_delta=10)
