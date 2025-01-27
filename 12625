@@ -1,0 +1,56 @@
+import pandas as pd
+from datetime import datetime
+
+# Function to process the data and return the pivot table
+def process_commodity_data(data):
+    # Corrected mapping of commodity letters to months
+    month_mapping = { 
+        'f': 1, 'g': 2, 'h': 3, 'j': 4, 'k': 5, 'm': 6,
+        'n': 7, 'q': 8, 'u': 9, 'v': 10, 'x': 11, 'z': 12
+    }
+
+    # Function to convert commodity code to date
+    def convert_code_to_date(code):
+        letter, year_suffix = code.split('_')
+        year = 2000 + int(year_suffix)  # Assuming the year is 20XX format
+        month = month_mapping.get(letter, None)
+        
+        if month is None:
+            return None  # If the letter is not recognized, return None
+        
+        # Return the date in 'm/d/YYYY' format
+        return datetime(year, month, 1).strftime('%m/%d/%Y')
+
+    # Convert dictionary into a DataFrame
+    df = pd.DataFrame(list(data.items()), columns=['commodity_code', 'pnl'])
+
+    # Create a new column 'Date' based on commodity_code
+    df['Date'] = df['commodity_code'].apply(convert_code_to_date)
+
+    # Convert 'Date' to datetime
+    df['Date'] = pd.to_datetime(df['Date'], format='%m/%d/%Y')
+
+    # Extract month and year from 'Date' column
+    df['month'] = df['Date'].dt.month
+    df['year'] = df['Date'].dt.year
+
+    # Pivot the data
+    pivot_df = df.pivot_table(index='year', columns='month', values='pnl', aggfunc='sum')
+
+    return pivot_df
+
+# Sample dictionary with commodity month code and associated value
+data = {
+    'f_24': 100,  # January 2024
+    'g_23': 150,  # February 2023
+    'h_22': 200,  # March 2022
+    'j_24': 50,   # April 2024
+    'k_23': 120,  # May 2023
+    'm_22': 80,   # June 2022
+}
+
+# Call the function with the sample data
+pivot_table = process_commodity_data(data)
+
+# Display the pivot table
+print(pivot_table)
