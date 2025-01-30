@@ -1,0 +1,20 @@
+import pandas as pd
+
+def calculate_spread(df1: pd.DataFrame, df2: pd.DataFrame) -> pd.DataFrame:
+    """
+    Calculate the spread between two time series dataframes.
+
+    Parameters:
+        df1 (pd.DataFrame): Time series DataFrame of futures contracts for region 1.
+        df2 (pd.DataFrame): Time series DataFrame of futures contracts for region 2.
+
+    Returns:
+        pd.DataFrame: DataFrame containing the spread (df1 - df2).
+    """
+    # Ensure the DataFrames are aligned on their index (datetime)
+    df1, df2 = df1.align(df2, join='inner')
+    
+    # Compute the spread
+    spread_df = df1 - df2
+    
+    return spread_df
