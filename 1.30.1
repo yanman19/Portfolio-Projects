@@ -1,0 +1,25 @@
+import pandas as pd
+
+# Sample data
+df1 = pd.DataFrame({'date': ['2024-01-01', '2024-01-02', '2024-01-03'],
+                    'price': [100, 105, 110]})
+
+df2 = pd.DataFrame({'date': ['2024-01-01', '2024-01-02', '2024-01-03'],
+                    'price': [98, 107, 108]})
+
+# Convert date column to datetime for proper merging
+df1['date'] = pd.to_datetime(df1['date'])
+df2['date'] = pd.to_datetime(df2['date'])
+
+# Merge the dataframes on date
+merged_df = df1.merge(df2, on='date', suffixes=('_df1', '_df2'))
+
+# Calculate the price difference (spread)
+merged_df['spread'] = merged_df['price_df1'] - merged_df['price_df2']
+
+# Save as spread_df
+spread_df = merged_df[['date', 'spread']]
+
+# Display the result
+import ace_tools as tools
+tools.display_dataframe_to_user(name="Price Spread DataFrame", dataframe=spread_df)
