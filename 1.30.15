@@ -1,0 +1,4 @@
+import pandas as pd
+
+def dict_to_dataframe(data_dict):
+    return pd.DataFrame.from_dict(data_dict, orient='index')
