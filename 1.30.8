@@ -1,0 +1,25 @@
+import pandas as pd
+
+def average_price_variable_length(df):
+    averages = {}
+
+    for col in df.columns:
+        non_null_data = df[col].dropna()  # Drop NaNs to get correct length
+        if non_null_data.empty:
+            averages[col] = None  # If no data, return None
+            continue
+
+        last_date = non_null_data.index.max()  # Get last available date
+        data_length = len(non_null_data)  # Get correct length of the column
+
+        # Define the range relative to the last available date
+        start_date = last_date - pd.Timedelta(days=30)
+        end_date = last_date - pd.Timedelta(days=10)
+
+        # Filter values within the date range
+        filtered_values = non_null_data[(non_null_data.index >= start_date) & (non_null_data.index <= end_date)]
+        
+        # Compute mean if valid values exist
+        averages[col] = filtered_values.mean() if not filtered_values.empty else None
+
+    return averages
