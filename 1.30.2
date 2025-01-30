@@ -1,0 +1,27 @@
+import pandas as pd
+
+# Assuming both dataframes have the same structure with a 'date' column and many numerical columns
+df1 = pd.DataFrame({
+    'date': pd.date_range(start='2024-01-01', periods=5, freq='D'),
+    'A': [100, 105, 110, 120, 130],
+    'B': [200, 210, 215, 225, 235]
+})
+
+df2 = pd.DataFrame({
+    'date': pd.date_range(start='2024-01-01', periods=5, freq='D'),
+    'A': [102, 106, 108, 119, 132],
+    'B': [198, 211, 218, 223, 236]
+})
+
+# Merge on 'date' column
+merged_df = df1.merge(df2, on='date', suffixes=('_df1', '_df2'))
+
+# Compute the spread (difference between matching columns)
+spread_df = merged_df[['date']].copy()
+for col in df1.columns:
+    if col != 'date':  # Skip the date column
+        spread_df[col] = merged_df[f'{col}_df1'] - merged_df[f'{col}_df2']
+
+# Display the spread dataframe
+import ace_tools as tools
+tools.display_dataframe_to_user(name="Spread DataFrame", dataframe=spread_df)
