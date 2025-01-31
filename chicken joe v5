@@ -1,0 +1,132 @@
+import pandas as pd
+import numpy as np
+from dash import Dash, dcc, html, Input, Output, dash_table
+
+# Load your time-series data with the contract columns
+df = pd.read_csv('time_series.csv', parse_dates=['Date'], index_col='Date')
+
+# Load your realized prices, assumed to have columns ["Contract", "g_a"]
+realized_df = pd.read_csv('realized_prices.csv')
+realized_prices = realized_df.set_index('Contract')['g_a'].to_dict()
+
+app = Dash(__name__)
+
+app.layout = html.Div(
+    style={'textAlign': 'center'},  # Center all content
+    children=[
+        html.H1("YANUS Surf School", style={'textAlign': 'center'}),
+        html.Div([
+            html.Label("Days Before Expiration to Start Buying:", style={'display': 'block'}),
+            dcc.Input(id='start_days', type='number', value=20),
+        ]),
+        html.Div([
+            html.Label("Days Before Expiration to End Buying:", style={'display': 'block'}),
+            dcc.Input(id='end_days', type='number', value=10),
+        ]),
+        html.Div([
+            html.Label("Quantity Bought per Day:", style={'display': 'block'}),
+            dcc.Input(id='quantity', type='number', value=10),
+        ]),
+        html.Button("Update", id="update-btn"),
+        dash_table.DataTable(id='pnl-table', style_table={'margin': '0 auto'})
+    ]
+)
+
+def compute_pnl(input_df, realized_dict, start_days, end_days, qty):
+    results = []
+    for contract in input_df.columns:
+        series = input_df[contract].dropna()
+        if series.empty:
+            continue
+        
+        # If no realized price is found for this contract, skip
+        if contract not in realized_dict:
+            continue
+        
+        # Last non-NaN date is effectively the contract's final day in the data (its "expiry" in this context)
+        last_date = series.index[-1]
+
+        # Define the buy window
+        buy_start = last_date - pd.Timedelta(days=start_days)
+        buy_end   = last_date - pd.Timedelta(days=end_days)
+
+        buy_period = series.loc[buy_start:buy_end]
+        if buy_period.empty:
+            continue
+
+        avg_price = buy_period.mean()
+        liquidation_price = realized_dict[contract]
+        days_in_market = buy_period.shape[0]
+        pnl = (avg_price - liquidation_price) * 352 * qty * days_in_market
+
+        # Extract month/year from something like "Z23" => Month=Z, Year=20+23
+        contract_month = contract[:-2]
+        contract_year = '20' + contract[-2:]
+
+        results.append({
+            'Year': contract_year,
+            'Month': contract_month,
+            'PNL': pnl
+        })
+
+    result_df = pd.DataFrame(results)
+    if result_df.empty:
+        return pd.DataFrame()
+
+    # Pivot, then round the values
+    pivot_df = result_df.pivot_table(index='Year', columns='Month', values='PNL', aggfunc='sum').fillna(0)
+    pivot_df = pivot_df.round(0)
+    return pivot_df.reset_index()
+
+def make_style_data_conditional(pivot_df):
+    """
+    Returns conditional formatting rules:
+    - Dark green if value >= 5000
+    - Dark red if value <= -5000
+    - No special color if between -5000 and 5000
+    """
+    sdc = []
+    for col in pivot_df.columns:
+        if col == 'Year':
+            continue
+        sdc.append({
+            'if': {
+                'filter_query': f'{{{col}}} >= 5000',
+                'column_id': col
+            },
+            'backgroundColor': 'darkgreen',
+            'color': 'white'
+        })
+        sdc.append({
+            'if': {
+                'filter_query': f'{{{col}}} <= -5000',
+                'column_id': col
+            },
+            'backgroundColor': 'darkred',
+            'color': 'white'
+        })
+    return sdc
+
+@app.callback(
+    Output('pnl-table', 'data'),
+    Output('pnl-table', 'columns'),
+    Output('pnl-table', 'style_data_conditional'),
+    Input('update-btn', 'n_clicks'),
+    Input('start_days', 'value'),
+    Input('end_days', 'value'),
+    Input('quantity', 'value')
+)
+def update_table(n_clicks, start_days, end_days, quantity):
+    pivot_df = compute_pnl(df, realized_prices, start_days, end_days, quantity)
+    if pivot_df.empty:
+        return [], [], []
+    data = pivot_df.to_dict('records')
+    columns = [{"name": i, "id": i} for i in pivot_df.columns]
+
+    # Build style rules based on each column except 'Year'
+    style_data_conditional = make_style_data_conditional(pivot_df)
+
+    return data, columns, style_data_conditional
+
+if __name__ == '__main__':
+    app.run_server(debug=True)
