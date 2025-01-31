@@ -1,0 +1,305 @@
+import pandas as pd
+import numpy as np
+from dash import Dash, dcc, html, Input, Output, dash_table
+
+# Example data loading; replace with your actual data paths or pre-loaded DataFrames
+g_a_spread = pd.read_csv('time_series.csv', parse_dates=['Date'], index_col='Date')
+realized_df = pd.read_csv('realized_prices.csv')
+
+# Convert realized prices into a dictionary keyed by contract
+realized_prices = realized_df.set_index('Contract')['g_a'].to_dict()
+
+app = Dash(__name__)
+
+app.layout = html.Div(
+    style={'textAlign': 'center'},
+    children=[
+        html.H1("YANUS Surf School"),
+        html.Div([
+            html.Label("Days Before Expiration to Start Buying:", style={'display': 'block'}),
+            dcc.Input(id='start_days', type='number', value=20),
+        ]),
+        html.Div([
+            html.Label("Days Before Expiration to End Buying:", style={'display': 'block'}),
+            dcc.Input(id='end_days', type='number', value=10),
+        ]),
+        html.Div([
+            html.Label("Quantity Bought per Day:", style={'display': 'block'}),
+            dcc.Input(id='quantity', type='number', value=10),
+        ]),
+        html.Button("Update", id="update-btn"),
+        html.Hr(),
+        html.H2("PnL (Pivot)"),
+        dash_table.DataTable(id='pnl-table', style_table={'margin': '0 auto'}),
+        html.Br(),
+        html.H2("Max Drawdown (Pivot)"),
+        dash_table.DataTable(id='max-drawdown-table', style_table={'margin': '0 auto'}),
+        html.Br(),
+        html.H2("Average Purchase Price (Pivot)"),
+        dash_table.DataTable(id='avg-price-table', style_table={'margin': '0 auto'}),
+        html.Br(),
+        html.H2("Liquidation Price (Pivot)"),
+        dash_table.DataTable(id='liq-price-table', style_table={'margin': '0 auto'}),
+        html.Br(),
+        html.H2("Buy-Start Date (Pivot)"),
+        dash_table.DataTable(id='start-date-table', style_table={'margin': '0 auto'}),
+        html.Br(),
+        html.H2("Buy-End Date (Pivot)"),
+        dash_table.DataTable(id='end-date-table', style_table={'margin': '0 auto'}),
+        html.Br(),
+        html.H2("Position Size (Pivot)"),
+        dash_table.DataTable(id='position-size-table', style_table={'margin': '0 auto'}),
+    ]
+)
+
+
+def compute_tables(spread_df, realized_dict, start_days, end_days, qty):
+    """
+    For each contract, this function:
+    1) Locates the buy window (start_days to end_days before last date).
+    2) Calculates average price, liquidation price, days in market.
+    3) Calculates final PnL = (liq - avg) * 352 * qty * days_in_market / 1000
+    4) Calculates position size = (avg_price * qty * 352 * days_in_market) / 1000
+    5) Calculates daily mark-to-market to find minimum daily PnL (max drawdown).
+    6) Builds pivot tables for PnL, Avg Price, Liquidation, Start/End Dates, Position Size, Max Drawdown.
+    """
+    results = []
+    for contract in spread_df.columns:
+        series = spread_df[contract].dropna()
+        if series.empty:
+            continue
+        if contract not in realized_dict:
+            continue
+
+        last_date = series.index[-1]
+        buy_start = last_date - pd.Timedelta(days=start_days)
+        buy_end = last_date - pd.Timedelta(days=end_days)
+        buy_period = series.loc[buy_start:buy_end]
+        if buy_period.empty:
+            continue
+
+        avg_price = buy_period.mean()
+        liq_price = realized_dict[contract]
+        days_in_market = buy_period.shape[0]
+
+        # Final PnL in thousands
+        final_pnl = (liq_price - avg_price) * 352 * qty * days_in_market / 1000.0
+        # Position size in thousands
+        position_size = avg_price * qty * 352 * days_in_market / 1000.0
+
+        # Calculate daily PnLs for drawdown
+        daily_pnls = []
+        total_shares = 0.0
+        total_cost = 0.0
+        for day_price in buy_period:
+            total_shares += qty
+            total_cost += (day_price * qty)
+            wac = total_cost / total_shares  # weighted avg cost
+            mtm = (day_price - wac) * total_shares * 352 / 1000.0
+            daily_pnls.append(mtm)
+        max_drawdown = min(daily_pnls) if daily_pnls else 0.0
+
+        contract_month = contract[:-2]
+        contract_year = '20' + contract[-2:]
+        start_dt = buy_period.index[0]
+        end_dt = buy_period.index[-1]
+
+        results.append({
+            'Year': contract_year,
+            'Month': contract_month,
+            'PNL': final_pnl,
+            'AVG': avg_price,
+            'LIQ': liq_price,
+            'START_DT': start_dt,
+            'END_DT': end_dt,
+            'POSITION_SIZE': position_size,
+            'MAX_DRAWDOWN': max_drawdown
+        })
+
+    if not results:
+        return (pd.DataFrame(),) * 7
+
+    result_df = pd.DataFrame(results)
+
+    # Build pivot tables
+    # 1) PnL pivot
+    pnl_pivot = result_df.pivot_table(index='Year', columns='Month', values='PNL', aggfunc='sum').fillna(0)
+    # 2) Max Drawdown pivot
+    max_drawdown_pivot = result_df.pivot_table(index='Year', columns='Month', values='MAX_DRAWDOWN', aggfunc='min').fillna(0)
+    # 3) Average Price pivot
+    avg_pivot = result_df.pivot_table(index='Year', columns='Month', values='AVG', aggfunc='mean').fillna(0)
+    # 4) Liquidation Price pivot
+    liq_pivot = result_df.pivot_table(index='Year', columns='Month', values='LIQ', aggfunc='mean').fillna(0)
+    # 5) Buy-Start Date pivot
+    start_date_pivot = result_df.pivot_table(index='Year', columns='Month', values='START_DT', aggfunc='first')
+    # 6) Buy-End Date pivot
+    end_date_pivot = result_df.pivot_table(index='Year', columns='Month', values='END_DT', aggfunc='first')
+    # 7) Position Size pivot
+    position_size_pivot = result_df.pivot_table(index='Year', columns='Month', values='POSITION_SIZE', aggfunc='sum').fillna(0)
+
+    # Convert date columns to mm/dd/yy
+    if not start_date_pivot.empty:
+        start_date_pivot = start_date_pivot.applymap(lambda x: x.strftime("%m/%d/%y") if pd.notnull(x) else "")
+    if not end_date_pivot.empty:
+        end_date_pivot = end_date_pivot.applymap(lambda x: x.strftime("%m/%d/%y") if pd.notnull(x) else "")
+
+    return (
+        pnl_pivot.reset_index(),
+        max_drawdown_pivot.reset_index(),
+        avg_pivot.reset_index(),
+        liq_pivot.reset_index(),
+        start_date_pivot.reset_index(),
+        end_date_pivot.reset_index(),
+        position_size_pivot.reset_index()
+    )
+
+
+def make_style_data_conditional_for_pnl(pivot_df):
+    """
+    Conditional styling for PnL pivot:
+    - Dark green if >= 5 (thousands)
+    - Dark red if <= -5 (thousands)
+    """
+    sdc = []
+    if 'Year' in pivot_df.columns:
+        numeric_cols = [c for c in pivot_df.columns if c != 'Year']
+    else:
+        numeric_cols = pivot_df.columns
+    for col in numeric_cols:
+        sdc.append({
+            'if': {
+                'filter_query': f'{{{col}}} >= 5',
+                'column_id': col
+            },
+            'backgroundColor': 'darkgreen',
+            'color': 'white'
+        })
+        sdc.append({
+            'if': {
+                'filter_query': f'{{{col}}} <= -5',
+                'column_id': col
+            },
+            'backgroundColor': 'darkred',
+            'color': 'white'
+        })
+    return sdc
+
+
+def make_style_data_conditional_for_drawdown(pivot_df):
+    """
+    Conditional styling for Max Drawdown pivot:
+    - Dark red if <= -5 (thousands)
+    - No green needed since drawdown is a negative concept
+    """
+    sdc = []
+    if 'Year' in pivot_df.columns:
+        numeric_cols = [c for c in pivot_df.columns if c != 'Year']
+    else:
+        numeric_cols = pivot_df.columns
+    for col in numeric_cols:
+        sdc.append({
+            'if': {
+                'filter_query': f'{{{col}}} <= -5',
+                'column_id': col
+            },
+            'backgroundColor': 'darkred',
+            'color': 'white'
+        })
+    return sdc
+
+
+@app.callback(
+    Output('pnl-table', 'data'),
+    Output('pnl-table', 'columns'),
+    Output('pnl-table', 'style_data_conditional'),
+    Output('max-drawdown-table', 'data'),
+    Output('max-drawdown-table', 'columns'),
+    Output('max-drawdown-table', 'style_data_conditional'),
+    Output('avg-price-table', 'data'),
+    Output('avg-price-table', 'columns'),
+    Output('liq-price-table', 'data'),
+    Output('liq-price-table', 'columns'),
+    Output('start-date-table', 'data'),
+    Output('start-date-table', 'columns'),
+    Output('end-date-table', 'data'),
+    Output('end-date-table', 'columns'),
+    Output('position-size-table', 'data'),
+    Output('position-size-table', 'columns'),
+    Input('update-btn', 'n_clicks'),
+    Input('start_days', 'value'),
+    Input('end_days', 'value'),
+    Input('quantity', 'value')
+)
+def update_tables(n_clicks, start_days, end_days, quantity):
+    (pnl_pivot, max_drawdown_pivot, avg_pivot, liq_pivot, 
+     start_pivot, end_pivot, pos_size_pivot) = compute_tables(
+        g_a_spread, realized_prices, start_days, end_days, quantity
+    )
+
+    # If empty, return empty outputs
+    if pnl_pivot.empty:
+        return ([], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [])
+
+    # --- 1) Format PnL pivot (thousands, integer commas) ---
+    pnl_numeric = pnl_pivot.set_index('Year')
+    style_data_conditional_pnl = make_style_data_conditional_for_pnl(pnl_numeric)
+    for col in pnl_numeric.columns:
+        pnl_numeric[col] = pnl_numeric[col].apply(lambda x: f"{x:,.0f}")
+    pnl_table_final = pnl_numeric.reset_index()
+    pnl_data = pnl_table_final.to_dict('records')
+    pnl_columns = [{"name": str(i), "id": str(i)} for i in pnl_table_final.columns]
+
+    # --- 2) Format Max Drawdown pivot (thousands, integer commas, color if <= -5) ---
+    dd_numeric = max_drawdown_pivot.set_index('Year')
+    style_data_conditional_dd = make_style_data_conditional_for_drawdown(dd_numeric)
+    for col in dd_numeric.columns:
+        dd_numeric[col] = dd_numeric[col].apply(lambda x: f"{x:,.0f}")
+    dd_table_final = dd_numeric.reset_index()
+    dd_data = dd_table_final.to_dict('records')
+    dd_columns = [{"name": str(i), "id": str(i)} for i in dd_table_final.columns]
+
+    # --- 3) Format Average Price pivot (2 decimals, comma separated) ---
+    avg_numeric = avg_pivot.set_index('Year')
+    for col in avg_numeric.columns:
+        avg_numeric[col] = avg_numeric[col].apply(lambda x: f"{x:,.2f}")
+    avg_table_final = avg_numeric.reset_index()
+    avg_data = avg_table_final.to_dict('records')
+    avg_columns = [{"name": str(i), "id": str(i)} for i in avg_table_final.columns]
+
+    # --- 4) Format Liquidation Price pivot (2 decimals, comma separated) ---
+    liq_numeric = liq_pivot.set_index('Year')
+    for col in liq_numeric.columns:
+        liq_numeric[col] = liq_numeric[col].apply(lambda x: f"{x:,.2f}")
+    liq_table_final = liq_numeric.reset_index()
+    liq_data = liq_table_final.to_dict('records')
+    liq_columns = [{"name": str(i), "id": str(i)} for i in liq_table_final.columns]
+
+    # --- 5) Start Date pivot (already strings) ---
+    start_data = start_pivot.to_dict('records')
+    start_columns = [{"name": str(i), "id": str(i)} for i in start_pivot.columns]
+
+    # --- 6) End Date pivot (already strings) ---
+    end_data = end_pivot.to_dict('records')
+    end_columns = [{"name": str(i), "id": str(i)} for i in end_pivot.columns]
+
+    # --- 7) Position Size pivot (thousands, integer commas) ---
+    pos_numeric = pos_size_pivot.set_index('Year')
+    for col in pos_numeric.columns:
+        pos_numeric[col] = pos_numeric[col].apply(lambda x: f"{x:,.0f}")
+    pos_size_final = pos_numeric.reset_index()
+    pos_data = pos_size_final.to_dict('records')
+    pos_columns = [{"name": str(i), "id": str(i)} for i in pos_size_final.columns]
+
+    return (
+        pnl_data, pnl_columns, style_data_conditional_pnl,
+        dd_data, dd_columns, style_data_conditional_dd,
+        avg_data, avg_columns,
+        liq_data, liq_columns,
+        start_data, start_columns,
+        end_data, end_columns,
+        pos_data, pos_columns
+    )
+
+
+if __name__ == '__main__':
+    app.run_server(debug=True)
