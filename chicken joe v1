@@ -1,0 +1,62 @@
+import dash
+from dash import dcc, html, Input, Output
+import pandas as pd
+import plotly.express as px
+
+# Load price history CSV files
+price_history_1 = pd.read_csv("price_history_1.csv", parse_dates=["Date"])
+price_history_2 = pd.read_csv("price_history_2.csv", parse_dates=["Date"])
+price_history_3 = pd.read_csv("price_history_3.csv", parse_dates=["Date"])
+price_history_4 = pd.read_csv("price_history_4.csv", parse_dates=["Date"])
+
+# Store in dictionary for easy reference
+price_data = {
+    "price_history_1": price_history_1,
+    "price_history_2": price_history_2,
+    "price_history_3": price_history_3,
+    "price_history_4": price_history_4,
+}
+
+# Load realized price CSV
+realized_price = pd.read_csv("realized_price.csv")
+
+# Match asset names with realized price columns
+assets = list(price_data.keys())
+spreads = realized_price.columns[1:].tolist()
+contracts = {asset: list(df.columns[1:]) for asset, df in price_data.items()}
+
+# Initialize Dash app
+app = dash.Dash(__name__)
+app.layout = html.Div([
+    html.H1("Trading Dashboard"),
+    dcc.Dropdown(
+        id="spread-selector",
+        options=[{"label": s, "value": s} for s in spreads],
+        value=spreads[0],
+        clearable=False
+    ),
+    dcc.Checklist(
+        id="contract-selector",
+        options=[{"label": c, "value": c} for c in sum(contracts.values(), [])],
+        value=list(contracts.values())[0][:2],  # Default to first two contracts
+        inline=True
+    ),
+    dcc.Graph(id="price-chart")
+])
+
+@app.callback(
+    Output("price-chart", "figure"),
+    [Input("spread-selector", "value"),
+     Input("contract-selector", "value")]
+)
+def update_chart(selected_spread, selected_contracts):
+    fig = px.line()
+    for asset, df in price_data.items():
+        for contract in selected_contracts:
+            if contract in df.columns:
+                fig.add_scatter(x=df["Date"], y=df[contract], mode="lines", name=f"{asset} - {contract}")
+    fig.update_layout(title=f"Price History for Selected Contracts and Spread ({selected_spread})")
+    return fig
+
+if __name__ == "__main__":
+    app.run_server(debug=True)
