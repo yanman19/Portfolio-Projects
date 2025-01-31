@@ -1,0 +1,152 @@
+import pandas as pd
+import numpy as np
+from dash import Dash, dcc, html, Input, Output, dash_table
+
+# Load your time-series data with the contract columns
+df = pd.read_csv('time_series.csv', parse_dates=['Date'], index_col='Date')
+
+# Load your realized prices, assumed to have columns ["Contract", "g_a"]
+realized_df = pd.read_csv('realized_prices.csv')
+realized_prices = realized_df.set_index('Contract')['g_a'].to_dict()
+
+app = Dash(__name__)
+
+app.layout = html.Div(
+    style={'textAlign': 'center'},
+    children=[
+        html.H1("YANUS Surf School", style={'textAlign': 'center'}),
+        html.Div([
+            html.Label("Days Before Expiration to Start Buying:", style={'display': 'block'}),
+            dcc.Input(id='start_days', type='number', value=20),
+        ]),
+        html.Div([
+            html.Label("Days Before Expiration to End Buying:", style={'display': 'block'}),
+            dcc.Input(id='end_days', type='number', value=10),
+        ]),
+        html.Div([
+            html.Label("Quantity Bought per Day:", style={'display': 'block'}),
+            dcc.Input(id='quantity', type='number', value=10),
+        ]),
+        html.Button("Update", id="update-btn"),
+        html.Hr(),
+        html.H2("PnL (Pivot)"),
+        dash_table.DataTable(id='pnl-table', style_table={'margin': '0 auto'}),
+        html.Br(),
+        html.H2("Average Purchase Price (Pivot)"),
+        dash_table.DataTable(id='avg-price-table', style_table={'margin': '0 auto'}),
+        html.Br(),
+        html.H2("Liquidation Price (Pivot)"),
+        dash_table.DataTable(id='liquidation-table', style_table={'margin': '0 auto'})
+    ]
+)
+
+def compute_tables(input_df, realized_dict, start_days, end_days, qty):
+    results = []
+    for contract in input_df.columns:
+        series = input_df[contract].dropna()
+        if series.empty:
+            continue
+        
+        if contract not in realized_dict:
+            continue
+        
+        last_date = series.index[-1]
+        buy_start = last_date - pd.Timedelta(days=start_days)
+        buy_end   = last_date - pd.Timedelta(days=end_days)
+        buy_period = series.loc[buy_start:buy_end]
+        if buy_period.empty:
+            continue
+        
+        avg_price = buy_period.mean()
+        liq_price = realized_dict[contract]
+        days_in_market = buy_period.shape[0]
+        pnl = (avg_price - liq_price) * 352 * qty * days_in_market
+
+        contract_month = contract[:-2]
+        contract_year = '20' + contract[-2:]
+
+        results.append({
+            'Year': contract_year,
+            'Month': contract_month,
+            'PNL': pnl,
+            'AVG': avg_price,
+            'LIQ': liq_price
+        })
+
+    result_df = pd.DataFrame(results)
+    if result_df.empty:
+        return pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
+
+    # Create separate pivot tables for PnL, Average Price, and Liquidation Price
+    pnl_pivot = result_df.pivot_table(index='Year', columns='Month', values='PNL', aggfunc='mean').fillna(0).round(0)
+    avg_pivot = result_df.pivot_table(index='Year', columns='Month', values='AVG', aggfunc='mean').fillna(0).round(2)
+    liq_pivot = result_df.pivot_table(index='Year', columns='Month', values='LIQ', aggfunc='mean').fillna(0).round(2)
+
+    return pnl_pivot.reset_index(), avg_pivot.reset_index(), liq_pivot.reset_index()
+
+def make_style_data_conditional(pivot_df):
+    """
+    Returns conditional formatting rules for PnL table:
+    - Dark green if value >= 5000
+    - Dark red if value <= -5000
+    - No special color otherwise
+    """
+    sdc = []
+    for col in pivot_df.columns:
+        if col == 'Year':
+            continue
+        sdc.append({
+            'if': {
+                'filter_query': f'{{{col}}} >= 5000',
+                'column_id': col
+            },
+            'backgroundColor': 'darkgreen',
+            'color': 'white'
+        })
+        sdc.append({
+            'if': {
+                'filter_query': f'{{{col}}} <= -5000',
+                'column_id': col
+            },
+            'backgroundColor': 'darkred',
+            'color': 'white'
+        })
+    return sdc
+
+@app.callback(
+    Output('pnl-table', 'data'),
+    Output('pnl-table', 'columns'),
+    Output('pnl-table', 'style_data_conditional'),
+    Output('avg-price-table', 'data'),
+    Output('avg-price-table', 'columns'),
+    Output('liquidation-table', 'data'),
+    Output('liquidation-table', 'columns'),
+    Input('update-btn', 'n_clicks'),
+    Input('start_days', 'value'),
+    Input('end_days', 'value'),
+    Input('quantity', 'value')
+)
+def update_tables(n_clicks, start_days, end_days, quantity):
+    pnl_pivot, avg_pivot, liq_pivot = compute_tables(df, realized_prices, start_days, end_days, quantity)
+    if pnl_pivot.empty:
+        # Return empty sets for all outputs if no data
+        return [], [], [], [], [], [], []
+
+    pnl_data = pnl_pivot.to_dict('records')
+    pnl_columns = [{"name": i, "id": i} for i in pnl_pivot.columns]
+    style_data_conditional = make_style_data_conditional(pnl_pivot)
+
+    avg_data = avg_pivot.to_dict('records')
+    avg_columns = [{"name": i, "id": i} for i in avg_pivot.columns]
+
+    liq_data = liq_pivot.to_dict('records')
+    liq_columns = [{"name": i, "id": i} for i in liq_pivot.columns]
+
+    return (
+        pnl_data, pnl_columns, style_data_conditional,
+        avg_data, avg_columns,
+        liq_data, liq_columns
+    )
+
+if __name__ == '__main__':
+    app.run_server(debug=True)
