@@ -1,0 +1,231 @@
+app = Dash(__name__)
+
+app.layout = html.Div(
+    style={'textAlign': 'center'},
+    children=[
+        html.H1("YANUS Surf School"),
+        html.Div([
+            html.Label("Days Before Expiration to Start Buying:", style={'display': 'block'}),
+            dcc.Input(id='start_days', type='number', value=20),
+        ]),
+        html.Div([
+            html.Label("Days Before Expiration to End Buying:", style={'display': 'block'}),
+            dcc.Input(id='end_days', type='number', value=10),
+        ]),
+        html.Div([
+            html.Label("Quantity Bought per Day:", style={'display': 'block'}),
+            dcc.Input(id='quantity', type='number', value=10),
+        ]),
+        html.Button("Update", id="update-btn"),
+        html.Hr(),
+        html.H2("PnL (Pivot)"),
+        dash_table.DataTable(id='pnl-table', style_table={'margin': '0 auto'}),
+        html.Br(),
+        html.H2("Average Purchase Price (Pivot)"),
+        dash_table.DataTable(id='avg-price-table', style_table={'margin': '0 auto'}),
+        html.Br(),
+        html.H2("Liquidation Price (Pivot)"),
+        dash_table.DataTable(id='liq-price-table', style_table={'margin': '0 auto'}),
+        html.Br(),
+        html.H2("Buy-Start Date (Pivot)"),
+        dash_table.DataTable(id='start-date-table', style_table={'margin': '0 auto'}),
+        html.Br(),
+        html.H2("Buy-End Date (Pivot)"),
+        dash_table.DataTable(id='end-date-table', style_table={'margin': '0 auto'}),
+    ]
+)
+
+def compute_tables(spread_df, realized_dict, start_days, end_days, qty):
+    results = []
+    for contract in spread_df.columns:
+        series = spread_df[contract].dropna()
+        if series.empty:
+            continue
+        
+        # Skip if no realized price in the dict
+        if contract not in realized_dict:
+            continue
+        
+        last_date = series.index[-1]
+        buy_start = last_date - pd.Timedelta(days=start_days)
+        buy_end   = last_date - pd.Timedelta(days=end_days)
+        buy_period = series.loc[buy_start:buy_end]
+        if buy_period.empty:
+            continue
+        
+        avg_price = buy_period.mean()
+        liq_price = realized_dict[contract]
+        days_in_market = buy_period.shape[0]
+        
+        # PnL = (Liquidation - Average) * 352 * qty * days_in_market / 1000
+        pnl = (liq_price - avg_price) * 352 * qty * days_in_market / 1000.0
+        
+        contract_month = contract[:-2]
+        contract_year = '20' + contract[-2:]
+        
+        # Store start/end date for the buy window
+        start_dt = buy_period.index[0]
+        end_dt   = buy_period.index[-1]
+        
+        results.append({
+            'Year': contract_year,
+            'Month': contract_month,
+            'PNL': pnl,
+            'AVG': avg_price,
+            'LIQ': liq_price,
+            'START_DT': start_dt,
+            'END_DT': end_dt
+        })
+
+    if not results:
+        return (pd.DataFrame(),)*5
+
+    result_df = pd.DataFrame(results)
+
+    # 1) PnL pivot (sum or mean depending on your preference; here we'll use sum for demonstration)
+    pnl_pivot = result_df.pivot_table(index='Year', columns='Month', values='PNL', aggfunc='sum').fillna(0)
+
+    # 2) Average Price pivot
+    avg_pivot = result_df.pivot_table(index='Year', columns='Month', values='AVG', aggfunc='mean').fillna(0)
+
+    # 3) Liquidation Price pivot
+    liq_pivot = result_df.pivot_table(index='Year', columns='Month', values='LIQ', aggfunc='mean').fillna(0)
+
+    # 4) Buy-Start Date pivot
+    start_date_pivot = result_df.pivot_table(index='Year', columns='Month', values='START_DT', aggfunc='first')
+
+    # 5) Buy-End Date pivot
+    end_date_pivot = result_df.pivot_table(index='Year', columns='Month', values='END_DT', aggfunc='first')
+
+    # Convert date columns to mm/dd/yy strings
+    if not start_date_pivot.empty:
+        start_date_pivot = start_date_pivot.applymap(lambda x: x.strftime("%m/%d/%y") if pd.notnull(x) else "")
+    if not end_date_pivot.empty:
+        end_date_pivot = end_date_pivot.applymap(lambda x: x.strftime("%m/%d/%y") if pd.notnull(x) else "")
+
+    return (
+        pnl_pivot.reset_index(),
+        avg_pivot.reset_index(),
+        liq_pivot.reset_index(),
+        start_date_pivot.reset_index(),
+        end_date_pivot.reset_index()
+    )
+
+def make_style_data_conditional(pivot_df):
+    """
+    Styling for PnL table only. We do numeric comparisons:
+    - Dark green if value >= 5 (because PnL is in 'thousands', you can adjust thresholds)
+    - Dark red if value <= -5
+    """
+    sdc = []
+    for col in pivot_df.columns:
+        if col == 'Year':
+            continue
+        # Because we're dealing with PnL in thousands,
+        # adjust the threshold logic as you wish
+        sdc.append({
+            'if': {
+                'filter_query': f'{{{col}}} >= 5',
+                'column_id': col
+            },
+            'backgroundColor': 'darkgreen',
+            'color': 'white'
+        })
+        sdc.append({
+            'if': {
+                'filter_query': f'{{{col}}} <= -5',
+                'column_id': col
+            },
+            'backgroundColor': 'darkred',
+            'color': 'white'
+        })
+    return sdc
+
+@app.callback(
+    Output('pnl-table', 'data'),
+    Output('pnl-table', 'columns'),
+    Output('pnl-table', 'style_data_conditional'),
+    Output('avg-price-table', 'data'),
+    Output('avg-price-table', 'columns'),
+    Output('liq-price-table', 'data'),
+    Output('liq-price-table', 'columns'),
+    Output('start-date-table', 'data'),
+    Output('start-date-table', 'columns'),
+    Output('end-date-table', 'data'),
+    Output('end-date-table', 'columns'),
+    Input('update-btn', 'n_clicks'),
+    Input('start_days', 'value'),
+    Input('end_days', 'value'),
+    Input('quantity', 'value')
+)
+def update_tables(n_clicks, start_days, end_days, quantity):
+    pnl_pivot, avg_pivot, liq_pivot, start_pivot, end_pivot = compute_tables(
+        g_a_spread, realized_prices, start_days, end_days, quantity
+    )
+
+    # If empty, return empty for all
+    if pnl_pivot.empty:
+        return [], [], [], [], [], [], [], [], [], [], []
+
+    # --- Format the PnL pivot with commas ---
+    # We'll keep it numeric for styling, then transform to comma-string for final display
+    # 1) Build data for style
+    pnl_numeric = pnl_pivot.set_index('Year')  # keep numeric for color coding
+    style_data_conditional = make_style_data_conditional(pnl_numeric)
+
+    # 2) Convert numeric to comma strings
+    for col in pnl_numeric.columns:
+        pnl_numeric[col] = pnl_numeric[col].apply(lambda x: f"{x:,.0f}")  # no decimals, with commas
+
+    pnl_pivot_final = pnl_numeric.reset_index()
+
+    # Convert the rest to strings with the desired decimal or grouping
+    # For Average Price and Liquidation Price, let's do 2 decimals with commas
+    avg_numeric = avg_pivot.set_index('Year')
+    for col in avg_numeric.columns:
+        avg_numeric[col] = avg_numeric[col].apply(lambda x: f"{x:,.2f}")
+    avg_pivot_final = avg_numeric.reset_index()
+
+    liq_numeric = liq_pivot.set_index('Year')
+    for col in liq_numeric.columns:
+        liq_numeric[col] = liq_numeric[col].apply(lambda x: f"{x:,.2f}")
+    liq_pivot_final = liq_numeric.reset_index()
+
+    # Start/End date pivots are already strings in mm/dd/yy
+    start_pivot_final = start_pivot
+    end_pivot_final = end_pivot
+
+    # Build DataTable data/columns
+    # PnL table
+    pnl_data = pnl_pivot_final.to_dict('records')
+    pnl_columns = [
+        {"name": str(i), "id": str(i)} for i in pnl_pivot_final.columns
+    ]
+    # Average Price table
+    avg_data = avg_pivot_final.to_dict('records')
+    avg_columns = [
+        {"name": str(i), "id": str(i)} for i in avg_pivot_final.columns
+    ]
+    # Liquidation Price table
+    liq_data = liq_pivot_final.to_dict('records')
+    liq_columns = [
+        {"name": str(i), "id": str(i)} for i in liq_pivot_final.columns
+    ]
+    # Start Date table
+    start_data = start_pivot_final.to_dict('records')
+    start_columns = [
+        {"name": str(i), "id": str(i)} for i in start_pivot_final.columns
+    ]
+    # End Date table
+    end_data = end_pivot_final.to_dict('records')
+    end_columns = [
+        {"name": str(i), "id": str(i)} for i in end_pivot_final.columns
+    ]
+
+    return (
+        pnl_data, pnl_columns, style_data_conditional,
+        avg_data, avg_columns,
+        liq_data, liq_columns,
+        start_data, start_columns,
+        end_data, end_columns
+    )
