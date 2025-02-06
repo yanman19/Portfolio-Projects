@@ -1,0 +1,71 @@
+from fpdf import FPDF
+
+pdf = FPDF()
+pdf.add_page()
+pdf.set_font("Arial", size=12)
+
+# Title
+pdf.cell(0, 10, txt="Pennsylvania Tier 1 Renewable Energy Credits (RECs) – One Pager", ln=True, align="C")
+pdf.ln(10)
+
+# Background Section
+pdf.multi_cell(0, 10, txt=(
+    "Background\n"
+    "Pennsylvania Tier 1 RECs are certificates issued under the state's Alternative Energy Portfolio Standards (AEPS). "
+    "They represent 1 MWh of electricity generated from eligible renewable resources such as solar, wind, geothermal, "
+    "low-impact hydropower, biomass (with restrictions), coal mine methane, and fuel cells. Utilities and retail suppliers "
+    "must procure a set percentage of these RECs each year to comply with state mandates.\n"
+    "Source: https://www.puc.pa.gov/Energy/EnergyPrograms/Pages/AlternativeEnergyPortfolioStandard.aspx\n"
+))
+pdf.ln(5)
+
+# How Tier 1 RECs Work Section
+pdf.multi_cell(0, 10, txt=(
+    "How Tier 1 RECs Work\n"
+    "1. Generation & Certification\n"
+    "   - Renewable energy facilities produce electricity and certify each MWh as a REC using systems like PJM’s Generation Attribute Tracking System (GATS).\n"
+    "   Source: https://www.pjm.com/gats\n\n"
+    "2. Compliance for Utilities/Suppliers\n"
+    "   - Each compliance year, utilities must purchase enough Tier 1 RECs to meet mandated percentages under AEPS. If they fall short, they must pay an Alternative Compliance Payment (ACP).\n"
+    "   Source: https://www.puc.pa.gov/Energy/EnergyPrograms/Pages/AlternativeEnergyPortfolioStandard.aspx\n\n"
+    "3. REC Trading\n"
+    "   - RECs are bought and sold on the open market. Their prices reflect market supply from renewable projects and the demand driven by compliance obligations.\n"
+    "   Source: https://www.pjm.com/gats\n\n"
+    "4. Compliance & Penalties\n"
+    "   - Failure to meet the required REC procurement results in an ACP, which also serves to cap REC market prices by setting a maximum effective cost.\n"
+    "   Source: https://www.puc.pa.gov/Energy/EnergyPrograms/Pages/AlternativeEnergyPortfolioStandard.aspx\n"
+))
+pdf.ln(5)
+
+# Supply and Demand Relationships Section
+pdf.multi_cell(0, 10, txt=(
+    "Supply and Demand Relationships\n"
+    "1. Supply Factors\n"
+    "   - Resource Capacity: The total renewable generation capacity determines how many RECs are available.\n"
+    "   - Project Development: New renewable projects affect both current and future REC supplies.\n"
+    "   Source: https://www.eia.gov/\n\n"
+    "2. Demand Factors\n"
+    "   - Compliance Demand: The annual REC requirement set by AEPS establishes the baseline demand for RECs.\n"
+    "   - Voluntary Purchases: Some organizations buy additional RECs to bolster their renewable energy credentials beyond compliance.\n"
+    "   Source: https://www.puc.pa.gov/Energy/EnergyPrograms/Pages/AlternativeEnergyPortfolioStandard.aspx\n\n"
+    "3. Market Dynamics\n"
+    "   - REC Pricing: REC prices vary according to the balance between supply and demand, with trends indicating market health.\n"
+    "   - ACP as a Price Cap: The Alternative Compliance Payment (ACP) provides an upper limit on REC prices, ensuring cost control for utilities.\n"
+    "   Source: https://www.pjm.com/gats\n"
+))
+pdf.ln(5)
+
+# Approach to Understanding Supply-Demand Relationships Section
+pdf.multi_cell(0, 10, txt=(
+    "Approach to Understanding Supply-Demand Relationships\n"
+    "- Monitor Capacity Additions: Track news on new renewable projects, regulatory filings, and industry reports to understand changes in REC supply.\n"
+    "  Source: https://www.eia.gov/\n\n"
+    "- Follow Compliance Requirements: Regularly review updates and policy changes from the Pennsylvania PUC regarding AEPS mandates.\n"
+    "  Source: https://www.puc.pa.gov/Energy/EnergyPrograms/Pages/AlternativeEnergyPortfolioStandard.aspx\n\n"
+    "- Analyze REC Market Data: Examine REC pricing trends, trading volumes, and market analyses available via PJM’s GATS and industry publications.\n"
+    "  Source: https://www.pjm.com/gats\n\n"
+    "- Stay Informed on Policy Changes: Keep an eye on legislative and regulatory developments that might affect REC eligibility, ACP levels, or overall market dynamics.\n"
+    "  Source: https://www.puc.pa.gov/\n"
+))
+
+pdf.output("Tier1_RECs_OnePager.pdf")
