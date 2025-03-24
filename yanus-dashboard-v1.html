@@ -1,0 +1,650 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>YANUS Dashboard</title>
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/tabulator/5.4.4/css/tabulator.min.css" rel="stylesheet">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/tabulator/5.4.4/js/tabulator.min.js"></script>
+  <style>
+    body {
+      font-family: 'Arial', sans-serif;
+      margin: 0;
+      padding: 0;
+      background-color: #f5f5f5;
+    }
+    
+    #app-container {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 20px;
+      background-color: white;
+      box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+      min-height: 100vh;
+    }
+    
+    /* Google-style YANUS logo */
+    .logo-container {
+      text-align: center;
+      margin-bottom: 30px;
+    }
+    
+    .logo {
+      font-size: 64px;
+      font-weight: bold;
+      font-family: 'Product Sans', Arial, sans-serif;
+      letter-spacing: -2px;
+    }
+    
+    .logo span:nth-child(1) { color: #4285F4; }
+    .logo span:nth-child(2) { color: #DB4437; }
+    .logo span:nth-child(3) { color: #F4B400; }
+    .logo span:nth-child(4) { color: #4285F4; }
+    .logo span:nth-child(5) { color: #0F9D58; }
+    
+    /* Tab navigation */
+    .tabs {
+      display: flex;
+      margin-bottom: 20px;
+      border-bottom: 1px solid #ddd;
+    }
+    
+    .tab {
+      padding: 10px 20px;
+      cursor: pointer;
+      background-color: #f1f1f1;
+      border: 1px solid #ddd;
+      border-bottom: none;
+      border-radius: 5px 5px 0 0;
+      margin-right: 5px;
+      font-weight: bold;
+    }
+    
+    .tab.active {
+      background-color: white;
+      border-bottom: 1px solid white;
+      margin-bottom: -1px;
+      color: #4285F4;
+    }
+    
+    .tab-content {
+      display: none;
+    }
+    
+    .tab-content.active {
+      display: block;
+    }
+    
+    /* Filter controls */
+    .filters {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 15px;
+      margin-bottom: 20px;
+      padding: 15px;
+      background-color: #f9f9f9;
+      border-radius: 5px;
+    }
+    
+    .filter-group {
+      display: flex;
+      flex-direction: column;
+    }
+    
+    .filter-group label {
+      font-weight: bold;
+      margin-bottom: 5px;
+      color: #555;
+    }
+    
+    .filter-group input, .filter-group select {
+      padding: 8px;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+    }
+    
+    button {
+      padding: 8px 16px;
+      background-color: #4285F4;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-weight: bold;
+    }
+    
+    button:hover {
+      background-color: #3b78e7;
+    }
+    
+    .notes {
+      margin-top: 15px;
+      padding: 10px;
+      background-color: #f0f8ff;
+      border-left: 3px solid #4285F4;
+      font-size: 0.9em;
+    }
+    
+    .emphasized {
+      font-weight: bold;
+      color: #DB4437;
+    }
+    
+    #daily-table, #pivot-table {
+      margin-top: 20px;
+    }
+    
+    .tabulator .tabulator-header .tabulator-col {
+      background-color: #f1f1f1;
+    }
+    
+    /* Winter month styling (Jan, Feb, Dec) */
+    .winter-month {
+      background-color: rgba(66, 133, 244, 0.2) !important;
+    }
+    
+    /* Summer month styling (Jul, Aug) */
+    .summer-month {
+      background-color: rgba(255, 152, 0, 0.2) !important;
+    }
+    
+    /* Styling for pivot tables */
+    #pivot-tables-container {
+      margin-top: 30px;
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      gap: 30px;
+    }
+    
+    .pivot-wrapper {
+      width: calc(50% - 15px);
+      margin-bottom: 30px;
+    }
+    
+    .pivot-wrapper h2 {
+      text-align: center;
+      margin-bottom: 15px;
+      color: #4285F4;
+      border-bottom: 2px solid #ddd;
+      padding-bottom: 10px;
+    }
+    
+    @media (max-width: 992px) {
+      .pivot-wrapper {
+        width: 100%;
+      }
+    }
+    
+    .tabulator-col.winter-month .tabulator-col-content {
+      background-color: rgba(66, 133, 244, 0.3) !important;
+      color: #333;
+    }
+    
+    .tabulator-col.summer-month .tabulator-col-content {
+      background-color: rgba(255, 152, 0, 0.3) !important;
+      color: #333;
+    }
+    
+    /* Summary columns */
+    .tabulator-col.summary-col .tabulator-col-content {
+      background-color: rgba(15, 157, 88, 0.3) !important;
+      font-weight: bold;
+    }
+  </style>
+</head>
+<body>
+  <div id="app-container">
+    <div class="logo-container">
+      <div class="logo">
+        <span>Y</span><span>A</span><span>N</span><span>U</span><span>S</span>
+      </div>
+    </div>
+    
+    <div class="tabs">
+      <div class="tab active" data-tab="daily">Daily Slack</div>
+      <div class="tab" data-tab="pivot">Hist Pivot</div>
+    </div>
+    
+    <div id="daily-tab" class="tab-content active">
+      <div class="filters">
+        <div class="filter-group">
+          <label for="date-filter">Date Range</label>
+          <div style="display: flex; gap: 5px;">
+            <input type="date" id="date-from" placeholder="From">
+            <input type="date" id="date-to" placeholder="To">
+          </div>
+        </div>
+        
+        <div class="filter-group">
+          <label for="price-filter">Price Range</label>
+          <div style="display: flex; gap: 5px;">
+            <input type="number" id="price-min" placeholder="Min">
+            <input type="number" id="price-max" placeholder="Max">
+          </div>
+        </div>
+        
+        <div class="filter-group">
+          <label>&nbsp;</label>
+          <button id="apply-filters">Apply Filters</button>
+        </div>
+        
+        <div class="filter-group">
+          <label>&nbsp;</label>
+          <button id="reset-filters">Reset</button>
+        </div>
+      </div>
+      
+      <div id="daily-table"></div>
+    </div>
+    
+    <div id="pivot-tab" class="tab-content">
+      <div class="peak-filter-container">
+        <label for="peak-type-selector">Time Period:</label>
+        <select id="peak-type-selector" class="filter-dropdown">
+          <option value="all">All Hours (ATC)</option>
+          <option value="peak">Peak (Mon-Fri, 8-23)</option>
+          <option value="offpeak">Off-Peak (Not Peak)</option>
+          <option value="2x16">Weekend Peak (Sat-Sun, 8-23)</option>
+          <option value="7x8">Weekday Off-Peak (Mon-Fri, not 8-23)</option>
+        </select>
+      </div>
+      <div id="pivot-tables-container">
+        <!-- Individual pivot tables will be generated here, one for each variable -->
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // Sample data generation function with hourly data
+    const generateSampleData = () => {
+      const startDate = new Date('2020-01-01');
+      const endDate = new Date('2022-12-31');
+      const data = [];
+      
+      const currentDate = new Date(startDate);
+      
+      while (currentDate <= endDate) {
+        // Generate data for each hour of the day
+        for (let hour = 0; hour < 24; hour++) {
+          const currentDateTime = new Date(currentDate);
+          currentDateTime.setHours(hour);
+          
+          const dayOfYear = Math.floor((currentDate - new Date(currentDate.getFullYear(), 0, 0)) / 1000 / 60 / 60 / 24);
+          const dayOfWeek = currentDate.getDay(); // 0 = Sunday, 6 = Saturday
+          
+          // Apply different patterns for peak vs off-peak hours
+          const isPeak = (hour >= 8 && hour <= 23);
+          const isWeekday = (dayOfWeek > 0 && dayOfWeek < 6);
+          
+          // Base patterns with seasonal variations
+          let basePrice = 50 + Math.sin(dayOfYear / 365 * 2 * Math.PI) * 20;
+          
+          // Add time-of-day patterns
+          if (isPeak && isWeekday) {
+            // Weekday peak hours are more expensive
+            basePrice *= 1.3;
+          } else if (!isPeak && isWeekday) {
+            // Weekday off-peak hours
+            basePrice *= 0.8;
+          } else if (isPeak && !isWeekday) {
+            // Weekend peak hours
+            basePrice *= 0.9;
+          } else {
+            // Weekend off-peak hours
+            basePrice *= 0.7;
+          }
+          
+          // Daily pattern with higher demand during day, lower at night
+          const hourlyFactor = 1 + 0.3 * Math.sin((hour - 12) / 24 * Math.PI);
+          
+          data.push({
+            Date: new Date(currentDateTime),
+            Hour: hour,
+            DayOfWeek: dayOfWeek,
+            Price: parseFloat((basePrice * hourlyFactor + Math.random() * 10 - 5).toFixed(2)),
+            WindProduction: parseFloat((500 + Math.sin((dayOfYear / 365 * 2 * Math.PI) + 2) * 300 + Math.random() * 100).toFixed(2)),
+            SolarProduction: parseFloat((hour >= 6 && hour <= 18 ? 300 + Math.sin((hour - 12) / 12 * Math.PI) * 250 : 10) + Math.random() * 50).toFixed(2),
+            Demand: parseFloat((1000 * hourlyFactor + Math.sin((dayOfYear / 365 * 2 * Math.PI) + 0.5) * 300 + Math.random() * 100).toFixed(2)),
+            Temperature: parseFloat((15 + Math.sin(dayOfYear / 365 * 2 * Math.PI) * 10 + Math.sin((hour - 12) / 24 * Math.PI) * 5 + Math.random() * 3 - 1.5).toFixed(1))
+          });
+        }
+        
+        // Move to next day
+        currentDate.setDate(currentDate.getDate() + 1);
+        
+        // Skip some days to reduce data size for this demo
+        if (currentDate.getDate() % 5 === 0) {
+          currentDate.setDate(currentDate.getDate() + 4);
+        }
+      }
+      
+      return data;
+    };
+
+    // Function to filter hourly data based on peak type
+    const filterDataByPeakType = (data, peakType) => {
+      if (peakType === 'all') {
+        // All hours (no filtering)
+        return data;
+      }
+      
+      return data.filter(row => {
+        const hour = row.Hour;
+        const dayOfWeek = row.DayOfWeek;
+        const isWeekday = (dayOfWeek > 0 && dayOfWeek < 6); // Monday-Friday
+        const isWeekend = (dayOfWeek === 0 || dayOfWeek === 6); // Saturday-Sunday
+        const isPeakHour = (hour >= 8 && hour <= 23);
+        
+        switch (peakType) {
+          case 'peak':
+            // Peak: Monday-Friday, hours 8-23
+            return isWeekday && isPeakHour;
+          case 'offpeak':
+            // Off-peak: Everything that is not peak
+            return !(isWeekday && isPeakHour);
+          case '2x16':
+            // 2x16: Saturday and Sunday, hours 8-23
+            return isWeekend && isPeakHour;
+          case '7x8':
+            // 7x8: Monday-Friday, hours not 8-23
+            return isWeekday && !isPeakHour;
+          default:
+            return true;
+        }
+      });
+    };
+    
+    // Pivot data function for the new structure (one table per variable)
+    const pivotDataByVariable = (data, peakType = 'all', dateColumnName = 'Date') => {
+      // Filter data based on peak type
+      const filteredData = filterDataByPeakType(data, peakType);
+      
+      // Get all variables (numeric columns) except the date, hour, and dayOfWeek
+      const variables = Object.keys(data[0]).filter(key => 
+        key !== dateColumnName && 
+        key !== 'Hour' && 
+        key !== 'DayOfWeek' && 
+        typeof data[0][key] === 'number'
+      );
+      
+      // Get all unique years and months
+      const years = [...new Set(filteredData.map(row => row[dateColumnName].getFullYear()))].sort();
+      const months = [...Array(12).keys()]; // 0-11 for months
+      
+      // Create pivot data for each variable
+      const pivotedByVariable = {};
+      
+      variables.forEach(variable => {
+        // Initialize structure for this variable
+        pivotedByVariable[variable] = {};
+        
+        // Initialize years and months with zeros
+        years.forEach(year => {
+          pivotedByVariable[variable][year] = {};
+          months.forEach(month => {
+            pivotedByVariable[variable][year][month] = {
+              sum: 0,
+              count: 0
+            };
+          });
+        });
+        
+        // Populate with data
+        filteredData.forEach(row => {
+          const date = row[dateColumnName];
+          const year = date.getFullYear();
+          const month = date.getMonth();
+          
+          if (row[variable] !== undefined && !isNaN(row[variable])) {
+            pivotedByVariable[variable][year][month].sum += row[variable];
+            pivotedByVariable[variable][year][month].count++;
+          }
+        });
+      });
+      
+      // Convert to format needed for tables
+      const result = {};
+      
+      variables.forEach(variable => {
+        // For each variable, create an array of rows (one per year)
+        result[variable] = years.map(year => {
+          // Start with the year
+          const yearRow = { Year: year };
+          
+          // Add one column per month with the average value
+          const monthlyValues = [];
+          months.forEach(month => {
+            const data = pivotedByVariable[variable][year][month];
+            const monthName = new Date(Date.UTC(2000, month, 1)).toLocaleString('default', { month: 'short' });
+            
+            // Calculate average, round to 1 decimal place
+            const value = data.count > 0 
+              ? parseFloat((data.sum / data.count).toFixed(1)) 
+              : null; // Use null for months with no data
+              
+            yearRow[monthName] = value;
+            monthlyValues.push({ month, value });
+          });
+          
+          // Calculate the yearly average
+          const validValues = monthlyValues.filter(m => m.value !== null).map(m => m.value);
+          yearRow['Year Avg'] = validValues.length > 0 
+            ? parseFloat((validValues.reduce((a, b) => a + b, 0) / validValues.length).toFixed(1)) 
+            : null;
+          
+          // Calculate April-October average (JV)
+          const jvMonths = monthlyValues.filter(m => m.month >= 3 && m.month <= 9 && m.value !== null).map(m => m.value);
+          yearRow['JV'] = jvMonths.length > 0 
+            ? parseFloat((jvMonths.reduce((a, b) => a + b, 0) / jvMonths.length).toFixed(1)) 
+            : null;
+          
+          // Calculate July-August average (NQ)
+          const nqMonths = monthlyValues.filter(m => (m.month === 6 || m.month === 7) && m.value !== null).map(m => m.value);
+          yearRow['NQ'] = nqMonths.length > 0 
+            ? parseFloat((nqMonths.reduce((a, b) => a + b, 0) / nqMonths.length).toFixed(1)) 
+            : null;
+          
+          // Calculate January-February average (FG)
+          const fgMonths = monthlyValues.filter(m => (m.month === 0 || m.month === 1) && m.value !== null).map(m => m.value);
+          yearRow['FG'] = fgMonths.length > 0 
+            ? parseFloat((fgMonths.reduce((a, b) => a + b, 0) / fgMonths.length).toFixed(1)) 
+            : null;
+          
+          return yearRow;
+        });
+      });
+      
+      return result;
+    };
+
+    // DOM ready
+    document.addEventListener('DOMContentLoaded', function() {
+      // Generate sample data
+      const rawData = generateSampleData();
+      let filteredData = [...rawData];
+      
+      // Format dates for display in daily table
+      const formattedData = rawData.map(row => ({
+        ...row,
+        Date: new Date(row.Date).toISOString().split('T')[0] + ' ' + 
+              String(row.Date.getHours()).padStart(2, '0') + ':00', // Format as YYYY-MM-DD HH:00
+        DayOfWeek: ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][row.DayOfWeek]
+      }));
+      
+      // Tab switching
+      document.querySelectorAll('.tab').forEach(tab => {
+        tab.addEventListener('click', function() {
+          document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+          document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+          
+          this.classList.add('active');
+          document.getElementById(this.dataset.tab + '-tab').classList.add('active');
+          
+          // If switching to pivot tab, initialize or refresh the pivot tables
+          if (this.dataset.tab === 'pivot') {
+            updatePivotTables();
+          }
+        });
+      });
+      
+      // Set up the daily table
+      const dailyTable = new Tabulator("#daily-table", {
+        data: formattedData,
+        layout: "fitColumns",
+        pagination: "local",
+        paginationSize: 15,
+        paginationSizeSelector: [10, 15, 20, 50, 100],
+        columns: [
+          {title: "Date", field: "Date", sorter: "date", headerFilter: true},
+          {title: "Day", field: "DayOfWeek", headerFilter: true},
+          {title: "Hour", field: "Hour", sorter: "number", headerFilter: true},
+          {title: "Price", field: "Price", sorter: "number", headerFilter: true},
+          {title: "Wind Production", field: "WindProduction", sorter: "number", headerFilter: true},
+          {title: "Solar Production", field: "SolarProduction", sorter: "number", headerFilter: true},
+          {title: "Demand", field: "Demand", sorter: "number", headerFilter: true},
+          {title: "Temperature", field: "Temperature", sorter: "number", headerFilter: true},
+        ],
+      });
+      
+      // Set up filters for daily table
+      document.getElementById('apply-filters').addEventListener('click', function() {
+        const dateFrom = document.getElementById('date-from').value;
+        const dateTo = document.getElementById('date-to').value;
+        const priceMin = document.getElementById('price-min').value;
+        const priceMax = document.getElementById('price-max').value;
+        
+        filteredData = rawData.filter(row => {
+          const rowDate = row.Date.toISOString().split('T')[0];
+          let include = true;
+          
+          if (dateFrom && rowDate < dateFrom) include = false;
+          if (dateTo && rowDate > dateTo) include = false;
+          if (priceMin && row.Price < parseFloat(priceMin)) include = false;
+          if (priceMax && row.Price > parseFloat(priceMax)) include = false;
+          
+          return include;
+        });
+        
+        const formattedFilteredData = filteredData.map(row => ({
+          ...row,
+          Date: new Date(row.Date).toISOString().split('T')[0] + ' ' + 
+                String(row.Date.getHours()).padStart(2, '0') + ':00',
+          DayOfWeek: ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][row.DayOfWeek]
+        }));
+        
+        dailyTable.setData(formattedFilteredData);
+      });
+      
+      document.getElementById('reset-filters').addEventListener('click', function() {
+        document.getElementById('date-from').value = '';
+        document.getElementById('date-to').value = '';
+        document.getElementById('price-min').value = '';
+        document.getElementById('price-max').value = '';
+        
+        filteredData = [...rawData];
+        dailyTable.setData(formattedData);
+      });
+      
+      // Peak type selector event handler
+      document.getElementById('peak-type-selector').addEventListener('change', function() {
+        updatePivotTables();
+      });
+      
+      // Function to create/update the pivot tables
+      function updatePivotTables() {
+        const peakType = document.getElementById('peak-type-selector').value;
+        
+        // Create the pivot data based on the selected peak type
+        const pivotedDataByVariable = pivotDataByVariable(rawData, peakType);
+        
+        // Get all variables (numeric columns) excluding the metadata columns
+        const variables = Object.keys(rawData[0]).filter(key => 
+          key !== 'Date' && 
+          key !== 'Hour' && 
+          key !== 'DayOfWeek' && 
+          typeof rawData[0][key] === 'number'
+        );
+        
+        // Get all month names in order
+        const monthNames = [];
+        for (let i = 0; i < 12; i++) {
+          monthNames.push(new Date(Date.UTC(2000, i, 1)).toLocaleString('default', { month: 'short' }));
+        }
+        
+        // Create column definitions for the tables
+        // First column is Cal (Calendar Year), then one column per month, then the summary columns
+        const pivotColumns = [
+          {title: "Cal", field: "Year", sorter: "number", headerSort: false, frozen: true}
+        ];
+        
+        // Add month columns
+        monthNames.forEach((month, index) => {
+          pivotColumns.push({
+            title: month, 
+            field: month, 
+            sorter: "number",
+            headerSort: false,
+            formatter: function(cell) {
+              const value = cell.getValue();
+              return value !== null ? value.toFixed(1) : "-";
+            },
+            // Format winter months (Dec, Jan, Feb) in blue
+            cssClass: (month === 'Jan' || month === 'Feb' || month === 'Dec') ? 'winter-month' : 
+                      (month === 'Jul' || month === 'Aug') ? 'summer-month' : ''
+          });
+        });
+        
+        // Add summary columns
+        ['Year Avg', 'JV', 'NQ', 'FG'].forEach(summaryCol => {
+          pivotColumns.push({
+            title: summaryCol,
+            field: summaryCol,
+            sorter: "number",
+            headerSort: false,
+            formatter: function(cell) {
+              const value = cell.getValue();
+              return value !== null ? value.toFixed(1) : "-";
+            },
+            cssClass: 'summary-col'
+          });
+        });
+        
+        // Clear previous tables if any
+        const container = document.getElementById('pivot-tables-container');
+        container.innerHTML = '';
+        
+        // Create a pivot table for each variable - two side by side
+        variables.forEach((variable, index) => {
+          // Create a wrapper div for this pivot
+          const wrapper = document.createElement('div');
+          wrapper.className = 'pivot-wrapper';
+          container.appendChild(wrapper);
+          
+          // Create a heading for this variable
+          const heading = document.createElement('h2');
+          heading.textContent = variable;
+          wrapper.appendChild(heading);
+          
+          // Create a div for this table
+          const tableDiv = document.createElement('div');
+          tableDiv.id = `pivot-table-${variable}`;
+          wrapper.appendChild(tableDiv);
+          
+          // Create the table
+          new Tabulator(`#pivot-table-${variable}`, {
+            data: pivotedDataByVariable[variable],
+            layout: "fitColumns",
+            columns: pivotColumns,
+          });
+        });
+      }
+      
+      // Initialize pivot tables with "all" filter
+      if (document.querySelector('.tab.active').dataset.tab === 'pivot') {
+        updatePivotTables();
+      }
+    });
+  </script>
+</body>
+</html>
