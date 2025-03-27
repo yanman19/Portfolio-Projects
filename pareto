@@ -1,0 +1,1403 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pareto Frontier Dashboard</title>
+    <style>
+        :root {
+            --primary: #4361ee;
+            --secondary: #3f37c9;
+            --accent: #4895ef;
+            --background: #f8f9fa;
+            --card: #ffffff;
+            --text: #333333;
+            --border: #e0e0e0;
+            --success: #4cc9f0;
+            --warning: #fca311;
+            --danger: #e63946;
+        }
+        
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        
+        body {
+            background-color: var(--background);
+            color: var(--text);
+            line-height: 1.6;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 30px;
+            padding-bottom: 20px;
+            border-bottom: 1px solid var(--border);
+        }
+        
+        .header h1 {
+            color: var(--primary);
+            font-size: 28px;
+        }
+        
+        .card {
+            background-color: var(--card);
+            border-radius: 12px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+            padding: 24px;
+            margin-bottom: 24px;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        
+        .card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.12);
+        }
+        
+        .card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid var(--border);
+        }
+        
+        .card-header h2 {
+            color: var(--secondary);
+            font-size: 20px;
+        }
+        
+        .grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+        
+        @media (max-width: 768px) {
+            .grid {
+                grid-template-columns: 1fr;
+            }
+        }
+        
+        .form-group {
+            margin-bottom: 15px;
+        }
+        
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 500;
+        }
+        
+        input, select {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            font-size: 14px;
+            transition: border-color 0.3s, box-shadow 0.3s;
+        }
+        
+        input:focus, select:focus {
+            border-color: var(--accent);
+            box-shadow: 0 0 0 3px rgba(73, 147, 239, 0.15);
+            outline: none;
+        }
+        
+        button {
+            background-color: var(--primary);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            padding: 12px 18px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 600;
+            transition: background-color 0.3s, transform 0.1s;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        button:hover {
+            background-color: var(--secondary);
+            transform: translateY(-1px);
+        }
+        
+        button:active {
+            transform: translateY(1px);
+        }
+        
+        button.btn-secondary {
+            background-color: var(--secondary);
+        }
+        
+        button.btn-secondary:hover {
+            background-color: #332db1;
+        }
+        
+        button.btn-danger {
+            background-color: var(--danger);
+        }
+        
+        button.btn-danger:hover {
+            background-color: #d32f40;
+        }
+        
+        button.btn-light {
+            background-color: #f8f9fa;
+            color: var(--text);
+            border: 1px solid var(--border);
+        }
+        
+        button.btn-light:hover {
+            background-color: #e9ecef;
+        }
+        
+        button.btn-sm {
+            padding: 6px 12px;
+            font-size: 12px;
+        }
+        
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 10px;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+        }
+        
+        th, td {
+            padding: 14px 16px;
+            text-align: left;
+        }
+        
+        th {
+            background-color: var(--primary);
+            color: white;
+            font-weight: 600;
+            position: sticky;
+            top: 0;
+        }
+        
+        tr {
+            border-bottom: 1px solid var(--border);
+        }
+        
+        tr:last-child {
+            border-bottom: none;
+        }
+        
+        tr:nth-child(even) {
+            background-color: #f8f9fa;
+        }
+        
+        tr:hover {
+            background-color: rgba(73, 147, 239, 0.05);
+        }
+        
+        .badge {
+            display: inline-block;
+            padding: 6px 10px;
+            border-radius: 999px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+        
+        .badge-primary {
+            background-color: rgba(73, 147, 239, 0.2);
+            color: var(--primary);
+        }
+        
+        .badge-success {
+            background-color: rgba(76, 201, 240, 0.2);
+            color: #0077b6;
+        }
+        
+        .badge-warning {
+            background-color: rgba(252, 163, 17, 0.2);
+            color: #995d00;
+        }
+        
+        .badge-danger {
+            background-color: rgba(230, 57, 70, 0.2);
+            color: #c1121f;
+        }
+        
+        .variable-list, .dynamic-inputs {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+        
+        .variable-chip {
+            display: flex;
+            align-items: center;
+            background-color: rgba(73, 147, 239, 0.15);
+            color: var(--primary);
+            padding: 8px 14px;
+            border-radius: 999px;
+            font-size: 14px;
+            font-weight: 500;
+            transition: all 0.2s;
+            border: 1px solid rgba(73, 147, 239, 0.3);
+        }
+        
+        .variable-chip:hover {
+            background-color: rgba(73, 147, 239, 0.25);
+        }
+        
+        .variable-chip .remove {
+            margin-left: 8px;
+            cursor: pointer;
+            font-weight: bold;
+            opacity: 0.6;
+            transition: opacity 0.2s;
+        }
+        
+        .variable-chip .remove:hover {
+            opacity: 1;
+        }
+        
+        .chart-container {
+            height: 350px;
+            position: relative;
+        }
+        
+        .item-actions {
+            display: flex;
+            gap: 8px;
+        }
+        
+        .score-display {
+            width: 32px;
+            height: 32px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 50%;
+            font-size: 13px;
+            font-weight: bold;
+            margin-right: 6px;
+            transition: all 0.2s;
+        }
+        
+        .score-display:hover {
+            transform: scale(1.1);
+        }
+        
+        .low-score {
+            background-color: rgba(230, 57, 70, 0.15);
+            color: #c1121f;
+        }
+        
+        .medium-score {
+            background-color: rgba(252, 163, 17, 0.15);
+            color: #995d00;
+        }
+        
+        .high-score {
+            background-color: rgba(76, 201, 240, 0.15);
+            color: #0077b6;
+        }
+        
+        .perfect-score {
+            background-color: rgba(73, 147, 239, 0.15);
+            color: #2b59c3;
+        }
+        
+        .instructions {
+            background-color: rgba(73, 147, 239, 0.08);
+            border-left: 4px solid var(--accent);
+            padding: 16px 20px;
+            margin-bottom: 24px;
+            font-size: 15px;
+            border-radius: 0 8px 8px 0;
+        }
+        
+        .visualizer {
+            position: relative;
+            width: 100%;
+            height: 450px;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            overflow: hidden;
+            margin-top: 20px;
+            background-color: #fcfcfc;
+            transition: all 0.2s;
+        }
+        
+        .visualizer:hover {
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+        }
+        
+        .item-dot {
+            position: absolute;
+            width: 14px;
+            height: 14px;
+            border-radius: 50%;
+            transform: translate(-50%, -50%);
+            cursor: pointer;
+            transition: all 0.3s;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+        }
+        
+        .item-dot:hover {
+            transform: translate(-50%, -50%) scale(1.5);
+            z-index: 100;
+            box-shadow: 0 3px 8px rgba(0, 0, 0, 0.25);
+        }
+        
+        .tooltip {
+            position: absolute;
+            background-color: rgba(33, 33, 33, 0.9);
+            color: white;
+            padding: 8px 12px;
+            border-radius: 6px;
+            font-size: 12px;
+            pointer-events: none;
+            z-index: 1000;
+            display: none;
+            max-width: 250px;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
+        }
+        
+        .axis {
+            position: absolute;
+            background-color: #ddd;
+        }
+        
+        .axis-x {
+            bottom: 20px;
+            left: 50px;
+            right: 20px;
+            height: 1px;
+        }
+        
+        .axis-y {
+            top: 20px;
+            bottom: 50px;
+            left: 50px;
+            width: 1px;
+        }
+        
+        .axis-label {
+            position: absolute;
+            font-size: 12px;
+            color: #777;
+            font-weight: 500;
+        }
+        
+        .legend {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 12px;
+            margin-top: 20px;
+            padding: 10px;
+            background-color: rgba(248, 249, 250, 0.6);
+            border-radius: 8px;
+        }
+        
+        .legend-item {
+            display: flex;
+            align-items: center;
+            font-size: 13px;
+            background-color: white;
+            padding: 6px 10px;
+            border-radius: 6px;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+        }
+        
+        .legend-color {
+            width: 16px;
+            height: 16px;
+            border-radius: 4px;
+            margin-right: 8px;
+        }
+        
+        .welcome-message {
+            text-align: center;
+            margin: 30px 0;
+        }
+        
+        .welcome-message h2 {
+            margin-bottom: 10px;
+            color: var(--primary);
+        }
+        
+        .welcome-message p {
+            font-size: 16px;
+            color: #666;
+            max-width: 700px;
+            margin: 0 auto 20px auto;
+        }
+        
+        .action-row {
+            display: flex;
+            gap: 10px;
+            margin-top: 15px;
+            justify-content: center;
+        }
+        
+        .no-items {
+            text-align: center;
+            padding: 30px;
+            color: #666;
+        }
+        
+        .no-items p {
+            margin-bottom: 20px;
+        }
+        
+        .tab-container {
+            margin-bottom: 20px;
+        }
+        
+        .tab-buttons {
+            display: flex;
+            border-bottom: 1px solid var(--border);
+            margin-bottom: 20px;
+        }
+        
+        .tab-button {
+            padding: 10px 20px;
+            border: none;
+            background: none;
+            cursor: pointer;
+            font-weight: 600;
+            color: #777;
+            border-bottom: 3px solid transparent;
+            transition: all 0.2s;
+        }
+        
+        .tab-button.active {
+            color: var(--primary);
+            border-bottom: 3px solid var(--primary);
+        }
+        
+        .tab-button:hover:not(.active) {
+            color: var(--secondary);
+            border-bottom: 3px solid var(--border);
+        }
+        
+        .tab-content {
+            display: none;
+        }
+        
+        .tab-content.active {
+            display: block;
+        }
+        
+        .feature-section {
+            display: flex;
+            align-items: center;
+            margin-bottom: 30px;
+            gap: 20px;
+        }
+        
+        .feature-icon {
+            font-size: 24px;
+            background-color: rgba(73, 147, 239, 0.15);
+            color: var(--primary);
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+        }
+        
+        .feature-content h3 {
+            margin-bottom: 5px;
+            color: var(--secondary);
+        }
+        
+        .notification {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            padding: 15px 20px;
+            background-color: #333;
+            color: white;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+            z-index: 1000;
+            transition: all 0.3s ease;
+            transform: translateY(100px);
+            opacity: 0;
+        }
+        
+        .notification.show {
+            transform: translateY(0);
+            opacity: 1;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Pareto Frontier Analysis Dashboard</h1>
+            <div>
+                <button id="saveData" class="btn-secondary" title="Save your data to your browser">Save Data</button>
+                <button id="loadData" class="btn-secondary" title="Load previously saved data">Load Data</button>
+                <button id="loadExample" class="btn-light" title="Load example data to see how it works">Load Example</button>
+            </div>
+        </div>
+        
+        <div id="welcomeSection" style="display:none;">
+            <div class="welcome-message">
+                <h2>Welcome to the Pareto Frontier Dashboard</h2>
+                <p>This tool helps you analyze trade-offs between multiple variables to find the optimal items that are closest to perfection.</p>
+                
+                <div class="action-row">
+                    <button id="getStarted" class="btn-primary">Get Started</button>
+                    <button id="showDemo" class="btn-light">Load Demo Data</button>
+                </div>
+            </div>
+            
+            <div class="grid">
+                <div class="feature-section">
+                    <div class="feature-icon">1</div>
+                    <div class="feature-content">
+                        <h3>Define Your Variables</h3>
+                        <p>Add the variables you care about (features, attributes, or requirements) that you want to evaluate.</p>
+                    </div>
+                </div>
+                <div class="feature-section">
+                    <div class="feature-icon">2</div>
+                    <div class="feature-content">
+                        <h3>Add Items to Compare</h3>
+                        <p>Enter items with scores from 1-10 for each variable to analyze their performance.</p>
+                    </div>
+                </div>
+                <div class="feature-section">
+                    <div class="feature-icon">3</div>
+                    <div class="feature-content">
+                        <h3>Automatic Distance Calculation</h3>
+                        <p>The dashboard calculates each item's distance from perfection (score of 10 in all variables).</p>
+                    </div>
+                </div>
+                <div class="feature-section">
+                    <div class="feature-icon">4</div>
+                    <div class="feature-content">
+                        <h3>Visualize Your Data</h3>
+                        <p>Use different visualization types to better understand the trade-offs and identify Pareto-optimal items.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div id="mainContent">
+            <div class="instructions">
+                <p><strong>How to use:</strong> First, add the variables you want to evaluate (like cost, performance, reliability). Then add items and score them from 1-10 for each variable. The dashboard will automatically calculate the distance to perfection (score of 10 in all variables) and display items in order from closest to furthest from ideal.</p>
+            </div>
+            
+            <div class="grid">
+                <div class="card">
+                    <div class="card-header">
+                        <h2>Variables Management</h2>
+                    </div>
+                    <div class="form-group">
+                        <label for="variableName">Add a new variable (scored 1-10)</label>
+                        <div style="display: flex; gap: 10px;">
+                            <input type="text" id="variableName" placeholder="Enter variable name (e.g., Cost, Performance)">
+                            <button id="addVariable">Add Variable</button>
+                        </div>
+                    </div>
+                    <div>
+                        <label>Your Variables:</label>
+                        <div id="variablesList" class="variable-list">
+                            <!-- Variables will be added here -->
+                            <div id="noVariablesMessage" style="color: #777; font-style: italic;">No variables added yet. Add your first variable above.</div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="card">
+                    <div class="card-header">
+                        <h2>Add New Item</h2>
+                    </div>
+                    <div class="form-group">
+                        <label for="itemName">Item Name</label>
+                        <input type="text" id="itemName" placeholder="Enter item name (e.g., Product A, Option 1)">
+                    </div>
+                    <div id="itemVariables">
+                        <!-- Dynamic input fields will be added here -->
+                        <p id="noVariablesForItemMessage" style="color: #777; font-style: italic;">Add variables first to create items</p>
+                    </div>
+                    <button id="addItem" disabled>Add Item</button>
+                </div>
+            </div>
+            
+            <div class="card">
+                <div class="card-header">
+                    <h2>Items Ranked by Distance to Perfection</h2>
+                    <div>
+                        <button id="exportData">Export Data</button>
+                    </div>
+                </div>
+                <div id="noItemsMessage" class="no-items" style="display:none;">
+                    <p>No items added yet. Add variables and then create items to see them ranked here.</p>
+                    <button id="addFirstItem" class="btn-primary" disabled>Add Your First Item</button>
+                </div>
+                <div class="table-responsive">
+                    <table id="itemsTable">
+                        <thead>
+                            <tr>
+                                <th>Rank</th>
+                                <th>Item</th>
+                                <th>Variables & Scores</th>
+                                <th>Distance to Perfection</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <!-- Items will be added here -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            
+            <div class="card">
+                <div class="card-header">
+                    <h2>Visualization</h2>
+                    <div class="tab-container">
+                        <div class="tab-buttons">
+                            <button class="tab-button active" data-viz="2d">2D Plot</button>
+                            <button class="tab-button" data-viz="radar">Radar Chart</button>
+                            <button class="tab-button" data-viz="bar">Bar Chart</button>
+                        </div>
+                    </div>
+                </div>
+                <div id="visualization" class="visualizer">
+                    <!-- Visualization will be rendered here -->
+                </div>
+                <div id="legend" class="legend">
+                    <!-- Legend will be added here -->
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div id="notification" class="notification"></div>
+    
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
+    <script>
+        // State management
+        const state = {
+            variables: [],
+            items: [],
+            visualizationType: '2d',
+            currentChart: null
+        };
+        
+        // DOM elements
+        const welcomeSection = document.getElementById('welcomeSection');
+        const mainContent = document.getElementById('mainContent');
+        const variableNameInput = document.getElementById('variableName');
+        const addVariableBtn = document.getElementById('addVariable');
+        const variablesList = document.getElementById('variablesList');
+        const noVariablesMessage = document.getElementById('noVariablesMessage');
+        const itemNameInput = document.getElementById('itemName');
+        const itemVariablesDiv = document.getElementById('itemVariables');
+        const addItemBtn = document.getElementById('addItem');
+        const itemsTable = document.getElementById('itemsTable');
+        const noItemsMessage = document.getElementById('noItemsMessage');
+        const addFirstItemBtn = document.getElementById('addFirstItem');
+        const tabButtons = document.querySelectorAll('.tab-button');
+        const visualizationDiv = document.getElementById('visualization');
+        const legendDiv = document.getElementById('legend');
+        const saveDataBtn = document.getElementById('saveData');
+        const loadDataBtn = document.getElementById('loadData');
+        const loadExampleBtn = document.getElementById('loadExample');
+        const exportDataBtn = document.getElementById('exportData');
+        const getStartedBtn = document.getElementById('getStarted');
+        const showDemoBtn = document.getElementById('showDemo');
+        const notification = document.getElementById('notification');
+        
+        // Check if it's the first visit
+        function checkFirstVisit() {
+            if (!localStorage.getItem('paretoVisited')) {
+                welcomeSection.style.display = 'block';
+                mainContent.style.display = 'none';
+                localStorage.setItem('paretoVisited', 'true');
+            }
+        }
+        
+        // Event listeners
+        getStartedBtn?.addEventListener('click', function() {
+            welcomeSection.style.display = 'none';
+            mainContent.style.display = 'block';
+        });
+        
+        showDemoBtn?.addEventListener('click', function() {
+            welcomeSection.style.display = 'none';
+            mainContent.style.display = 'block';
+            loadExampleData();
+        });
+        
+        addVariableBtn.addEventListener('click', addVariable);
+        addItemBtn.addEventListener('click', addItem);
+        addFirstItemBtn.addEventListener('click', function() {
+            document.querySelector('.card:nth-child(2)').scrollIntoView({ behavior: 'smooth' });
+        });
+        
+        tabButtons.forEach(button => {
+            button.addEventListener('click', function() {
+                tabButtons.forEach(btn => btn.classList.remove('active'));
+                this.classList.add('active');
+                state.visualizationType = this.dataset.viz;
+                updateVisualization();
+            });
+        });
+        
+        saveDataBtn.addEventListener('click', saveData);
+        loadDataBtn.addEventListener('click', loadData);
+        loadExampleBtn.addEventListener('click', loadExampleData);
+        exportDataBtn.addEventListener('click', exportData);
+        
+        variableNameInput.addEventListener('keyup', function(event) {
+            if (event.key === 'Enter') {
+                addVariable();
+            }
+        });
+        
+        itemNameInput.addEventListener('keyup', function(event) {
+            if (event.key === 'Enter' && !addItemBtn.disabled) {
+                addItem();
+            }
+        });
+        
+        // Functions
+        function addVariable() {
+            const variableName = variableNameInput.value.trim();
+            
+            if (variableName && !state.variables.includes(variableName)) {
+                state.variables.push(variableName);
+                updateVariablesList();
+                updateItemForm();
+                variableNameInput.value = '';
+                variableNameInput.focus();
+                showNotification(`Variable "${variableName}" added successfully`);
+            } else if (state.variables.includes(variableName)) {
+                showNotification('This variable already exists!', 'error');
+            } else {
+                showNotification('Please enter a variable name', 'error');
+            }
+        }
+        
+        function removeVariable(index) {
+            if (confirm(`Are you sure you want to remove the variable "${state.variables[index]}"?`)) {
+                state.variables.splice(index, 1);
+                
+                // Update scores in items
+                state.items.forEach(item => {
+                    item.scores.splice(index, 1);
+                    updateItemDistance(item);
+                });
+                
+                updateVariablesList();
+                updateItemForm();
+                updateItemsTable();
+                updateVisualization();
+                showNotification('Variable removed successfully');
+            }
+        }
+        
+        function updateVariablesList() {
+            variablesList.innerHTML = '';
+            
+            if (state.variables.length === 0) {
+                variablesList.appendChild(noVariablesMessage);
+                return;
+            }
+            
+            state.variables.forEach((variable, index) => {
+                const chip = document.createElement('div');
+                chip.className = 'variable-chip';
+                chip.innerHTML = `
+                    ${variable}
+                    <span class="remove" onclick="removeVariable(${index})" title="Remove this variable">×</span>
+                `;
+                variablesList.appendChild(chip);
+            });
+            
+            // Enable/disable add item button based on variables presence
+            addItemBtn.disabled = state.variables.length === 0;
+            addFirstItemBtn.disabled = state.variables.length === 0;
+            
+            // Update no variables message display
+            if (state.variables.length > 0) {
+                if (noVariablesMessage.parentNode === variablesList) {
+                    variablesList.removeChild(noVariablesMessage);
+                }
+            }
+        }
+        
+        function updateItemForm() {
+            itemVariablesDiv.innerHTML = '';
+            
+            if (state.variables.length === 0) {
+                itemVariablesDiv.innerHTML = '<p style="color: #777; font-style: italic;">Add variables first to create items</p>';
+                return;
+            }
+            
+            const dynamicInputs = document.createElement('div');
+            dynamicInputs.className = 'dynamic-inputs';
+            
+            state.variables.forEach((variable, index) => {
+                const formGroup = document.createElement('div');
+                formGroup.className = 'form-group';
+                formGroup.style.flex = '1 0 45%';
+                
+                formGroup.innerHTML = `
+                    <label for="score_${index}">${variable} (1-10)</label>
+                    <input type="number" id="score_${index}" min="1" max="10" step="0.1" value="5" class="variable-score">
+                `;
+                
+                dynamicInputs.appendChild(formGroup);
+            });
+            
+            itemVariablesDiv.appendChild(dynamicInputs);
+        }
+        
+        function addItem() {
+            const itemName = itemNameInput.value.trim();
+            
+            if (!itemName) {
+                showNotification('Please enter an item name', 'error');
+                return;
+            }
+            
+            // Check if item name already exists
+            if (state.items.some(item => item.name === itemName)) {
+                showNotification('An item with this name already exists', 'error');
+                return;
+            }
+            
+            const scores = [];
+            const scoreInputs = document.querySelectorAll('.variable-score');
+            
+            scoreInputs.forEach(input => {
+                const score = parseFloat(input.value);
+                if (score >= 1 && score <= 10) {
+                    scores.push(score);
+                } else {
+                    showNotification('All scores must be between 1 and 10', 'error');
+                    return;
+                }
+            });
+            
+            if (scores.length === state.variables.length) {
+                const newItem = {
+                    name: itemName,
+                    scores: scores,
+                    distance: calculateDistance(scores)
+                };
+                
+                state.items.push(newItem);
+                sortItems();
+                updateItemsTable();
+                updateVisualization();
+                
+                // Reset form
+                itemNameInput.value = '';
+                scoreInputs.forEach(input => {
+                    input.value = 5;
+                });
+                
+                showNotification(`Item "${itemName}" added successfully`);
+            }
+        }
+        
+        function calculateDistance(scores) {
+            // Euclidean distance to perfection (10 in all variables)
+            let sumOfSquares = 0;
+            scores.forEach(score => {
+                const diff = 10 - score;
+                sumOfSquares += diff * diff;
+            });
+            
+            return Math.sqrt(sumOfSquares);
+        }
+        
+        function updateItemDistance(item) {
+            item.distance = calculateDistance(item.scores);
+        }
+        
+        function sortItems() {
+            state.items.sort((a, b) => a.distance - b.distance);
+        }
+        
+        function removeItem(index) {
+            if (confirm(`Are you sure you want to remove the item "${state.items[index].name}"?`)) {
+                const itemName = state.items[index].name;
+                state.items.splice(index, 1);
+                updateItemsTable();
+                updateVisualization();
+                showNotification(`Item "${itemName}" removed successfully`);
+            }
+        }
+        
+        function getScoreClass(score) {
+            if (score < 4) return 'low-score';
+            if (score < 7) return 'medium-score';
+            if (score < 10) return 'high-score';
+            return 'perfect-score';
+        }
+        
+        function updateItemsTable() {
+            const tbody = itemsTable.querySelector('tbody');
+            tbody.innerHTML = '';
+            
+            if (state.items.length === 0) {
+                noItemsMessage.style.display = 'block';
+                itemsTable.style.display = 'none';
+                return;
+            } else {
+                noItemsMessage.style.display = 'none';
+                itemsTable.style.display = 'table';
+            }
+            
+            state.items.forEach((item, index) => {
+                const row = document.createElement('tr');
+                
+                // Create the scores display
+                let scoresHtml = '';
+                item.scores.forEach((score, i) => {
+                    const scoreClass = getScoreClass(score);
+                    scoresHtml += `
+                        <div title="${state.variables[i]}: ${score}" style="display: inline-block; margin-right: 10px; margin-bottom: 5px;">
+                            <span class="score-display ${scoreClass}">${score}</span>
+                            ${state.variables[i]}
+                        </div>
+                    `;
+                });
+                
+                // Create the badge for distance
+                let badgeClass = 'badge-success';
+                if (item.distance > 10) {
+                    badgeClass = 'badge-danger';
+                } else if (item.distance > 5) {
+                    badgeClass = 'badge-warning';
+                }
+                
+                row.innerHTML = `
+                    <td>${index + 1}</td>
+                    <td><strong>${item.name}</strong></td>
+                    <td>${scoresHtml}</td>
+                    <td><span class="badge ${badgeClass}">${item.distance.toFixed(2)}</span></td>
+                    <td>
+                        <div class="item-actions">
+                            <button class="btn-danger btn-sm" onclick="removeItem(${index})">Remove</button>
+                        </div>
+                    </td>
+                `;
+                
+                tbody.appendChild(row);
+            });
+        }
+        
+        function updateVisualization() {
+            // Clear previous visualization
+            visualizationDiv.innerHTML = '';
+            legendDiv.innerHTML = '';
+            
+            if (state.currentChart) {
+                state.currentChart.destroy();
+                state.currentChart = null;
+            }
+            
+            if (state.items.length === 0) {
+                visualizationDiv.innerHTML = '<div style="display: flex; justify-content: center; align-items: center; height: 100%; color: #777;">Add items to see visualization</div>';
+                return;
+            }
+            
+            switch (state.visualizationType) {
+                case '2d':
+                    render2DPlot();
+                    break;
+                case 'radar':
+                    renderRadarChart();
+                    break;
+                case 'bar':
+                    renderBarChart();
+                    break;
+            }
+        }
+        
+        function render2DPlot() {
+            if (state.variables.length < 2) {
+                visualizationDiv.innerHTML = '<div style="display: flex; justify-content: center; align-items: center; height: 100%; color: #777;">Need at least 2 variables for 2D plot</div>';
+                return;
+            }
+            
+            // Create axes
+            const xAxis = document.createElement('div');
+            xAxis.className = 'axis axis-x';
+            visualizationDiv.appendChild(xAxis);
+            
+            const yAxis = document.createElement('div');
+            yAxis.className = 'axis axis-y';
+            visualizationDiv.appendChild(yAxis);
+            
+            // Create labels
+            const xLabel = document.createElement('div');
+            xLabel.className = 'axis-label';
+            xLabel.textContent = state.variables[0];
+            xLabel.style.bottom = '5px';
+            xLabel.style.left = '50%';
+            xLabel.style.transform = 'translateX(-50%)';
+            visualizationDiv.appendChild(xLabel);
+            
+            const yLabel = document.createElement('div');
+            yLabel.className = 'axis-label';
+            yLabel.textContent = state.variables[1];
+            yLabel.style.left = '5px';
+            yLabel.style.top = '50%';
+            yLabel.style.transform = 'translateY(-50%) rotate(-90deg)';
+            yLabel.style.transformOrigin = 'left center';
+            visualizationDiv.appendChild(yLabel);
+            
+            // Plot items
+            const width = visualizationDiv.clientWidth - 70;
+            const height = visualizationDiv.clientHeight - 70;
+            const xOffset = 50;
+            const yOffset = 20;
+            
+            // Create tooltip
+            const tooltip = document.createElement('div');
+            tooltip.className = 'tooltip';
+            visualizationDiv.appendChild(tooltip);
+            
+            // Generate colors for items
+            const colors = generateColors(state.items.length);
+            
+            state.items.forEach((item, index) => {
+                const x = xOffset + (item.scores[0] / 10) * width;
+                const y = height - ((item.scores[1] / 10) * height) + yOffset;
+                
+                const dot = document.createElement('div');
+                dot.className = 'item-dot';
+                dot.style.left = `${x}px`;
+                dot.style.top = `${y}px`;
+                dot.style.backgroundColor = colors[index];
+                dot.style.border = `2px solid ${adjustColor(colors[index], -30)}`;
+                
+                // Size based on distance (closer = larger)
+                const maxDistance = Math.sqrt(state.variables.length * 100); // Max possible distance
+                const size = 14 + ((maxDistance - item.distance) / maxDistance) * 10;
+                dot.style.width = `${size}px`;
+                dot.style.height = `${size}px`;
+                
+                // Tooltip
+                dot.addEventListener('mouseover', (e) => {
+                    tooltip.style.display = 'block';
+                    tooltip.style.left = `${e.pageX - visualizationDiv.getBoundingClientRect().left + 10}px`;
+                    tooltip.style.top = `${e.pageY - visualizationDiv.getBoundingClientRect().top - 20}px`;
+                    
+                    let tooltipContent = `<strong>${item.name}</strong><br>Distance: ${item.distance.toFixed(2)}<br><br>`;
+                    item.scores.forEach((score, i) => {
+                        tooltipContent += `${state.variables[i]}: ${score}<br>`;
+                    });
+                    
+                    tooltip.innerHTML = tooltipContent;
+                });
+                
+                dot.addEventListener('mouseout', () => {
+                    tooltip.style.display = 'none';
+                });
+                
+                visualizationDiv.appendChild(dot);
+                
+                // Add to legend
+                const legendItem = document.createElement('div');
+                legendItem.className = 'legend-item';
+                
+                const legendColor = document.createElement('div');
+                legendColor.className = 'legend-color';
+                legendColor.style.backgroundColor = colors[index];
+                
+                legendItem.appendChild(legendColor);
+                legendItem.appendChild(document.createTextNode(item.name));
+                
+                legendDiv.appendChild(legendItem);
+            });
+        }
+        
+        function renderRadarChart() {
+            if (state.variables.length < 3) {
+                visualizationDiv.innerHTML = '<div style="display: flex; justify-content: center; align-items: center; height: 100%; color: #777;">Need at least 3 variables for radar chart</div>';
+                return;
+            }
+            
+            const canvas = document.createElement('canvas');
+            canvas.width = visualizationDiv.clientWidth;
+            canvas.height = visualizationDiv.clientHeight;
+            visualizationDiv.appendChild(canvas);
+            
+            const ctx = canvas.getContext('2d');
+            
+            // Generate colors for items
+            const colors = generateColors(state.items.length);
+            
+            const datasets = state.items.map((item, index) => {
+                return {
+                    label: item.name,
+                    data: item.scores,
+                    backgroundColor: hexToRgba(colors[index], 0.2),
+                    borderColor: colors[index],
+                    pointBackgroundColor: colors[index],
+                    pointBorderColor: '#fff',
+                    pointHoverBackgroundColor: '#fff',
+                    pointHoverBorderColor: colors[index]
+                };
+            });
+            
+            state.currentChart = new Chart(ctx, {
+                type: 'radar',
+                data: {
+                    labels: state.variables,
+                    datasets: datasets
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        r: {
+                            angleLines: {
+                                display: true
+                            },
+                            suggestedMin: 0,
+                            suggestedMax: 10
+                        }
+                    }
+                }
+            });
+        }
+        
+        function renderBarChart() {
+            const canvas = document.createElement('canvas');
+            canvas.width = visualizationDiv.clientWidth;
+            canvas.height = visualizationDiv.clientHeight;
+            visualizationDiv.appendChild(canvas);
+            
+            const ctx = canvas.getContext('2d');
+            
+            // Generate colors for variables
+            const colors = generateColors(state.variables.length);
+            
+            const datasets = state.variables.map((variable, index) => {
+                return {
+                    label: variable,
+                    data: state.items.map(item => item.scores[index]),
+                    backgroundColor: colors[index],
+                    borderColor: adjustColor(colors[index], -30),
+                    borderWidth: 1
+                };
+            });
+            
+            state.currentChart = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: state.items.map(item => item.name),
+                    datasets: datasets
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            max: 10
+                        }
+                    }
+                }
+            });
+        }
+        
+        function generateColors(count) {
+            const colors = [];
+            const hueStep = 360 / count;
+            
+            for (let i = 0; i < count; i++) {
+                const hue = i * hueStep;
+                colors.push(`hsl(${hue}, 70%, 60%)`);
+            }
+            
+            return colors;
+        }
+        
+        function adjustColor(color, amount) {
+            // Simple adjustment for HSL colors
+            if (color.startsWith('hsl')) {
+                const match = color.match(/hsl\((\d+),\s*(\d+)%,\s*(\d+)%\)/);
+                if (match) {
+                    const h = match[1];
+                    const s = match[2];
+                    let l = parseInt(match[3]) + amount;
+                    l = Math.max(0, Math.min(100, l));
+                    return `hsl(${h}, ${s}%, ${l}%)`;
+                }
+            }
+            return color;
+        }
+        
+        function hexToRgba(hex, alpha) {
+            // Convert HSL to RGBA
+            if (hex.startsWith('hsl')) {
+                const match = hex.match(/hsl\((\d+),\s*(\d+)%,\s*(\d+)%\)/);
+                if (match) {
+                    // This is a simplification - full HSL to RGB conversion is more complex
+                    return `rgba(${match[1]}, ${match[2]}%, ${match[3]}%, ${alpha})`;
+                }
+            }
+            return hex;
+        }
+        
+        function saveData() {
+            const data = {
+                variables: state.variables,
+                items: state.items
+            };
+            
+            localStorage.setItem('paretoData', JSON.stringify(data));
+            showNotification('Data saved successfully!');
+        }
+        
+        function loadData() {
+            const savedData = localStorage.getItem('paretoData');
+            
+            if (savedData) {
+                const data = JSON.parse(savedData);
+                
+                state.variables = data.variables || [];
+                state.items = data.items || [];
+                
+                updateVariablesList();
+                updateItemForm();
+                updateItemsTable();
+                updateVisualization();
+                
+                showNotification('Data loaded successfully!');
+            } else {
+                showNotification('No saved data found', 'warning');
+            }
+        }
+        
+        function exportData() {
+            const data = {
+                variables: state.variables,
+                items: state.items.map(item => ({
+                    name: item.name,
+                    scores: item.scores,
+                    distance: item.distance
+                }))
+            };
+            
+            const jsonStr = JSON.stringify(data, null, 2);
+            const blob = new Blob([jsonStr], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'pareto_data.json';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+            
+            showNotification('Data exported successfully!');
+        }
+        
+        function showNotification(message, type = 'success') {
+            notification.textContent = message;
+            notification.className = 'notification';
+            
+            if (type === 'error') {
+                notification.style.backgroundColor = '#e63946';
+            } else if (type === 'warning') {
+                notification.style.backgroundColor = '#fca311';
+            } else {
+                notification.style.backgroundColor = '#4895ef';
+            }
+            
+            notification.classList.add('show');
+            
+            setTimeout(() => {
+                notification.classList.remove('show');
+            }, 3000);
+        }
+        
+        // Load example data for demo
+        function loadExampleData() {
+            state.variables = ['Cost', 'Performance', 'Reliability', 'Ease of Use'];
+            state.items = [
+                {
+                    name: 'Product A',
+                    scores: [8.5, 7.2, 9.0, 6.8],
+                    distance: 0
+                },
+                {
+                    name: 'Product B',
+                    scores: [9.2, 8.5, 7.0, 8.3],
+                    distance: 0
+                },
+                {
+                    name: 'Product C',
+                    scores: [6.8, 9.1, 8.2, 7.5],
+                    distance: 0
+                },
+                {
+                    name: 'Product D',
+                    scores: [7.5, 6.8, 9.5, 8.8],
+                    distance: 0
+                }
+            ];
+            
+            // Calculate distances
+            state.items.forEach(item => {
+                updateItemDistance(item);
+            });
+            
+            sortItems();
+            updateVariablesList();
+            updateItemForm();
+            updateItemsTable();
+            updateVisualization();
+            
+            showNotification('Example data loaded successfully!');
+        }
+        
+        // Initialize the dashboard
+        function init() {
+            updateVariablesList();
+            updateItemForm();
+            updateItemsTable();
+            checkFirstVisit();
+        }
+        
+        // Global function exposure
+        window.removeVariable = removeVariable;
+        window.removeItem = removeItem;
+        
+        // Initialize
+        init();
+    </script>
+</body>
+</html>
