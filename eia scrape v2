@@ -1,0 +1,615 @@
+import pandas as pd
+import requests
+import os
+import zipfile
+import io
+
+"""
+EIA-860 Data Scraper
+====================
+
+This script provides functionality to download, extract, and load data from the EIA-860
+Annual Electric Generator Report. The EIA-860 collects generator-level information about
+existing and planned generators at electric power plants.
+
+Usage Examples:
+--------------
+# Quick usage - download latest data and load into DataFrame:
+from eia860_scraper import scrape_eia860
+df = scrape_eia860()
+print(df.head())
+
+# Download data for a specific year:
+df_2022 = scrape_eia860(year=2022)
+
+# For more control, use the EIA860Scraper class:
+from eia860_scraper import EIA860Scraper
+scraper = EIA860Scraper()
+available_years = scraper.get_available_years()
+zip_path = scraper.download_data(year=2023)
+extracted_files = scraper.extract_files(zip_path)
+generator_df = scraper.load_generator_data()
+all_data = scraper.load_all_data()
+
+# Handling connection issues:
+# If you're having trouble connecting to the EIA website:
+df = scrape_eia860(
+    proxies={'https': 'http://your-proxy:port'},  # Use if behind a proxy
+    alternative_url="https://www.eia.gov/opendata/bulk-downloads/electricity/form860.zip",  # Alternative URL
+    use_offline_file="path/to/downloaded/file.zip"  # Use local file
+)
+
+Requirements:
+------------
+- pandas
+- requests
+"""
+
+class EIA860Scraper:
+    """
+    A class to scrape and process EIA-860 data.
+    
+    The EIA-860 is the Annual Electric Generator Report that collects generator-level 
+    specific information about existing and planned generators.
+    """
+    
+    def __init__(self, year=None, save_dir=None, api_key=None, proxies=None, use_direct_api=False):
+        """
+        Initialize the EIA-860 scraper.
+        
+        Args:
+            year (int, optional): Year to download data for. Defaults to the most recent available.
+            save_dir (str, optional): Directory to save downloaded files. Defaults to current directory.
+            api_key (str, optional): EIA API key for alternative API access. Not required for basic scraping.
+            proxies (dict, optional): Dictionary mapping protocol to proxy URL (e.g., {'https': 'http://proxy.example.com:8080'})
+            use_direct_api (bool): If True, attempts to use EIA's API instead of web scraping
+        """
+        self.base_url = "https://www.eia.gov/electricity/data/eia860"
+        self.year = year
+        self.save_dir = save_dir or os.getcwd()
+        self.api_key = api_key
+        self.proxies = proxies
+        self.use_direct_api = use_direct_api
+        
+        # Create save directory if it doesn't exist
+        if not os.path.exists(self.save_dir):
+            os.makedirs(self.save_dir, exist_ok=True)
+            
+        # Configure session for reusing connections
+        self.session = requests.Session()
+        if self.proxies:
+            self.session.proxies.update(self.proxies)
+        
+    def get_available_years(self):
+        """
+        Get a list of available years for EIA-860 data.
+        
+        Returns:
+            list: List of available years as integers.
+        """
+        try:
+            # Adding timeout and error handling for more robustness
+            headers = {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+            }
+            
+            print(f"Attempting to connect to {self.base_url}...")
+            response = requests.get(self.base_url, headers=headers, timeout=30)
+            
+            if response.status_code != 200:
+                print(f"Failed to access {self.base_url}, status code: {response.status_code}")
+                print("Using fallback list of years instead.")
+                # Provide fallback years if the website can't be accessed
+                return list(range(2023, 2010, -1))
+            
+            # This is a simplistic approach - the actual implementation might need to be 
+            # adjusted based on the current EIA website structure
+            # Look for links to ZIP files which typically contain the year in their name
+            import re
+            years = set()
+            for match in re.finditer(r'href="([^"]*eia860([^"/]*))\.zip"', response.text):
+                year_match = re.search(r'(19|20)\d{2}', match.group(1))
+                if year_match:
+                    years.add(int(year_match.group(0)))
+            
+            if not years:
+                print("No years found in the HTML. The website structure may have changed.")
+                print("Using fallback list of years instead.")
+                return list(range(2023, 2010, -1))
+            
+            return sorted(list(years), reverse=True)
+            
+        except requests.exceptions.ConnectionError as e:
+            print(f"Connection error when accessing {self.base_url}: {e}")
+            print("This could be due to network issues or firewall restrictions.")
+            print("Using fallback list of years instead.")
+            return list(range(2023, 2010, -1))
+            
+        except requests.exceptions.Timeout:
+            print(f"Timeout when accessing {self.base_url}")
+            print("The server took too long to respond. Using fallback list of years.")
+            return list(range(2023, 2010, -1))
+            
+        except Exception as e:
+            print(f"Unexpected error when accessing {self.base_url}: {str(e)}")
+            print("Using fallback list of years instead.")
+            return list(range(2023, 2010, -1))
+    
+    def download_data(self, year=None):
+        """
+        Download EIA-860 data for the specified year.
+        
+        Args:
+            year (int, optional): Year to download data for. If None, uses self.year or the most recent.
+            
+        Returns:
+            str: Path to the downloaded zip file.
+        """
+        year_to_use = year or self.year
+        
+        if not year_to_use:
+            # If no year specified, get the most recent
+            available_years = self.get_available_years()
+            if not available_years:
+                raise Exception("Could not determine available years")
+            year_to_use = available_years[0]
+        
+        # Construct the URL for the specified year
+        # This URL pattern might need adjustment based on EIA's current structure
+        zip_url = f"{self.base_url}/archive/xls/eia860{year_to_use}.zip"
+        
+        # Use a browser-like User-Agent to avoid being blocked
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+        }
+        
+        print(f"Downloading EIA-860 data for {year_to_use}...")
+        
+        try:
+            response = requests.get(zip_url, headers=headers, timeout=60, stream=True)
+            
+            if response.status_code != 200:
+                # Try alternative URL patterns
+                alternative_urls = [
+                    f"{self.base_url}/xls/eia860{year_to_use}.zip",
+                    f"{self.base_url}/eia860{year_to_use}.zip",
+                    # Try direct download from the EIA open data
+                    f"https://www.eia.gov/opendata/bulk-downloads/electricity/form860.zip"
+                ]
+                
+                for alt_url in alternative_urls:
+                    print(f"Trying alternative URL: {alt_url}")
+                    try:
+                        response = requests.get(alt_url, headers=headers, timeout=60, stream=True)
+                        if response.status_code == 200:
+                            print(f"Success with URL: {alt_url}")
+                            break
+                    except requests.exceptions.RequestException as e:
+                        print(f"Failed with error: {e}")
+                        continue
+                
+                if response.status_code != 200:
+                    raise Exception(f"Failed to download data for {year_to_use}, status code: {response.status_code}")
+            
+            # Save the zip file
+            zip_path = os.path.join(self.save_dir, f"eia860_{year_to_use}.zip")
+            
+            # Stream the download to handle large files better
+            print(f"Saving to {zip_path}...")
+            with open(zip_path, 'wb') as f:
+                for chunk in response.iter_content(chunk_size=8192):
+                    if chunk:
+                        f.write(chunk)
+            
+            print(f"Successfully downloaded to {zip_path}")
+            return zip_path
+            
+        except requests.exceptions.ConnectionError as e:
+            print(f"Connection error when downloading data: {e}")
+            print("This could be due to network issues, firewall restrictions, or proxy settings.")
+            print("Troubleshooting tips:")
+            print("1. Check your internet connection")
+            print("2. Try using a VPN or different network")
+            print("3. If behind a corporate firewall, contact IT for assistance")
+            print("4. You might need to configure proxy settings in the requests library")
+            raise Exception(f"Connection error: {e}")
+            
+        except requests.exceptions.Timeout as e:
+            print(f"Timeout when downloading data: {e}")
+            print("The server took too long to respond.")
+            raise Exception(f"Timeout error: {e}")
+            
+        except Exception as e:
+            print(f"Unexpected error when downloading data: {str(e)}")
+            raise
+    
+    def extract_files(self, zip_path=None, extract_all=False):
+        """
+        Extract files from the downloaded zip.
+        
+        Args:
+            zip_path (str, optional): Path to the zip file. If None, uses the most recently downloaded.
+            extract_all (bool): Whether to extract all files or just the main data files.
+            
+        Returns:
+            dict: Dictionary mapping file names to their extracted paths.
+        """
+        if not zip_path:
+            # Find the most recent zip file in the save directory
+            zip_files = [f for f in os.listdir(self.save_dir) if f.startswith("eia860_") and f.endswith(".zip")]
+            if not zip_files:
+                raise Exception("No downloaded zip files found")
+            zip_path = os.path.join(self.save_dir, sorted(zip_files)[-1])
+        
+        print(f"Extracting files from {zip_path}...")
+        extract_dir = os.path.splitext(zip_path)[0]
+        os.makedirs(extract_dir, exist_ok=True)
+        
+        extracted_files = {}
+        with zipfile.ZipFile(zip_path, 'r') as zip_ref:
+            # Get list of files in the zip
+            file_list = zip_ref.namelist()
+            
+            # Filter for data files (usually Excel files)
+            files_to_extract = file_list
+            if not extract_all:
+                files_to_extract = [f for f in file_list if f.lower().endswith(('.xlsx', '.xls'))]
+            
+            # Extract the files
+            for file in files_to_extract:
+                extracted_path = zip_ref.extract(file, extract_dir)
+                extracted_files[file] = extracted_path
+                print(f"Extracted: {file}")
+        
+        return extracted_files
+    
+    def load_generator_data(self, excel_path=None):
+        """
+        Load generator data from the EIA-860 Excel file.
+        
+        Args:
+            excel_path (str, optional): Path to the Excel file. If None, tries to find it in extracted files.
+            
+        Returns:
+            pandas.DataFrame: DataFrame containing generator data.
+        """
+        if not excel_path:
+            # Try to find the generator data file in the extracted directory
+            extract_dir = os.path.join(self.save_dir, f"eia860_{self.year or ''}")
+            if not os.path.exists(extract_dir):
+                extracted_files = self.extract_files()
+                excel_files = [f for f in extracted_files.values() if f.lower().endswith(('.xlsx', '.xls'))]
+                if not excel_files:
+                    raise Exception("No Excel files found in extracted data")
+                
+                # Look for the file containing generator data
+                for file in excel_files:
+                    if "generator" in file.lower():
+                        excel_path = file
+                        break
+                
+                if not excel_path:
+                    excel_path = excel_files[0]  # Just use the first Excel file if can't identify
+        
+        print(f"Loading generator data from {excel_path}...")
+        
+        # The EIA-860 file typically has multiple sheets
+        # We'll try to identify and load the generator data
+        xl = pd.ExcelFile(excel_path)
+        
+        # Find sheets that likely contain generator data
+        generator_sheets = [s for s in xl.sheet_names if 'generator' in s.lower()]
+        
+        if not generator_sheets:
+            print("Could not find a sheet with 'generator' in the name. Available sheets:")
+            for sheet in xl.sheet_names:
+                print(f" - {sheet}")
+            
+            # Try to use "3_1_Generator" or similar naming patterns
+            generator_sheets = [s for s in xl.sheet_names if '3_1' in s or 'plant' in s.lower()]
+            
+            if not generator_sheets:
+                # Just use the first sheet if can't identify
+                generator_sheets = [xl.sheet_names[0]]
+        
+        print(f"Loading generator data from sheet: {generator_sheets[0]}")
+        
+        # Usually, the generator data has headers a few rows down
+        try:
+            df = pd.read_excel(excel_path, sheet_name=generator_sheets[0], skiprows=1)
+        except:
+            # If that fails, try different skiprows values
+            for skip in range(5):
+                try:
+                    df = pd.read_excel(excel_path, sheet_name=generator_sheets[0], skiprows=skip)
+                    break
+                except:
+                    continue
+        
+        # Clean up column names (remove whitespace, etc.)
+        df.columns = [str(col).strip() for col in df.columns]
+        
+        # Drop empty rows
+        df = df.dropna(how='all')
+        
+        # Print data overview
+        print(f"Loaded {len(df)} generator records")
+        print("Column names:", df.columns.tolist())
+        
+        return df
+    
+    def load_all_data(self, extract_dir=None):
+        """
+        Load all relevant data tables from the EIA-860 files.
+        
+        Args:
+            extract_dir (str, optional): Directory containing extracted files.
+            
+        Returns:
+            dict: Dictionary mapping table names to DataFrames.
+        """
+        if not extract_dir:
+            # Try to find the extracted directory
+            extract_dir = os.path.join(self.save_dir, f"eia860_{self.year or ''}")
+            if not os.path.exists(extract_dir):
+                extracted_files = self.extract_files()
+                extract_dir = os.path.dirname(list(extracted_files.values())[0])
+        
+        # Find all Excel files in the extract directory
+        excel_files = []
+        for root, _, files in os.walk(extract_dir):
+            for file in files:
+                if file.lower().endswith(('.xlsx', '.xls')):
+                    excel_files.append(os.path.join(root, file))
+        
+        if not excel_files:
+            raise Exception(f"No Excel files found in {extract_dir}")
+        
+        # Load data from each Excel file
+        all_data = {}
+        
+        for excel_path in excel_files:
+            file_name = os.path.basename(excel_path)
+            print(f"Processing {file_name}...")
+            
+            xl = pd.ExcelFile(excel_path)
+            
+            for sheet_name in xl.sheet_names:
+                # Skip sheets that are likely just documentation
+                if sheet_name.lower() in ['notes', 'contents', 'readme', 'instructions']:
+                    continue
+                
+                print(f"  Loading sheet: {sheet_name}")
+                
+                # Try to load the data with different skiprows values
+                for skip in range(5):
+                    try:
+                        df = pd.read_excel(excel_path, sheet_name=sheet_name, skiprows=skip)
+                        
+                        # Check if this seems like a valid data table
+                        if len(df.columns) > 2 and len(df) > 2:
+                            # Clean column names
+                            df.columns = [str(col).strip() for col in df.columns]
+                            
+                            # Drop empty rows
+                            df = df.dropna(how='all')
+                            
+                            table_name = f"{os.path.splitext(file_name)[0]}_{sheet_name}"
+                            all_data[table_name] = df
+                            print(f"    Loaded {len(df)} rows with {len(df.columns)} columns")
+                            break
+                    except Exception as e:
+                        if skip == 4:  # Last attempt
+                            print(f"    Failed to load sheet: {e}")
+        
+        return all_data
+
+def scrape_eia860(year=None, save_dir=None, extract=True, load_data=True, proxies=None, use_direct_api=False, 
+               alternative_url=None, use_offline_file=None):
+    """
+    Convenience function to scrape EIA-860 data in one step.
+    
+    Args:
+        year (int, optional): Year to download data for.
+        save_dir (str, optional): Directory to save downloaded files.
+        extract (bool): Whether to extract files from the zip.
+        load_data (bool): Whether to load generator data into a DataFrame.
+        proxies (dict, optional): Dictionary mapping protocol to proxy URL.
+        use_direct_api (bool): If True, attempts to use EIA's API instead of web scraping.
+        alternative_url (str, optional): Directly specify URL to download from.
+        use_offline_file (str, optional): Path to existing zip file if already downloaded.
+        
+    Returns:
+        pandas.DataFrame or None: Generator data DataFrame if load_data is True.
+    """
+    scraper = EIA860Scraper(year=year, save_dir=save_dir, proxies=proxies, use_direct_api=use_direct_api)
+    
+    try:
+        if use_offline_file:
+            if os.path.exists(use_offline_file):
+                print(f"Using existing offline file: {use_offline_file}")
+                zip_path = use_offline_file
+            else:
+                raise Exception(f"Specified offline file does not exist: {use_offline_file}")
+        else:
+            # Try to download the data
+            try:
+                if alternative_url:
+                    print(f"Using alternative URL: {alternative_url}")
+                    headers = {
+                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+                    }
+                    response = requests.get(alternative_url, headers=headers, timeout=60, stream=True)
+                    if response.status_code != 200:
+                        raise Exception(f"Failed to download from alternative URL, status code: {response.status_code}")
+                    
+                    year_str = str(year) if year else "data"
+                    zip_path = os.path.join(scraper.save_dir, f"eia860_{year_str}.zip")
+                    with open(zip_path, 'wb') as f:
+                        for chunk in response.iter_content(chunk_size=8192):
+                            if chunk:
+                                f.write(chunk)
+                else:
+                    zip_path = scraper.download_data()
+            except Exception as e:
+                print(f"Download failed: {str(e)}")
+                print("Looking for existing files in the save directory...")
+                
+                # Try to use any existing zip files in the save directory
+                zip_files = [f for f in os.listdir(scraper.save_dir) 
+                             if f.startswith("eia860_") and f.endswith(".zip")]
+                
+                if zip_files:
+                    print(f"Found existing zip files: {zip_files}")
+                    # Use the most recent one
+                    zip_files.sort(reverse=True)
+                    zip_path = os.path.join(scraper.save_dir, zip_files[0])
+                    print(f"Using existing file: {zip_path}")
+                else:
+                    raise Exception("Download failed and no existing files found. Please check your network connection.")
+        
+        if extract:
+            try:
+                extracted_files = scraper.extract_files(zip_path)
+            except Exception as extract_error:
+                print(f"Extraction failed: {str(extract_error)}")
+                return None
+        
+        if load_data:
+            try:
+                return scraper.load_generator_data()
+            except Exception as load_error:
+                print(f"Loading data failed: {str(load_error)}")
+                return None
+        
+        return None
+    
+    except Exception as e:
+        print(f"Error in scrape_eia860: {str(e)}")
+        print("\nTroubleshooting tips:")
+        print("1. Network issues: Check your internet connection")
+        print("2. Firewall issues: Your network might be blocking access to www.eia.gov")
+        print("3. Proxy settings: If you're behind a proxy, specify it using the 'proxies' parameter")
+        print("4. Try using an alternative URL or downloading the file manually and using 'use_offline_file'")
+        return None
+
+# Example usage
+if __name__ == "__main__":
+    # Get the most recent available year
+    scraper = EIA860Scraper()
+    available_years = scraper.get_available_years()
+    print(f"Available years: {available_years}")
+    
+    # Scrape the most recent year
+    df = scrape_eia860(year=available_years[0] if available_years else None)
+    
+    # Display the first few rows
+    if df is not None:
+        print("\nSample data:")
+        print(df.head())
+
+"""
+USAGE GUIDE
+===========
+
+This EIA-860 Scraper provides multiple ways to access and process EIA-860 data:
+
+1. Quick Start:
+   ```python
+   from eia860_scraper import scrape_eia860
+   
+   # Get the most recent year's data
+   df = scrape_eia860()
+   
+   # Or specify a year
+   df_2022 = scrape_eia860(year=2022)
+   ```
+
+2. Step-by-Step Approach:
+   ```python
+   from eia860_scraper import EIA860Scraper
+   
+   # Initialize the scraper
+   scraper = EIA860Scraper()
+   
+   # Get available years
+   years = scraper.get_available_years()
+   print(f"Available years: {years}")
+   
+   # Download a specific year
+   zip_path = scraper.download_data(year=2022)
+   
+   # Extract files
+   extracted_files = scraper.extract_files(zip_path)
+   
+   # Load generator data
+   generator_df = scraper.load_generator_data()
+   
+   # Or load all tables
+   all_data = scraper.load_all_data()
+   ```
+
+3. Common Data Analysis Tasks:
+   ```python
+   # Find all plants in California
+   ca_plants = df[df['State'] == 'CA']
+   
+   # Get total capacity by fuel type
+   capacity_by_fuel = df.groupby('Fuel Type (Primary)').agg({
+       'Nameplate Capacity (MW)': 'sum'
+   }).sort_values('Nameplate Capacity (MW)', ascending=False)
+   
+   # Find all solar generators
+   solar = df[df['Fuel Type (Primary)'].str.contains('Solar', case=False, na=False)]
+   ```
+
+Note: The actual column names may vary by year and version of the EIA-860 form.
+Make sure to inspect df.columns to see the available fields for your data.
+"""
+
+"""
+TROUBLESHOOTING
+==============
+
+If you're seeing connection errors like:
+ConnectionError: HTTPSConnectionPool(host='www.eia.gov', port=443): Max retries exceeded
+
+Here are some solutions to try:
+
+1. Network/Firewall Issues:
+   - Some networks (especially corporate networks) block access to certain websites
+   - Try running the script from a different network
+   - If on a corporate network, contact IT for assistance
+
+2. Using Proxies:
+   ```python
+   proxies = {
+       'http': 'http://your-proxy:port',
+       'https': 'http://your-proxy:port'
+   }
+   df = scrape_eia860(proxies=proxies)
+   ```
+
+3. Using Alternative URLs:
+   ```python
+   # Direct link to EIA open data
+   alt_url = "https://www.eia.gov/opendata/bulk-downloads/electricity/form860.zip"
+   df = scrape_eia860(alternative_url=alt_url)
+   ```
+
+4. Using Offline Files:
+   - Download the file manually from the EIA website
+   - Use the offline file option:
+   ```python
+   df = scrape_eia860(use_offline_file="path/to/downloaded/eia860_2023.zip")
+   ```
+
+5. Manually downloading data:
+   - Visit https://www.eia.gov/electricity/data/eia860/
+   - Download the ZIP file for your desired year
+   - Use pandas to read the Excel files directly:
+   ```python
+   import pandas as pd
+   df = pd.read_excel("path/to/extracted/3_1_Generator_Y2023.xlsx", skiprows=1)
+   ```
+"""
