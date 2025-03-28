@@ -1,0 +1,812 @@
+import pandas as pd
+import numpy as np
+from datetime import datetime, timedelta
+from flask import Flask, render_template, jsonify, send_from_directory
+import os
+
+# Create app directory structure
+os.makedirs('static', exist_ok=True)
+os.makedirs('templates', exist_ok=True)
+
+# Flask app
+app = Flask(__name__)
+
+# Function to generate CSV data
+def generate_price_data():
+    # Set seed for reproducibility
+    np.random.seed(42)
+
+    # Create date range from 1/1/2010 to today
+    start_date = datetime(2010, 1, 1)
+    end_date = datetime(2025, 3, 28)  # Current date
+    date_range = pd.date_range(start=start_date, end=end_date, freq='D')
+
+    # Create DataFrame with dates
+    df = pd.DataFrame({'Date': date_range})
+
+    # Define power regions
+    power_regions = ['ERCOT_North', 'ERCOT_Houston', 'ERCOT_West', 'ERCOT_South']
+
+    # Define price indices
+    price_indices = ['Peak', 'OffPeak', '2x16', '7x8', 'ATC']
+
+    # Base prices and volatility parameters for different regions
+    base_prices = {
+        'ERCOT_North': 35,
+        'ERCOT_Houston': 38,
+        'ERCOT_West': 32,
+        'ERCOT_South': 36,
+        'Waha_Gas': 3.2,  # $/MMBtu
+        'Henry_Gas': 3.5  # $/MMBtu
+    }
+
+    volatility = {
+        'ERCOT_North': 0.15,
+        'ERCOT_Houston': 0.18,
+        'ERCOT_West': 0.20,
+        'ERCOT_South': 0.17,
+        'Waha_Gas': 0.25,
+        'Henry_Gas': 0.2
+    }
+
+    # Seasonal factors (multipliers for each month)
+    seasonal_factors = {
+        1: 1.2,  # January
+        2: 1.15,
+        3: 0.9,
+        4: 0.85,
+        5: 1.0,
+        6: 1.3,  # Summer peak
+        7: 1.4,  # Summer peak
+        8: 1.45, # Summer peak
+        9: 1.15,
+        10: 0.9,
+        11: 0.95,
+        12: 1.1   # December
+    }
+
+    # Index multipliers (relative to base price)
+    index_multipliers = {
+        'Peak': 1.3,
+        'OffPeak': 0.7,
+        '2x16': 1.1,
+        '7x8': 0.65,
+        'ATC': 1.0
+    }
+
+    # Function to generate price series with trends, seasonality, and random variation
+    def generate_price_series(base_price, volatility, dates, product_type):
+        # Add long-term trend component
+        years = (dates - dates[0]).days / 365.25
+        if product_type.startswith('ERCOT'):
+            # ERCOT prices had a general upward trend
+            trend = base_price * (1 + 0.04 * years)
+        else:
+            # Gas prices had more volatility with periods of high and low prices
+            trend = base_price * (1 + 0.02 * np.sin(years * 0.5) + 0.01 * years)
+        
+        # Add seasonal component
+        month = dates.month
+        seasonal = np.array([seasonal_factors[m] for m in month])
+        
+        # Special adjustments for extreme events
+        
+        # 2021 Texas Winter Storm (February 2021)
+        if product_type.startswith('ERCOT'):
+            winter_storm_mask = (dates.year == 2021) & (dates.month == 2) & (dates.day >= 14) & (dates.day <= 19)
+            seasonal[winter_storm_mask] *= 15  # Extreme price spike
+        
+        # COVID-19 impact (March-May 2020)
+        covid_mask = (dates.year == 2020) & (dates.month >= 3) & (dates.month <= 5)
+        seasonal[covid_mask] *= 0.7  # Reduced demand
+        
+        # Add random component
+        random = np.exp(np.random.normal(0, volatility, len(dates)))
+        
+        # Combine components
+        prices = trend * seasonal * random
+        
+        # Add daily patterns
+        day_of_week = dates.dayofweek
+        weekend_mask = (day_of_week >= 5)  # Saturday and Sunday
+        prices[weekend_mask] *= 0.85  # Weekend discount
+        
+        return prices
+
+    # Generate prices for each power region and index
+    for region in power_regions:
+        base_price = base_prices[region]
+        vol = volatility[region]
+        base_series = generate_price_series(base_price, vol, date_range, region)
+        
+        for index in price_indices:
+            col_name = f"{region}_{index}"
+            multiplier = index_multipliers[index]
+            df[col_name] = base_series * multiplier
+            
+            # Round to 2 decimal places
+            df[col_name] = np.round(df[col_name], 2)
+
+    # Generate gas prices
+    for gas in ['Waha_Gas', 'Henry_Gas']:
+        base_price = base_prices[gas]
+        vol = volatility[gas]
+        df[gas] = generate_price_series(base_price, vol, date_range, gas)
+        df[gas] = np.round(df[gas], 2)
+
+    # Save to CSV
+    csv_path = 'static/ercot_gas_prices.csv'
+    df.to_csv(csv_path, index=False)
+    
+    # Return column names for reference
+    return list(df.columns), csv_path
+
+# Generate some sample data for the other tabs
+def generate_fundamentals_data():
+    # Generate some sample fundamentals data
+    date_range = pd.date_range(start='2010-01-01', end='2025-03-28', freq='MS')  # Monthly data
+    df = pd.DataFrame({'Date': date_range})
+    
+    # Generate random values with trends for fundamental metrics
+    np.random.seed(123)  # For reproducibility
+    
+    # Gas storage levels (BCF)
+    base_storage = 2500
+    seasonal_pattern = 500 * np.sin(np.arange(len(date_range)) * (2 * np.pi / 12))
+    trend = np.arange(len(date_range)) * 0.5
+    random_component = np.random.normal(0, 100, len(date_range))
+    df['Gas_Storage_BCF'] = base_storage + seasonal_pattern + trend + random_component
+    
+    # Power demand (GWh)
+    base_demand = 35000
+    demand_seasonal = 10000 * np.sin(np.arange(len(date_range)) * (2 * np.pi / 12) + np.pi)  # Peak in summer
+    demand_trend = np.arange(len(date_range)) * 5
+    demand_random = np.random.normal(0, 1000, len(date_range))
+    df['Power_Demand_GWh'] = base_demand + demand_seasonal + demand_trend + demand_random
+    
+    # Power capacity (MW)
+    df['Thermal_Capacity_MW'] = 50000 + np.arange(len(date_range)) * 10 + np.random.normal(0, 100, len(date_range))
+    df['Wind_Capacity_MW'] = 5000 + np.arange(len(date_range)) * 50 + np.random.normal(0, 200, len(date_range))
+    df['Solar_Capacity_MW'] = 500 + np.arange(len(date_range)) * 30 + np.random.normal(0, 50, len(date_range))
+    
+    # Round values
+    df = df.round(0)
+    
+    # Save to CSV
+    csv_path = 'static/fundamentals_data.csv'
+    df.to_csv(csv_path, index=False)
+    
+    return list(df.columns), csv_path
+
+# Generate NBR (Net Burn Rate) data
+def generate_nbr_data():
+    # Generate some sample NBR data
+    date_range = pd.date_range(start='2010-01-01', end='2025-03-28', freq='D')
+    df = pd.DataFrame({'Date': date_range})
+    
+    # Generate daily gas burn for power generation (BCF/day)
+    np.random.seed(456)  # For reproducibility
+    
+    # Base burn rate with seasonal pattern and gradual growth
+    base_burn = 4.0
+    seasonal_pattern = 3.0 * np.sin(np.arange(len(date_range)) * (2 * np.pi / 365) + np.pi)  # Peak in summer
+    trend = np.arange(len(date_range)) * 0.0005  # Gradual increase over time
+    
+    # Add weather-related spikes (heat waves and cold snaps)
+    random_component = np.random.normal(0, 0.3, len(date_range))
+    spike_locations = np.random.choice(len(date_range), size=50, replace=False)
+    spike_magnitudes = np.random.normal(2, 0.5, 50)
+    
+    spikes = np.zeros(len(date_range))
+    for loc, mag in zip(spike_locations, spike_magnitudes):
+        # Create a spike with a 3-day effect
+        for i in range(-1, 2):
+            if 0 <= loc + i < len(date_range):
+                spikes[loc + i] += mag * (1 - abs(i) * 0.3)  # Diminishing effect
+    
+    df['Gas_Burn_BCF'] = base_burn + seasonal_pattern + trend + random_component + spikes
+    df['Gas_Burn_BCF'] = np.maximum(df['Gas_Burn_BCF'], 0.5)  # Minimum burn
+    
+    # Add power generation (GWh)
+    heat_rate = 7.5 + np.random.normal(0, 0.2, len(date_range))  # MMBtu/MWh with some variability
+    df['Power_Gen_GWh'] = df['Gas_Burn_BCF'] * 1000 / heat_rate  # Convert BCF to MMBtu then to GWh
+    
+    # Calculate implied heat rate
+    df['Implied_Heat_Rate'] = 7.5 + seasonal_pattern * 0.1 + np.random.normal(0, 0.3, len(date_range))
+    
+    # Round values
+    df['Gas_Burn_BCF'] = df['Gas_Burn_BCF'].round(2)
+    df['Power_Gen_GWh'] = df['Power_Gen_GWh'].round(0)
+    df['Implied_Heat_Rate'] = df['Implied_Heat_Rate'].round(2)
+    
+    # Save to CSV
+    csv_path = 'static/nbr_data.csv'
+    df.to_csv(csv_path, index=False)
+    
+    return list(df.columns), csv_path
+
+# Routes
+@app.route('/')
+def index():
+    # Generate all data and create HTML template
+    price_columns, price_csv = generate_price_data()
+    fundamentals_columns, fundamentals_csv = generate_fundamentals_data()
+    nbr_columns, nbr_csv = generate_nbr_data()
+    
+    return render_template('dashboard.html', 
+                          price_columns=price_columns,
+                          fundamentals_columns=fundamentals_columns,
+                          nbr_columns=nbr_columns)
+
+@app.route('/data/<path:filename>')
+def get_data(filename):
+    return send_from_directory('static', filename)
+
+# Create HTML template
+dashboard_html = """
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>YANUS Dashboard</title>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/lodash.js/4.17.21/lodash.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.29.4/moment.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
+    <style>
+        :root {
+            --primary-color: #2c3e50;
+            --secondary-color: #3498db;
+            --accent-color: #e67e22;
+            --light-color: #ecf0f1;
+            --dark-color: #2c3e50;
+            --success-color: #2ecc71;
+            --warning-color: #f39c12;
+            --danger-color: #e74c3c;
+            --winter-color: #e6f7ff;
+            --summer-color: #fff2e6;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            color: var(--dark-color);
+            margin: 0;
+            padding: 0;
+            background-color: #f5f7fa;
+        }
+        
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        
+        header {
+            background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
+            color: white;
+            padding: 1.5rem;
+            margin-bottom: 2rem;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .header-logo {
+            display: flex;
+            align-items: center;
+        }
+        
+        .header-logo i {
+            font-size: 2rem;
+            margin-right: 15px;
+        }
+        
+        h1 {
+            margin: 0;
+            font-size: 2rem;
+            letter-spacing: 1px;
+        }
+        
+        .header-date {
+            font-size: 1rem;
+            opacity: 0.9;
+        }
+        
+        .tabs {
+            display: flex;
+            background-color: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            margin-bottom: 2rem;
+            overflow: hidden;
+        }
+        
+        .tab-btn {
+            padding: 15px 25px;
+            background-color: transparent;
+            border: none;
+            cursor: pointer;
+            font-size: 1rem;
+            font-weight: 600;
+            color: var(--dark-color);
+            transition: all 0.3s ease;
+            position: relative;
+            flex: 1;
+            text-align: center;
+        }
+        
+        .tab-btn:hover {
+            background-color: rgba(0,0,0,0.05);
+        }
+        
+        .tab-btn.active {
+            color: var(--secondary-color);
+        }
+        
+        .tab-btn.active::after {
+            content: '';
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            height: 3px;
+            background-color: var(--secondary-color);
+        }
+        
+        .tab-btn i {
+            margin-right: 8px;
+        }
+        
+        .tab-content {
+            display: none;
+        }
+        
+        .tab-content.active {
+            display: block;
+        }
+        
+        .controls {
+            background-color: white;
+            padding: 1.5rem;
+            border-radius: 8px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            margin-bottom: 2rem;
+        }
+        
+        .pivots-container {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 20px;
+            justify-content: space-between;
+        }
+        
+        .pivot-table-container {
+            background-color: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            padding: 1rem;
+            margin-bottom: 20px;
+            flex: 0 0 calc(50% - 10px);
+            box-sizing: border-box;
+        }
+        
+        @media (max-width: 1200px) {
+            .pivot-table-container {
+                flex: 0 0 100%;
+            }
+        }
+        
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 10px;
+        }
+        
+        th, td {
+            border: 1px solid #ddd;
+            padding: 8px;
+            text-align: right;
+        }
+        
+        th {
+            background-color: #f2f2f2;
+            text-align: center;
+            position: sticky;
+            top: 0;
+            font-weight: 600;
+        }
+        
+        tr:nth-child(even) {
+            background-color: #f9f9f9;
+        }
+        
+        tr:hover {
+            background-color: #f0f0f0;
+        }
+        
+        .winter-month {
+            background-color: var(--winter-color);
+        }
+        
+        .summer-month {
+            background-color: var(--summer-color);
+        }
+        
+        .market-select, select {
+            display: block;
+            width: 100%;
+            padding: 10px;
+            margin-bottom: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 0.9rem;
+        }
+        
+        .column-select {
+            height: 150px;
+            width: 100%;
+            margin-bottom: 15px;
+        }
+        
+        button {
+            background-color: var(--primary-color);
+            color: white;
+            border: none;
+            padding: 10px 15px;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+            font-weight: 600;
+        }
+        
+        button:hover {
+            background-color: var(--secondary-color);
+        }
+        
+        .form-row {
+            display: flex;
+            gap: 15px;
+            margin-bottom: 15px;
+        }
+        
+        .form-group {
+            flex: 1;
+        }
+        
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: 600;
+            color: var(--dark-color);
+        }
+        
+        .loading {
+            text-align: center;
+            padding: 2rem;
+            font-size: 1.2rem;
+            color: #666;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .loading i {
+            margin-right: 10px;
+            animation: spin 1s linear infinite;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        .error {
+            background-color: #ffe6e6;
+            color: var(--danger-color);
+            padding: 1rem;
+            border-radius: 5px;
+            margin-bottom: 1rem;
+            display: flex;
+            align-items: center;
+        }
+        
+        .error i {
+            margin-right: 10px;
+            font-size: 1.2rem;
+        }
+        
+        .pivot-title {
+            font-size: 1.2rem;
+            font-weight: bold;
+            margin-bottom: 10px;
+            text-align: center;
+            color: var(--primary-color);
+            padding: 5px 0;
+            border-bottom: 2px solid #eee;
+        }
+        
+        .checkbox-group {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-top: 10px;
+        }
+        
+        .checkbox-item {
+            display: flex;
+            align-items: center;
+            background-color: #f5f7fa;
+            padding: 5px 10px;
+            border-radius: 4px;
+        }
+        
+        .checkbox-item input {
+            margin-right: 5px;
+        }
+        
+        .chart-container {
+            background-color: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            padding: 1rem;
+            margin-bottom: 20px;
+            height: 400px;
+        }
+        
+        .two-column {
+            display: flex;
+            gap: 20px;
+        }
+        
+        .two-column > div {
+            flex: 1;
+        }
+        
+        .card {
+            background-color: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            padding: 1.5rem;
+            margin-bottom: 20px;
+        }
+        
+        .card-title {
+            font-size: 1.2rem;
+            font-weight: bold;
+            margin-bottom: 15px;
+            color: var(--primary-color);
+            border-bottom: 2px solid #eee;
+            padding-bottom: 10px;
+        }
+        
+        .stat-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+        
+        .stat-card {
+            background-color: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            padding: 1rem;
+            text-align: center;
+            transition: transform 0.3s;
+        }
+        
+        .stat-card:hover {
+            transform: translateY(-5px);
+        }
+        
+        .stat-title {
+            font-size: 0.9rem;
+            color: #777;
+            margin-bottom: 5px;
+        }
+        
+        .stat-value {
+            font-size: 1.8rem;
+            font-weight: bold;
+            color: var(--primary-color);
+            margin-bottom: 5px;
+        }
+        
+        .stat-change {
+            font-size: 0.9rem;
+        }
+        
+        .stat-change.positive {
+            color: var(--success-color);
+        }
+        
+        .stat-change.negative {
+            color: var(--danger-color);
+        }
+        
+        .tooltip {
+            position: relative;
+            display: inline-block;
+            cursor: pointer;
+        }
+        
+        .tooltip .tooltip-text {
+            visibility: hidden;
+            width: 200px;
+            background-color: #555;
+            color: #fff;
+            text-align: center;
+            border-radius: 6px;
+            padding: 5px;
+            position: absolute;
+            z-index: 1;
+            bottom: 125%;
+            left: 50%;
+            margin-left: -100px;
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+        
+        .tooltip:hover .tooltip-text {
+            visibility: visible;
+            opacity: 1;
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="header-logo">
+            <i class="fas fa-bolt"></i>
+            <h1>YANUS Dashboard</h1>
+        </div>
+        <div class="header-date" id="currentDate">
+            Loading...
+        </div>
+    </header>
+
+    <div class="container">
+        <div class="tabs">
+            <button class="tab-btn active" data-tab="price-tracker">
+                <i class="fas fa-chart-line"></i> Price Tracker
+            </button>
+            <button class="tab-btn" data-tab="fundamentals">
+                <i class="fas fa-database"></i> Fundamentals
+            </button>
+            <button class="tab-btn" data-tab="nbr">
+                <i class="fas fa-fire"></i> NBR
+            </button>
+        </div>
+
+        <!-- Price Tracker Tab -->
+        <div class="tab-content active" id="price-tracker">
+            <div class="controls">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="periodType">Period Type:</label>
+                        <select id="periodType" class="market-select">
+                            <option value="monthly">Monthly Average</option>
+                            <option value="quarterly">Quarterly Average</option>
+                            <option value="yearly">Yearly Average</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="yearRange">Year Range:</label>
+                        <div class="form-row">
+                            <select id="startYear" class="market-select"></select>
+                            <select id="endYear" class="market-select"></select>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="columnSelect">Select Columns to Display:</label>
+                        <select id="columnSelect" class="column-select" multiple>
+                            {% for column in price_columns %}
+                                {% if column != "Date" %}
+                                <option value="{{ column }}">{{ column }}</option>
+                                {% endif %}
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Aggregations:</label>
+                        <div class="checkbox-group">
+                            <div class="checkbox-item">
+                                <input type="checkbox" id="showFrontMonth" checked>
+                                <label for="showFrontMonth">Front Month (FM)</label>
+                            </div>
+                            <div class="checkbox-item">
+                                <input type="checkbox" id="showNearQuarter" checked>
+                                <label for="showNearQuarter">Near Quarter (NQ)</label>
+                            </div>
+                            <div class="checkbox-item">
+                                <input type="checkbox" id="showQ4" checked>
+                                <label for="showQ4">Q4</label>
+                            </div>
+                            <div class="checkbox-item">
+                                <input type="checkbox" id="showCal" checked>
+                                <label for="showCal">Calendar Year (Cal)</label>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <button id="generateBtn">
+                    <i class="fas fa-sync-alt"></i> Generate Pivot Tables
+                </button>
+            </div>
+
+            <div id="errorMsg" class="error" style="display: none;">
+                <i class="fas fa-exclamation-circle"></i>
+                <span id="errorText"></span>
+            </div>
+            
+            <div id="loading" class="loading" style="display: none;">
+                <i class="fas fa-spinner"></i> Loading and processing data...
+            </div>
+            
+            <div id="pivotsContainer" class="pivots-container"></div>
+        </div>
+
+        <!-- Fundamentals Tab -->
+        <div class="tab-content" id="fundamentals">
+            <div class="stat-grid">
+                <div class="stat-card">
+                    <div class="stat-title">Current Gas Storage</div>
+                    <div class="stat-value" id="currentGasStorage">-</div>
+                    <div class="stat-change" id="storageChange">-</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-title">Power Demand (Last Month)</div>
+                    <div class="stat-value" id="currentPowerDemand">-</div>
+                    <div class="stat-change" id="demandChange">-</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-title">Total Generation Capacity</div>
+                    <div class="stat-value" id="totalCapacity">-</div>
+                    <div class="stat-change" id="capacityChange">-</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-title">Renewable %</div>
+                    <div class="stat-value" id="renewablePercent">-</div>
+                    <div class="stat-change" id="renewableChange">-</div>
+                </div>
+            </div>
+            
+            <div class="two-column">
+                <div class="chart-container">
+                    <canvas id="storageChart"></canvas>
+                </div>
+                <div class="chart-container">
+                    <canvas id="powerDemandChart"></canvas>
+                </div>
+            </div>
+            
+            <div class="chart-container">
+                <canvas id="capacityChart"></canvas>
+            </div>
+        </div>
+
+        <!-- NBR Tab -->
+        <div class="tab-content" id="nbr">
+            <div class="stat-grid">
+                <div class="stat-card">
+                    <div class="stat-title">Current Gas Burn</div>
+                    <div class="stat-value" id="currentGasBurn">-</div>
+                    <div class="stat-change" id="gasBurnChange">-</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-title">Power Generation</div>
+                    <div class="stat-value" id="currentPowerGen">-</div>
+                    <div class="stat-change" id="powerGenChange">-</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-title">Implied Heat Rate</div>
+                    <div class="stat-value" id="currentHeatRate">-</div>
+                    <div class="stat
