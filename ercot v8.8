@@ -1,0 +1,484 @@
+import pandas as pd
+import numpy as np
+import panel as pn
+from datetime import datetime
+
+# Initialize Panel extension
+pn.extension()
+
+# Sample data generation function
+def generate_sample_data():
+    """Generate sample time series data for commodities"""
+    assets = ['ERCOT North', 'ERCOT Houston', 'ERCOT West', 'Waha', 'Houston']
+    start_date = datetime(2010, 1, 1)
+    end_date = datetime(2025, 3, 27)
+    
+    # Create a date range for our daily data
+    date_range = pd.date_range(start=start_date, end=end_date, freq='D')
+    
+    # Base prices for different assets
+    base_prices = {
+        'ERCOT North': 35,
+        'ERCOT Houston': 38,
+        'ERCOT West': 32,
+        'Waha': 2.5,
+        'Houston': 40
+    }
+    
+    # Create an empty dataframe to store all data
+    all_data = []
+    
+    # Generate data for each asset
+    for asset in assets:
+        base_price = base_prices[asset]
+        
+        # Generate synthetic prices with trend and seasonality
+        for current_date in date_range:
+            year_factor = (current_date.year - 2010) * (np.random.random() * 0.1 + 0.02) * base_price
+            
+            # More pronounced seasonality for power prices
+            if 'ERCOT' in asset:
+                # Higher in summer months (May-Sep)
+                if current_date.month >= 5 and current_date.month <= 9:
+                    month_seasonal = np.sin((current_date.month - 2) / 12 * 2 * np.pi) * base_price * 0.4
+                else:
+                    month_seasonal = np.sin((current_date.month - 2) / 12 * 2 * np.pi) * base_price * 0.2
+            else:
+                month_seasonal = np.sin(current_date.month / 12 * 2 * np.pi) * base_price * 0.15
+            
+            # Add some volatility for more realistic energy prices
+            volatility = 0.1 if 'ERCOT' in asset else 0.06
+            noise = (np.random.random() - 0.5) * base_price * volatility
+            
+            # Add occasional price spikes for ERCOT (especially in summer)
+            spike = 0
+            if 'ERCOT' in asset and np.random.random() < 0.01:
+                if current_date.month >= 6 and current_date.month <= 8:
+                    spike = base_price * (1 + np.random.random() * 3)
+            
+            price = base_price + year_factor + month_seasonal + noise + spike
+            
+            all_data.append({
+                'Asset': asset,
+                'Date': current_date,
+                'Price': round(price, 2)
+            })
+    
+    # Convert to dataframe
+    df = pd.DataFrame(all_data)
+    return df
+
+# Function to pivot and process data
+def process_data(df):
+    """Process data into yearly-monthly format with strips"""
+    # Extract components
+    df['Year'] = df['Date'].dt.year
+    df['Month'] = df['Date'].dt.month
+    
+    # Month code mapping
+    month_codes = {
+        1: 'F', 2: 'G', 3: 'H', 4: 'J', 5: 'K', 6: 'M', 
+        7: 'N', 8: 'Q', 9: 'U', 10: 'V', 11: 'X', 12: 'Z'
+    }
+    df['MonthCode'] = df['Month'].map(month_codes)
+    
+    # Aggregate by year, month and asset
+    agg_df = df.groupby(['Asset', 'Year', 'Month', 'MonthCode'])['Price'].mean().reset_index()
+    
+    # Get the full range of years across all assets
+    min_year = agg_df['Year'].min()
+    max_year = agg_df['Year'].max()
+    all_years = list(range(min_year, max_year + 1))
+    
+    # Get all month codes in correct order
+    ordered_columns = [month_codes[i] for i in range(1, 13)]
+    
+    # Dictionary to store processed data
+    assets_data = {}
+    
+    # Process each asset
+    for asset in agg_df['Asset'].unique():
+        asset_df = agg_df[agg_df['Asset'] == asset].copy()
+        
+        # Pivot to get the format we want
+        pivoted = asset_df.pivot_table(
+            index='Year', 
+            columns='MonthCode', 
+            values='Price',
+            aggfunc='mean'
+        ).round(2)
+        
+        # Ensure all years are included (fill with NaN for missing years)
+        missing_years = set(all_years) - set(pivoted.index)
+        if missing_years:
+            # Create a DataFrame with the missing years and NaN values
+            missing_df = pd.DataFrame(
+                index=list(missing_years),
+                columns=pivoted.columns
+            )
+            # Concatenate with the original pivot table
+            pivoted = pd.concat([pivoted, missing_df])
+            # Sort by year
+            pivoted = pivoted.sort_index()
+        
+        # Ensure all months are included and in correct order
+        for col in ordered_columns:
+            if col not in pivoted.columns:
+                pivoted[col] = np.nan
+        
+        # Reorder columns to match month order
+        pivoted = pivoted.reindex(columns=ordered_columns)
+        
+        # Calculate strips (without _Strip suffix)
+        # F-G (Jan-Feb)
+        pivoted['FG'] = pivoted[['F', 'G']].mean(axis=1).round(2)
+        
+        # N-Q (Jul-Aug)
+        pivoted['NQ'] = pivoted[['N', 'Q']].mean(axis=1).round(2)
+        
+        # J-V (Apr-Oct, J through V)
+        pivoted['JV'] = pivoted[['J', 'K', 'M', 'N', 'Q', 'U', 'V']].mean(axis=1).round(2)
+        
+        # Cal (all months)
+        pivoted['Cal'] = pivoted[ordered_columns].mean(axis=1).round(2)
+        
+        # Store in our dictionary
+        assets_data[asset] = pivoted
+    
+    return assets_data
+
+# Function to create HTML table for an asset with styling
+def create_asset_table_html(asset_name, pivot_df):
+    """Create a styled HTML table directly without using pandas styling"""
+    # Define color mapping
+    def get_cell_color(column):
+        if column in ['F', 'G', 'FG']:
+            return "#DBEAFE"  # Light blue
+        elif column in ['N', 'Q', 'NQ']:
+            return "#FFEDD5"  # Light orange
+        elif column in ['J', 'K', 'M', 'U', 'V', 'JV']:
+            return "#DCFCE7"  # Light green
+        elif column == 'Cal':
+            return "#FEF9C3"  # Light yellow
+        else:
+            return "white"
+    
+    # Reset index to get Year as a column
+    table_df = pivot_df.reset_index()
+    
+    # Define standardized dimensions
+    year_col_width = "80px"
+    data_col_width = "65px"
+    row_height = "40px"
+    
+    # Start building HTML table
+    html = f'<h3>{asset_name} - Average Monthly Prices</h3>\n'
+    html += '<table border="1" style="border-collapse: collapse; width: 100%; table-layout: fixed;">\n'
+    
+    # Header row
+    html += '<tr style="height: 50px;">\n'
+    html += f'<th style="width: {year_col_width}; background-color: #F3F4F6; color: black; padding: 8px; text-align: left;">Year</th>\n'
+    
+    for col in pivot_df.columns:
+        bg_color = get_cell_color(col)
+        html += f'<th style="width: {data_col_width}; background-color: {bg_color}; color: black; padding: 8px; text-align: center; overflow: hidden; text-overflow: ellipsis;">{col}</th>\n'
+    
+    html += '</tr>\n'
+    
+    # Data rows
+    for _, row in table_df.iterrows():
+        html += f'<tr style="height: {row_height};">\n'
+        html += f'<td style="width: {year_col_width}; background-color: #e9d5ff; color: black; padding: 8px; font-weight: bold;">{int(row["Year"])}</td>\n'
+        
+        for col in pivot_df.columns:
+            bg_color = get_cell_color(col)
+            value = row[col]
+            formatted_value = f"{value:.2f}" if pd.notna(value) else "-"
+            html += f'<td style="width: {data_col_width}; background-color: {bg_color}; color: black; padding: 8px; text-align: right;">{formatted_value}</td>\n'
+        
+        html += '</tr>\n'
+    
+    html += '</table>\n'
+    html += '<div style="margin-bottom: 30px;"></div>\n'
+    
+    return html
+
+# Function to create the price tracker tab with dropdown selectors
+def create_price_tracker_tab(assets_data):
+    """Create the price tracker tab content with dropdown selectors for peak type and trade type"""
+    # Create dropdown selectors
+    trade_type_select = pn.widgets.Select(
+        name='Trade Type', 
+        options=['Fixed Price', 'HR', 'Spark (10HR)', 'Gas Basis', 'Spreads'],
+        value='Fixed Price',
+        width=200
+    )
+    
+    peak_type_select = pn.widgets.Select(
+        name='Peak Type',
+        options=['Peak', 'Offpeak', '2x16', '7x8'],
+        value='Peak',
+        width=200
+    )
+    
+    # Create a container for the tables that will be updated based on dropdown selections
+    tables_container = pn.pane.HTML("", width=800)
+    
+    # Function to update tables based on dropdown selections
+    def update_tables(event):
+        trade_type = trade_type_select.value
+        peak_type = peak_type_select.value
+        
+        # For now, only show data if Fixed Price and Peak are selected
+        if trade_type == 'Fixed Price' and peak_type == 'Peak':
+            # Create HTML for all asset tables
+            all_tables_html = ""
+            for asset_name, pivot_df in assets_data.items():
+                all_tables_html += create_asset_table_html(asset_name, pivot_df)
+            
+            # Legend HTML
+            legend_html = """
+            <div style="margin-top: 20px; font-size: 0.9em; color: black;">
+                <p>Month Codes: F-Jan, G-Feb, H-Mar, J-Apr, K-May, M-Jun, N-Jul, Q-Aug, U-Sep, V-Oct, X-Nov, Z-Dec</p>
+                <p>
+                    <span style="display: inline-block; width: 15px; height: 15px; background-color: #DBEAFE;"></span> Jan/Feb &nbsp;&nbsp;
+                    <span style="display: inline-block; width: 15px; height: 15px; background-color: #FFEDD5;"></span> Jul/Aug &nbsp;&nbsp;
+                    <span style="display: inline-block; width: 15px; height: 15px; background-color: white; border: 1px solid #E5E7EB;"></span> Other months
+                </p>
+                <p style="margin-top: 10px; font-weight: bold;">Strip Definitions:</p>
+                <ul>
+                    <li><span style="display: inline-block; width: 15px; height: 15px; background-color: #DBEAFE;"></span> FG: Average of Jan-Feb</li>
+                    <li><span style="display: inline-block; width: 15px; height: 15px; background-color: #FFEDD5;"></span> NQ: Average of Jul-Aug</li>
+                    <li><span style="display: inline-block; width: 15px; height: 15px; background-color: #DCFCE7;"></span> JV: Average of Apr-Oct (J through V)</li>
+                    <li><span style="display: inline-block; width: 15px; height: 15px; background-color: #FEF9C3;"></span> Cal: Average of all months (Calendar year)</li>
+                </ul>
+            </div>
+            """
+            
+            # Combine all HTML
+            full_html = all_tables_html + legend_html
+            tables_container.object = full_html
+        else:
+            # Display a placeholder message for other combinations
+            placeholder_html = f"""
+            <div style="padding: 20px; background-color: #F9FAFB; border-radius: 5px; margin-top: 20px;">
+                <h2 style="font-size: 1.5em; margin-bottom: 15px; color: black;">
+                    {trade_type} - {peak_type}
+                </h2>
+                <p style="color: #333333;">
+                    Data for this combination will be available in future updates.
+                </p>
+            </div>
+            """
+            tables_container.object = placeholder_html
+    
+    # Connect the event handlers
+    trade_type_select.param.watch(update_tables, 'value')
+    peak_type_select.param.watch(update_tables, 'value')
+    
+    # Initialize with the default view
+    update_tables(None)
+    
+    # Create a layout with dropdowns and tables
+    dropdowns = pn.Row(trade_type_select, peak_type_select, width=450)
+    layout = pn.Column(
+        dropdowns,
+        tables_container,
+        sizing_mode='stretch_width'
+    )
+    
+    return layout
+
+# Function to create the fundamentals tab
+def create_fundamentals_tab():
+    """Create the fundamentals tab content"""
+    fundamentals_html = """
+    <div style="padding: 20px; background-color: #F9FAFB; border-radius: 5px;">
+        <h2 style="font-size: 1.5em; margin-bottom: 15px; color: black;">Fundamentals</h2>
+        <p style="color: #333333;">Fundamentals analysis will be available here in future updates.</p>
+    </div>
+    """
+    
+    fundamentals = pn.pane.HTML(fundamentals_html, sizing_mode='stretch_width')
+    
+    return fundamentals
+
+# Function to create a placeholder price tracker tab with the same dropdowns as ERCOT
+def create_placeholder_price_tracker_tab(region_name):
+    """Create a placeholder price tracker tab for regions other than ERCOT"""
+    # Create same dropdown selectors for consistency
+    trade_type_select = pn.widgets.Select(
+        name='Trade Type', 
+        options=['Fixed Price', 'HR', 'Spark (10HR)', 'Gas Basis', 'Spreads'],
+        value='Fixed Price',
+        width=200
+    )
+    
+    peak_type_select = pn.widgets.Select(
+        name='Peak Type',
+        options=['Peak', 'Offpeak', '2x16', '7x8'],
+        value='Peak',
+        width=200
+    )
+    
+    # Create a container for placeholder content
+    placeholder_container = pn.pane.HTML("", width=800)
+    
+    # Function to update placeholder based on dropdown selections
+    def update_placeholder(event):
+        trade_type = trade_type_select.value
+        peak_type = peak_type_select.value
+        
+        placeholder_html = f"""
+        <div style="padding: 20px; background-color: #F9FAFB; border-radius: 5px; margin-top: 20px;">
+            <h2 style="font-size: 1.5em; margin-bottom: 15px; color: black;">
+                {region_name} - {trade_type} - {peak_type}
+            </h2>
+            <p style="color: #333333;">
+                The {region_name} price data for {trade_type} ({peak_type}) will be available in future updates.
+            </p>
+        </div>
+        """
+        placeholder_container.object = placeholder_html
+    
+    # Connect the event handlers
+    trade_type_select.param.watch(update_placeholder, 'value')
+    peak_type_select.param.watch(update_placeholder, 'value')
+    
+    # Initialize with the default view
+    update_placeholder(None)
+    
+    # Create a layout with dropdowns and placeholder
+    dropdowns = pn.Row(trade_type_select, peak_type_select, width=450)
+    layout = pn.Column(
+        dropdowns,
+        placeholder_container,
+        sizing_mode='stretch_width'
+    )
+    
+    return layout
+
+# Function to create a placeholder cash tracking tab
+def create_placeholder_cash_tracking_tab(region_name):
+    """Create a placeholder cash tracking tab"""
+    cash_tracking_html = f"""
+    <div style="padding: 20px; background-color: #F9FAFB; border-radius: 5px;">
+        <h2 style="font-size: 1.5em; margin-bottom: 15px; color: black;">{region_name} Cash Tracking</h2>
+        <p style="color: #333333;">Cash tracking data and analytics will be available here in future updates.</p>
+    </div>
+    """
+    
+    cash_tracking = pn.pane.HTML(cash_tracking_html, sizing_mode='stretch_width')
+    return cash_tracking
+
+# Function to create a placeholder seasonal tab
+def create_placeholder_seasonal_tab(region_name):
+    """Create a placeholder seasonal analysis tab"""
+    seasonal_html = f"""
+    <div style="padding: 20px; background-color: #F9FAFB; border-radius: 5px;">
+        <h2 style="font-size: 1.5em; margin-bottom: 15px; color: black;">{region_name} Seasonal Analysis</h2>
+        <p style="color: #333333;">Seasonal patterns and trend analysis will be available here in future updates.</p>
+    </div>
+    """
+    
+    seasonal = pn.pane.HTML(seasonal_html, sizing_mode='stretch_width')
+    return seasonal
+
+# Main function to run the dashboard
+def run_yanus_dashboard():
+    """Create and run the YANUS dashboard"""
+    # Generate data
+    data_df = generate_sample_data()
+    
+    # Process data
+    assets_data = process_data(data_df)
+    
+    # Create the inner tabs for ERCOT region
+    ercot_price_tracker_tab = create_price_tracker_tab(assets_data)
+    ercot_fundamentals_tab = create_fundamentals_tab()
+    
+    # Create inner tabs for ERCOT
+    ercot_cash_tracking_tab = create_placeholder_cash_tracking_tab("ERCOT")
+    ercot_seasonal_tab = create_placeholder_seasonal_tab("ERCOT")
+    ercot_tabs = pn.Tabs(
+        ('Price Tracker', ercot_price_tracker_tab),
+        ('Cash Tracking', ercot_cash_tracking_tab),
+        ('Seasonal', ercot_seasonal_tab),
+        ('Fundamentals', ercot_fundamentals_tab)
+    )
+    
+    # Create tabs for PJM with same structure as ERCOT
+    pjm_price_tracker_tab = create_placeholder_price_tracker_tab("PJM")
+    pjm_cash_tracking_tab = create_placeholder_cash_tracking_tab("PJM")
+    pjm_seasonal_tab = create_placeholder_seasonal_tab("PJM")
+    pjm_fundamentals_tab = create_fundamentals_tab()
+    pjm_tabs = pn.Tabs(
+        ('Price Tracker', pjm_price_tracker_tab),
+        ('Cash Tracking', pjm_cash_tracking_tab),
+        ('Seasonal', pjm_seasonal_tab),
+        ('Fundamentals', pjm_fundamentals_tab)
+    )
+    
+    # Create tabs for NYISO with same structure as ERCOT
+    nyiso_price_tracker_tab = create_placeholder_price_tracker_tab("NYISO")
+    nyiso_cash_tracking_tab = create_placeholder_cash_tracking_tab("NYISO")
+    nyiso_seasonal_tab = create_placeholder_seasonal_tab("NYISO")
+    nyiso_fundamentals_tab = create_fundamentals_tab()
+    nyiso_tabs = pn.Tabs(
+        ('Price Tracker', nyiso_price_tracker_tab),
+        ('Cash Tracking', nyiso_cash_tracking_tab),
+        ('Seasonal', nyiso_seasonal_tab),
+        ('Fundamentals', nyiso_fundamentals_tab)
+    )
+    
+    # Create tabs for NEPOOL with same structure as ERCOT
+    nepool_price_tracker_tab = create_placeholder_price_tracker_tab("NEPOOL")
+    nepool_cash_tracking_tab = create_placeholder_cash_tracking_tab("NEPOOL")
+    nepool_seasonal_tab = create_placeholder_seasonal_tab("NEPOOL")
+    nepool_fundamentals_tab = create_fundamentals_tab()
+    nepool_tabs = pn.Tabs(
+        ('Price Tracker', nepool_price_tracker_tab),
+        ('Cash Tracking', nepool_cash_tracking_tab),
+        ('Seasonal', nepool_seasonal_tab),
+        ('Fundamentals', nepool_fundamentals_tab)
+    )
+    
+    # Create the top-level region tabs
+    region_tabs = pn.Tabs(
+        ('ERCOT', ercot_tabs),
+        ('PJM', pjm_tabs),
+        ('NYISO', nyiso_tabs),
+        ('NEPOOL', nepool_tabs)
+    )
+    
+    # Create the Google-style YANUS logo
+    google_style_logo = """
+    <div style="text-align: center; margin-bottom: 20px; font-family: Arial, sans-serif; font-size: 3em; font-weight: bold;">
+        <span style="color: #4285F4;">Y</span>
+        <span style="color: #EA4335;">A</span>
+        <span style="color: #FBBC05;">N</span>
+        <span style="color: #4285F4;">U</span>
+        <span style="color: #34A853;">S</span>
+    </div>
+    """
+    
+    # Create the dashboard
+    dashboard = pn.Column(
+        pn.pane.HTML(google_style_logo),
+        region_tabs,
+        sizing_mode='stretch_width'
+    )
+    
+    return dashboard
+
+# Running the dashboard
+if __name__ == "__main__" or '__main__' in locals():
+    dashboard = run_yanus_dashboard()
+    dashboard.servable()
+    # If running in a Jupyter notebook, uncomment the line below
+    # dashboard
+
+
+# To run in a Jupyter notebook, use:
+# dashboard = run_yanus_dashboard()
+# dashboard
