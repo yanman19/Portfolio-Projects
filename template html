@@ -1,0 +1,63 @@
+Here's a simple Python file that creates a basic HTTP server serving a "Hello World" HTML page:
+
+```python
+from http.server import HTTPServer, SimpleHTTPRequestHandler
+import socket
+import os
+
+# Create an HTML file with "Hello World"
+html_content = """<!DOCTYPE html>
+<html>
+<head>
+    <title>Hello World</title>
+</head>
+<body>
+    <h1>Hello World</h1>
+</body>
+</html>"""
+
+# Write the HTML content to a file
+with open("hello_world.html", "w") as file:
+    file.write(html_content)
+
+# Get the local IP address
+hostname = socket.gethostname()
+local_ip = socket.gethostbyname(hostname)
+
+# Set up a simple HTTP server
+port = 8000
+server_address = ('', port)  # Empty string means listen on all available interfaces
+
+# Create custom handler that always serves our HTML file
+class MyHandler(SimpleHTTPRequestHandler):
+    def do_GET(self):
+        self.path = "/hello_world.html"
+        return SimpleHTTPRequestHandler.do_GET(self)
+
+# Start the server
+httpd = HTTPServer(server_address, MyHandler)
+
+# Get the absolute file path
+file_path = os.path.abspath("hello_world.html")
+
+# Print server info and file path
+print(f"Server started at http://{local_ip}:{port}")
+print(f"HTML file created at: {file_path}")
+print("Press Ctrl+C to stop the server.")
+
+# Run the server
+httpd.serve_forever()
+```
+
+To use this script:
+
+1. Save it to a file (e.g., `hello_server.py`)
+2. Run it with Python: `python hello_server.py`
+3. The terminal will display:
+   - The URL where the server is accessible (e.g., http://192.168.1.100:8000)
+   - The absolute file path of the HTML file
+   - Instructions to stop the server
+
+You can access the page from any device on your network by navigating to the displayed URL.
+
+Would you like me to explain how any part of this code works?​​​​​​​​​​​​​​​​
