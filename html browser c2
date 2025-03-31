@@ -1,0 +1,58 @@
+Here's a modified version that creates a web server accessible to others on your network:
+
+```python
+import os
+import socket
+from http.server import HTTPServer, SimpleHTTPRequestHandler
+import webbrowser
+from threading import Thread
+
+# Create HTML content
+html_content = """<!DOCTYPE html>
+<html>
+<head>
+    <title>Hello World</title>
+</head>
+<body>
+    <h1>Hello World</h1>
+</body>
+</html>"""
+
+# Write to file
+with open("hello_world.html", "w") as file:
+    file.write(html_content)
+
+# Get local IP address
+hostname = socket.gethostname()
+local_ip = socket.gethostbyname(hostname)
+
+# Set up server
+port = 8000
+server_address = ('', port)  # Empty string means listen on all available interfaces
+
+# Handler that serves our HTML file
+class MyHandler(SimpleHTTPRequestHandler):
+    def do_GET(self):
+        self.path = "/hello_world.html"
+        return SimpleHTTPRequestHandler.do_GET(self)
+
+# Create and start server
+httpd = HTTPServer(server_address, MyHandler)
+file_path = os.path.abspath("hello_world.html")
+
+print(f"Server started at http://{local_ip}:{port}")
+print(f"HTML file created at: {file_path}")
+print("Share this link with others on your network: " + f"http://{local_ip}:{port}")
+print("Press Ctrl+C to stop the server.")
+
+# Start the server
+httpd.serve_forever()
+```
+
+When you run this in a Jupyter notebook:
+1. It creates the HTML file
+2. Starts a web server on your computer
+3. Prints out the URL that you can share with anyone on your local network
+4. Others can access your page by typing that URL in their browser
+
+Make sure to keep the notebook running while others are accessing your page.​​​​​​​​​​​​​​​​
