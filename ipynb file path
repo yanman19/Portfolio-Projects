@@ -1,0 +1,22 @@
+```python
+import os
+from IPython.display import HTML, display
+
+html_content = """<!DOCTYPE html>
+<html>
+<head>
+    <title>Hello World</title>
+</head>
+<body>
+    <h1>Hello World</h1>
+</body>
+</html>"""
+
+file_path = os.path.abspath("hello_world.html")
+with open(file_path, "w") as file:
+    file.write(html_content)
+
+print(f"HTML file created at: {file_path}")
+
+display(HTML(html_content))
+```
