@@ -1,0 +1,165 @@
+# Add this debug function at the top of your script
+def debug_dataframes(dataframes):
+    """Print debug information about the dataframes"""
+    print("\n=== DEBUG INFORMATION ===")
+    print(f"Number of dataframes: {len(dataframes)}")
+    
+    for peak_type, df in dataframes.items():
+        if df is not None:
+            print(f"\nPeak Type: {peak_type}")
+            print(f"DataFrame shape: {df.shape}")
+            print(f"Columns ({len(df.columns)}):")
+            for i, col in enumerate(df.columns):
+                print(f"  {i+1}. {col} - Type: {type(col).__name__}")
+            
+            # Check if MARKETDATE column exists
+            if 'MARKETDATE' in df.columns:
+                print("MARKETDATE column exists - Sample values:")
+                print(df['MARKETDATE'].head())
+            else:
+                print("WARNING: MARKETDATE column not found!")
+                
+            # Look for potential trade type patterns
+            trade_patterns = ['FP', 'HR', 'SPARK', 'GASBASIS', 'HEAT_RATE', 'FIXED_PRICE', 'FIXED PRICE']
+            print("\nPotential trade type columns found:")
+            
+            for pattern in trade_patterns:
+                matching = [col for col in df.columns if isinstance(col, str) and pattern in col]
+                if matching:
+                    print(f"  Pattern '{pattern}': {len(matching)} columns found")
+                    print(f"  Sample: {matching[:3]}")
+        else:
+            print(f"\nPeak Type: {peak_type} - No DataFrame Found (None)")
+    
+    print("\n=== END DEBUG INFO ===\n")
+
+# Add this to your existing create_dashboard function, right after getting the dataframes
+def create_dashboard(dataframes=None):
+    """Create a new dashboard instance with the provided dataframes"""
+    # Get dataframes
+    dfs = dataframes if dataframes is not None else get_dataframes()
+    
+    # Debug the dataframes
+    debug_dataframes(dfs)
+    
+    # Rest of your existing function...
+    # ...
+
+# Replace the process_dataframe_for_trade_type function with this updated version that has more logging
+def process_dataframe_for_trade_type(df, trade_type):
+    """Process a dataframe to create a pivot table for a specific trade type"""
+    if df is None:
+        print(f"DEBUG: DataFrame is None for trade_type {trade_type}")
+        return None
+    
+    # Extract columns for the specified trade type
+    trade_columns = [col for col in df.columns if isinstance(col, str) and trade_type in col]
+    
+    print(f"DEBUG: Found {len(trade_columns)} columns matching trade_type '{trade_type}'")
+    print(f"DEBUG: Sample columns: {trade_columns[:5]}")
+    
+    if not trade_columns:
+        # Try alternative patterns based on common naming conventions
+        alternative_patterns = {
+            'FP': ['FIXED_PRICE', 'FIXED PRICE', 'FIXEDPRICE'],
+            'HR': ['HEAT_RATE', 'HEAT RATE', 'HEATRATE'],
+            'SPARK': ['SPARKSPREAD', 'SPARK_SPREAD', 'SPARK SPREAD'],
+            'GASBASIS': ['GAS_BASIS', 'GAS BASIS', 'BASIS']
+        }
+        
+        if trade_type in alternative_patterns:
+            for alt_pattern in alternative_patterns[trade_type]:
+                alt_columns = [col for col in df.columns if isinstance(col, str) and alt_pattern in col]
+                if alt_columns:
+                    print(f"DEBUG: Found {len(alt_columns)} columns using alternative pattern '{alt_pattern}'")
+                    trade_columns = alt_columns
+                    break
+        
+        if not trade_columns:
+            print(f"DEBUG: No columns found for trade_type '{trade_type}' or its alternatives")
+            return None
+    
+    # Rest of the function continues as before...
+    # ... (keep the existing code from here)
+
+# Then we need to update the update_tables function to print more debugging info:
+def update_tables(event, trade_type_select, peak_type_select, tables_container, dataframes):
+    """Update tables based on dropdown selections"""
+    trade_type = trade_type_select.value
+    peak_type = peak_type_select.value
+    
+    print(f"\nDEBUG: update_tables called with trade_type={trade_type}, peak_type={peak_type}")
+    
+    # Map trade types to display names
+    trade_type_map = {
+        'FP': 'Fixed Price',
+        'HR': 'Heat Rate',
+        'SPARK': 'Spark Spread',
+        'GASBASIS': 'Gas Basis'
+    }
+    
+    if not trade_type or not peak_type:
+        print("DEBUG: Missing trade_type or peak_type")
+        tables_container.object = "<p>Please select valid Trade Type and Peak Type</p>"
+        return
+    
+    if peak_type not in dataframes:
+        print(f"DEBUG: peak_type {peak_type} not in dataframes")
+        tables_container.object = f"<p>No data available for peak type: {peak_type}</p>"
+        return
+    
+    # Get the dataframe for this peak type
+    df = dataframes.get(peak_type)
+    if df is None:
+        print(f"DEBUG: DataFrame for {peak_type} is None")
+        tables_container.object = f"<p>No data available for ERCOT {peak_type}</p>"
+        return
+    
+    print(f"DEBUG: DataFrame for {peak_type} shape: {df.shape}")
+    
+    # Process dataframe for the selected trade type
+    pivot_df = process_dataframe_for_trade_type(df, trade_type)
+    
+    if pivot_df is not None and not pivot_df.empty:
+        print(f"DEBUG: pivot_df created successfully with shape: {pivot_df.shape}")
+        # Create HTML for the table
+        table_html = create_asset_table_html(
+            f"ERCOT {peak_type} {trade_type_map.get(trade_type, trade_type)}", 
+            pivot_df
+        )
+        
+        # Add the legend
+        legend_html = """
+        <div style="margin-top: 20px; font-size: 0.9em; color: black;">
+            <p>Month Codes: F-Jan, G-Feb, H-Mar, J-Apr, K-May, M-Jun, N-Jul, Q-Aug, U-Sep, V-Oct, X-Nov, Z-Dec</p>
+            <p>
+                <span style="display: inline-block; width: 15px; height: 15px; background-color: #DBEAFE;"></span> Jan/Feb &nbsp;&nbsp;
+                <span style="display: inline-block; width: 15px; height: 15px; background-color: #FFEDD5;"></span> Jul/Aug &nbsp;&nbsp;
+                <span style="display: inline-block; width: 15px; height: 15px; background-color: white; border: 1px solid #E5E7EB;"></span> Other months
+            </p>
+            <p style="margin-top: 10px; font-weight: bold;">Strip Definitions:</p>
+            <ul>
+                <li><span style="display: inline-block; width: 15px; height: 15px; background-color: #DBEAFE;"></span> FG: Average of Jan-Feb</li>
+                <li><span style="display: inline-block; width: 15px; height: 15px; background-color: #FFEDD5;"></span> NQ: Average of Jul-Aug</li>
+                <li><span style="display: inline-block; width: 15px; height: 15px; background-color: #DCFCE7;"></span> JV: Average of Apr-Oct (J through V)</li>
+                <li><span style="display: inline-block; width: 15px; height: 15px; background-color: #FEF9C3;"></span> Cal: Average of all months (Calendar year)</li>
+            </ul>
+        </div>
+        """
+        
+        # Set the full HTML content
+        tables_container.object = table_html + legend_html
+    else:
+        print(f"DEBUG: No pivot_df created for {peak_type}, {trade_type}")
+        # Display placeholder message when the data is not available
+        placeholder_html = f"""
+        <div style="padding: 20px; background-color: #F9FAFB; border-radius: 5px; margin-top: 20px;">
+            <h2 style="font-size: 1.5em; margin-bottom: 15px; color: black;">
+                ERCOT {peak_type} {trade_type_map.get(trade_type, trade_type)}
+            </h2>
+            <p style="color: #333333;">
+                No data available for this combination.
+            </p>
+        </div>
+        """
+        tables_container.object = placeholder_html
