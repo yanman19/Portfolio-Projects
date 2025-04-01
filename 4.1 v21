@@ -1,0 +1,32 @@
+import panel as pn
+from bokeh.themes import Theme
+
+pn.extension('tabulator')
+
+def generate_pivots_page(df, column_list):
+    components = []
+
+    # Custom header with Google-style YANUS logo
+    header_html = """
+    <div style="text-align: center; font-size: 48px; font-family: Arial, sans-serif; margin-top: 20px; margin-bottom: 30px;">
+        <span style="color: #4285F4;">Y</span>
+        <span style="color: #DB4437;">A</span>
+        <span style="color: #F4B400;">N</span>
+        <span style="color: #0F9D58;">U</span>
+        <span style="color: #4285F4;">S</span>
+    </div>
+    """
+
+    components.append(pn.pane.HTML(header_html))
+
+    for col in column_list:
+        styled_pivot = create_seasonal_pivot(df, col)
+        title = pn.pane.Markdown(f"## Seasonal Pivot for `{col}`")
+        table = pn.pane.HTML(styled_pivot.to_html(), width=1200, height=400)
+        components.extend([title, table, pn.Spacer(height=30)])
+
+    return pn.Column(*components, width=1250)
+
+def serve_pivots(df, column_list, port=5006):
+    app = lambda: generate_pivots_page(df, column_list)
+    pn.serve(app, port=port, address="0.0.0.0", show=True, title="YANUS")
