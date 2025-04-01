@@ -1,0 +1,651 @@
+import pandas as pd
+import numpy as np
+import panel as pn
+from datetime import datetime
+import socket
+import flask
+from threading import Thread
+import webbrowser
+
+# Initialize Panel extension
+pn.extension()
+
+# ============================================================================
+# DATAFRAME INPUT SECTION - ADD YOUR DATAFRAMES HERE
+# ============================================================================
+
+def get_dataframes():
+    """
+    *** MODIFY THIS FUNCTION TO ADD YOUR DATAFRAMES ***
+    
+    Return a dictionary of dataframes organized by:
+    - ISO
+    - Tab type (price_tracker, cash_tracking, seasonal, fundamentals)
+    - For price_tracker: further organized by peak type
+    
+    Each price_tracker dataframe should have:
+    - A 'MARKETDATE' column (datetime type)
+    - Columns with price data that include trade type indicators:
+      - 'HR' for Heat Rate
+      - 'SPARK' for Spark Spread
+      - 'FP' for Fixed Price
+      - 'GASBASIS' for Gas Basis
+    
+    Example column names: 'Asset1_HR', 'Asset2_SPARK', 'Asset3_FP', etc.
+    """
+    dataframes = {
+        # ERCOT Data
+        'ERCOT': {
+            'price_tracker': {
+                'PEAK': None,      # Replace with your ERCOT PEAK dataframe
+                'OFFPEAK': None,   # Replace with your ERCOT OFFPEAK dataframe
+                'NIGHTS': None,    # Replace with your ERCOT NIGHTS dataframe 
+                'ATC': None        # Replace with your ERCOT ATC dataframe
+            },
+            'cash_tracking': None, # Replace with your ERCOT Cash Tracking dataframe
+            'seasonal': None,      # Replace with your ERCOT Seasonal dataframe
+            'fundamentals': None   # Replace with your ERCOT Fundamentals dataframe
+        },
+        
+        # PJM Data
+        'PJM': {
+            'price_tracker': {
+                'PEAK': None,      # Replace with your PJM PEAK dataframe
+                'OFFPEAK': None,   # Replace with your PJM OFFPEAK dataframe
+                '7x8': None,       # Replace with your PJM 7x8 dataframe 
+                '2x16': None,      # Replace with your PJM 2x16 dataframe
+                'ATC': None        # Replace with your PJM ATC dataframe
+            },
+            'cash_tracking': None, # Replace with your PJM Cash Tracking dataframe
+            'seasonal': None,      # Replace with your PJM Seasonal dataframe
+            'fundamentals': None   # Replace with your PJM Fundamentals dataframe
+        },
+        
+        # NYISO Data
+        'NYISO': {
+            'price_tracker': {
+                'PEAK': None,      # Replace with your NYISO PEAK dataframe
+                'OFFPEAK': None,   # Replace with your NYISO OFFPEAK dataframe
+                '7x8': None,       # Replace with your NYISO 7x8 dataframe 
+                '2x16': None,      # Replace with your NYISO 2x16 dataframe
+                'ATC': None        # Replace with your NYISO ATC dataframe
+            },
+            'cash_tracking': None, # Replace with your NYISO Cash Tracking dataframe
+            'seasonal': None,      # Replace with your NYISO Seasonal dataframe
+            'fundamentals': None   # Replace with your NYISO Fundamentals dataframe
+        },
+        
+        # NEPOOL Data
+        'NEPOOL': {
+            'price_tracker': {
+                'PEAK': None,      # Replace with your NEPOOL PEAK dataframe
+                'OFFPEAK': None,   # Replace with your NEPOOL OFFPEAK dataframe
+                '7x8': None,       # Replace with your NEPOOL 7x8 dataframe 
+                '2x16': None,      # Replace with your NEPOOL 2x16 dataframe
+                'ATC': None        # Replace with your NEPOOL ATC dataframe
+            },
+            'cash_tracking': None, # Replace with your NEPOOL Cash Tracking dataframe
+            'seasonal': None,      # Replace with your NEPOOL Seasonal dataframe
+            'fundamentals': None   # Replace with your NEPOOL Fundamentals dataframe
+        }
+    }
+    
+    # ============================================================================
+    # EXAMPLE: UNCOMMENT AND MODIFY THIS SECTION TO CREATE TEST DATAFRAMES
+    # ============================================================================
+    
+    # # Create example dataframes for testing
+    # years = pd.date_range(start='2020-01-01', end='2025-12-31', freq='YS')
+    # months = pd.date_range(start='2020-01-01', end='2020-12-31', freq='MS')
+    # dates = [pd.Timestamp(f"{year.year}-{month.month:02d}-01") for year in years for month in months]
+    # 
+    # # Example ERCOT PEAK dataframe
+    # df_ercot_peak = pd.DataFrame({'MARKETDATE': dates})
+    # df_ercot_peak['Asset1_FP'] = np.random.normal(50, 10, len(dates))
+    # df_ercot_peak['Asset2_FP'] = np.random.normal(55, 12, len(dates))
+    # df_ercot_peak['Asset1_HR'] = np.random.normal(10, 2, len(dates))
+    # df_ercot_peak['Asset1_SPARK'] = np.random.normal(15, 3, len(dates))
+    # dataframes['ERCOT']['price_tracker']['PEAK'] = df_ercot_peak
+    # 
+    # # Example ERCOT OFFPEAK dataframe
+    # df_ercot_offpeak = pd.DataFrame({'MARKETDATE': dates})
+    # df_ercot_offpeak['Asset1_FP'] = np.random.normal(40, 8, len(dates))
+    # df_ercot_offpeak['Asset2_FP'] = np.random.normal(45, 10, len(dates))
+    # df_ercot_offpeak['Asset1_HR'] = np.random.normal(8, 1.5, len(dates))
+    # df_ercot_offpeak['Asset1_SPARK'] = np.random.normal(12, 2.5, len(dates))
+    # dataframes['ERCOT']['price_tracker']['OFFPEAK'] = df_ercot_offpeak
+    #
+    # # Example Cash Tracking dataframe
+    # df_ercot_cash = pd.DataFrame({'Date': pd.date_range(start='2020-01-01', end='2025-12-31', freq='D')})
+    # df_ercot_cash['Price'] = np.random.normal(50, 15, len(df_ercot_cash))
+    # df_ercot_cash['Volume'] = np.random.randint(1000, 5000, len(df_ercot_cash))
+    # dataframes['ERCOT']['cash_tracking'] = df_ercot_cash
+    
+    return dataframes
+
+# ============================================================================
+# END OF DATAFRAME INPUT SECTION
+# ============================================================================
+
+# Function to process dataframe for a specific trade type
+def process_dataframe_for_trade_type(df, trade_type):
+    """Process a dataframe to create a pivot table for a specific trade type"""
+    if df is None:
+        return None
+    
+    # Extract columns for the specified trade type
+    trade_columns = [col for col in df.columns if trade_type in col]
+    
+    if not trade_columns:
+        return None
+    
+    # Extract year and month from MARKETDATE
+    df_copy = df.copy()
+    df_copy['Year'] = df_copy['MARKETDATE'].dt.year
+    df_copy['Month'] = df_copy['MARKETDATE'].dt.month
+    
+    # Month code mapping
+    month_codes = {
+        1: 'F', 2: 'G', 3: 'H', 4: 'J', 5: 'K', 6: 'M', 
+        7: 'N', 8: 'Q', 9: 'U', 10: 'V', 11: 'X', 12: 'Z'
+    }
+    df_copy['MonthCode'] = df_copy['Month'].map(month_codes)
+    
+    # Create a pivot table with Year as index, MonthCode as columns
+    # For each asset, create a separate pivot table and then concatenate them
+    pivot_tables = []
+    
+    for col in trade_columns:
+        # Create pivot table for this column
+        asset_pivot = df_copy.pivot_table(
+            index='Year', 
+            columns='MonthCode',
+            values=col,
+            aggfunc='mean'
+        ).round(2)
+        
+        # Calculate strips for this asset
+        ordered_columns = [month_codes[i] for i in range(1, 13)]
+        
+        # Ensure all months are included in correct order
+        for month_code in ordered_columns:
+            if month_code not in asset_pivot.columns:
+                asset_pivot[month_code] = np.nan
+        
+        asset_pivot = asset_pivot.reindex(columns=ordered_columns)
+        
+        # Calculate strips
+        if 'F' in asset_pivot.columns and 'G' in asset_pivot.columns:
+            asset_pivot['FG'] = asset_pivot[['F', 'G']].mean(axis=1).round(2)
+        
+        if 'N' in asset_pivot.columns and 'Q' in asset_pivot.columns:
+            asset_pivot['NQ'] = asset_pivot[['N', 'Q']].mean(axis=1).round(2)
+        
+        jv_cols = [c for c in 'JKMNQUV' if c in asset_pivot.columns]
+        if jv_cols:
+            asset_pivot['JV'] = asset_pivot[jv_cols].mean(axis=1).round(2)
+        
+        asset_pivot['Cal'] = asset_pivot[ordered_columns].mean(axis=1).round(2)
+        
+        # Add asset name as a prefix to all column names
+        asset_name = col.split('_')[0]  # Assuming format is AssetName_TradeType
+        asset_pivot.columns = [f"{asset_name}_{col}" for col in asset_pivot.columns]
+        
+        pivot_tables.append(asset_pivot)
+    
+    # If we have any pivot tables, concatenate them
+    if pivot_tables:
+        return pd.concat(pivot_tables, axis=1)
+    else:
+        return None
+
+# Function to create HTML table for an asset with styling
+def create_asset_table_html(asset_name, pivot_df):
+    """Create a styled HTML table directly without using pandas styling"""
+    if pivot_df is None or pivot_df.empty:
+        return f"<p>No data available for {asset_name}</p>"
+    
+    # Define color mapping
+    def get_cell_color(column):
+        if '_FG' in column:
+            return "#DBEAFE"  # Light blue
+        elif '_NQ' in column:
+            return "#FFEDD5"  # Light orange
+        elif '_JV' in column:
+            return "#DCFCE7"  # Light green
+        elif '_Cal' in column:
+            return "#FEF9C3"  # Light yellow
+        elif any(f"_{m}" in column for m in ['F', 'G']):
+            return "#DBEAFE"  # Light blue
+        elif any(f"_{m}" in column for m in ['N', 'Q']):
+            return "#FFEDD5"  # Light orange
+        elif any(f"_{m}" in column for m in ['J', 'K', 'M', 'U', 'V']):
+            return "#DCFCE7"  # Light green
+        else:
+            return "white"
+    
+    # Reset index to get Year as a column
+    table_df = pivot_df.reset_index()
+    
+    # Define standardized dimensions
+    year_col_width = "80px"
+    data_col_width = "65px"
+    row_height = "40px"
+    
+    # Start building HTML table
+    html = f'<h3>{asset_name}</h3>\n'
+    html += '<table border="1" style="border-collapse: collapse; width: 100%; table-layout: fixed;">\n'
+    
+    # Header row
+    html += '<tr style="height: 50px;">\n'
+    html += f'<th style="width: {year_col_width}; background-color: #F3F4F6; color: black; padding: 8px; text-align: left;">Year</th>\n'
+    
+    for col in pivot_df.columns:
+        bg_color = get_cell_color(col)
+        # Format the column header to show just the month code
+        display_col = col.split('_')[-1] if '_' in col else col
+        html += f'<th style="width: {data_col_width}; background-color: {bg_color}; color: black; padding: 8px; text-align: center; overflow: hidden; text-overflow: ellipsis;">{display_col}</th>\n'
+    
+    html += '</tr>\n'
+    
+    # Data rows
+    for _, row in table_df.iterrows():
+        year = int(row["Year"])
+        
+        # Check if this is the current year (2025)
+        current_year = 2025  # Hard-coded current year
+        highlight_row = (year == current_year)
+        
+        html += f'<tr style="height: {row_height};">\n'
+        html += f'<td style="width: {year_col_width}; background-color: #F3F4F6; color: black; padding: 8px; font-weight: bold;">{year}</td>\n'
+        
+        for col in pivot_df.columns:
+            # If highlighting the row, use purple, otherwise use the column color
+            bg_color = "#e9d5ff" if highlight_row else get_cell_color(col)  # Light purple if highlighted
+            
+            value = row[col]
+            formatted_value = f"{value:.2f}" if pd.notna(value) else "-"
+            html += f'<td style="width: {data_col_width}; background-color: {bg_color}; color: black; padding: 8px; text-align: right;">{formatted_value}</td>\n'
+        
+        html += '</tr>\n'
+    
+    html += '</table>\n'
+    html += '<div style="margin-bottom: 30px;"></div>\n'
+    
+    return html
+
+# Function to create the price tracker tab for a specific ISO
+def create_price_tracker_tab(dataframes, iso):
+    """Create the price tracker tab for a specific ISO with dropdown selectors"""
+    # Get available peak types for this ISO
+    iso_dataframes = dataframes.get(iso, {}).get('price_tracker', {})
+    peak_types = list([pt for pt, df in iso_dataframes.items() if df is not None])
+    
+    # If no dataframes available, return a placeholder
+    if not peak_types:
+        return pn.pane.HTML(f"<p>No data available for {iso} Price Tracker</p>")
+    
+    # Determine available trade types
+    all_trade_types = set()
+    for peak_type, df in iso_dataframes.items():
+        if df is not None:
+            for col in df.columns:
+                if '_HR' in col:
+                    all_trade_types.add('HR')
+                elif '_SPARK' in col:
+                    all_trade_types.add('SPARK')
+                elif '_FP' in col:
+                    all_trade_types.add('FP')
+                elif '_GASBASIS' in col:
+                    all_trade_types.add('GASBASIS')
+    
+    # Create dropdown selectors
+    # Map trade types to display names
+    trade_type_map = {
+        'FP': 'Fixed Price',
+        'HR': 'Heat Rate',
+        'SPARK': 'Spark Spread',
+        'GASBASIS': 'Gas Basis'
+    }
+    
+    # Create dropdown options
+    trade_type_options = [(trade_type_map.get(tt, tt), tt) for tt in all_trade_types]
+    peak_type_options = [(pt, pt) for pt in peak_types]
+    
+    # Default values
+    default_trade_type = trade_type_options[0][1] if trade_type_options else None
+    default_peak_type = peak_type_options[0][1] if peak_type_options else None
+    
+    # Create dropdown selectors
+    trade_type_select = pn.widgets.Select(
+        name='Trade Type', 
+        options=trade_type_options,
+        value=default_trade_type,
+        width=200
+    )
+    
+    peak_type_select = pn.widgets.Select(
+        name='Peak Type',
+        options=peak_type_options,
+        value=default_peak_type,
+        width=200
+    )
+    
+    # Create a container for the tables that will be updated based on dropdown selections
+    tables_container = pn.pane.HTML("", width=800)
+    
+    # Function to update tables based on dropdown selections
+    def update_tables(event):
+        trade_type = trade_type_select.value
+        peak_type = peak_type_select.value
+        
+        if trade_type and peak_type and peak_type in iso_dataframes:
+            # Get the dataframe for this peak type
+            df = iso_dataframes.get(peak_type)
+            if df is not None:
+                # Process dataframe for the selected trade type
+                pivot_df = process_dataframe_for_trade_type(df, trade_type)
+                
+                if pivot_df is not None and not pivot_df.empty:
+                    # Create HTML for the table
+                    table_html = create_asset_table_html(
+                        f"{iso} {peak_type} {trade_type_map.get(trade_type, trade_type)}", 
+                        pivot_df
+                    )
+                    
+                    # Add the legend
+                    legend_html = """
+                    <div style="margin-top: 20px; font-size: 0.9em; color: black;">
+                        <p>Month Codes: F-Jan, G-Feb, H-Mar, J-Apr, K-May, M-Jun, N-Jul, Q-Aug, U-Sep, V-Oct, X-Nov, Z-Dec</p>
+                        <p>
+                            <span style="display: inline-block; width: 15px; height: 15px; background-color: #DBEAFE;"></span> Jan/Feb &nbsp;&nbsp;
+                            <span style="display: inline-block; width: 15px; height: 15px; background-color: #FFEDD5;"></span> Jul/Aug &nbsp;&nbsp;
+                            <span style="display: inline-block; width: 15px; height: 15px; background-color: white; border: 1px solid #E5E7EB;"></span> Other months
+                        </p>
+                        <p style="margin-top: 10px; font-weight: bold;">Strip Definitions:</p>
+                        <ul>
+                            <li><span style="display: inline-block; width: 15px; height: 15px; background-color: #DBEAFE;"></span> FG: Average of Jan-Feb</li>
+                            <li><span style="display: inline-block; width: 15px; height: 15px; background-color: #FFEDD5;"></span> NQ: Average of Jul-Aug</li>
+                            <li><span style="display: inline-block; width: 15px; height: 15px; background-color: #DCFCE7;"></span> JV: Average of Apr-Oct (J through V)</li>
+                            <li><span style="display: inline-block; width: 15px; height: 15px; background-color: #FEF9C3;"></span> Cal: Average of all months (Calendar year)</li>
+                        </ul>
+                    </div>
+                    """
+                    
+                    # Set the full HTML content
+                    tables_container.object = table_html + legend_html
+                else:
+                    # Display placeholder message when the data is not available
+                    placeholder_html = f"""
+                    <div style="padding: 20px; background-color: #F9FAFB; border-radius: 5px; margin-top: 20px;">
+                        <h2 style="font-size: 1.5em; margin-bottom: 15px; color: black;">
+                            {iso} {peak_type} {trade_type_map.get(trade_type, trade_type)}
+                        </h2>
+                        <p style="color: #333333;">
+                            No data available for this combination.
+                        </p>
+                    </div>
+                    """
+                    tables_container.object = placeholder_html
+            else:
+                tables_container.object = f"<p>No data available for {iso} {peak_type}</p>"
+    
+    # Connect the event handlers
+    trade_type_select.param.watch(update_tables, 'value')
+    peak_type_select.param.watch(update_tables, 'value')
+    
+    # Initialize with the default view
+    update_tables(None)
+    
+    # Create a layout with dropdowns and tables
+    dropdowns = pn.Row(trade_type_select, peak_type_select, width=450)
+    layout = pn.Column(
+        dropdowns,
+        tables_container,
+        sizing_mode='stretch_width'
+    )
+    
+    return layout
+
+# Function to create the cash tracking tab
+def create_cash_tracking_tab(dataframes, iso):
+    """Create the cash tracking tab for a specific ISO"""
+    df = dataframes.get(iso, {}).get('cash_tracking')
+    
+    if df is not None:
+        # Process and display the cash tracking data
+        # This is a placeholder - replace with your actual visualization
+        cash_tracking_html = f"""
+        <div style="padding: 20px; background-color: #F9FAFB; border-radius: 5px;">
+            <h2 style="font-size: 1.5em; margin-bottom: 15px; color: black;">{iso} Cash Tracking</h2>
+            <p style="color: #333333;">
+                Your cash tracking data has {len(df)} rows.
+                Replace this with your actual cash tracking visualization.
+            </p>
+        </div>
+        """
+    else:
+        # Placeholder for when no data is available
+        cash_tracking_html = f"""
+        <div style="padding: 20px; background-color: #F9FAFB; border-radius: 5px;">
+            <h2 style="font-size: 1.5em; margin-bottom: 15px; color: black;">{iso} Cash Tracking</h2>
+            <p style="color: #333333;">Cash tracking data and analytics will be available here in future updates.</p>
+        </div>
+        """
+    
+    cash_tracking = pn.pane.HTML(cash_tracking_html, sizing_mode='stretch_width')
+    return cash_tracking
+
+# Function to create the seasonal tab
+def create_seasonal_tab(dataframes, iso):
+    """Create the seasonal tab for a specific ISO"""
+    df = dataframes.get(iso, {}).get('seasonal')
+    
+    if df is not None:
+        # Process and display the seasonal data
+        # This is a placeholder - replace with your actual visualization
+        seasonal_html = f"""
+        <div style="padding: 20px; background-color: #F9FAFB; border-radius: 5px;">
+            <h2 style="font-size: 1.5em; margin-bottom: 15px; color: black;">{iso} Seasonal Analysis</h2>
+            <p style="color: #333333;">
+                Your seasonal data has {len(df)} rows.
+                Replace this with your actual seasonal analysis visualization.
+            </p>
+        </div>
+        """
+    else:
+        # Placeholder for when no data is available
+        seasonal_html = f"""
+        <div style="padding: 20px; background-color: #F9FAFB; border-radius: 5px;">
+            <h2 style="font-size: 1.5em; margin-bottom: 15px; color: black;">{iso} Seasonal Analysis</h2>
+            <p style="color: #333333;">Seasonal patterns and trend analysis will be available here in future updates.</p>
+        </div>
+        """
+    
+    seasonal = pn.pane.HTML(seasonal_html, sizing_mode='stretch_width')
+    return seasonal
+
+# Function to create the fundamentals tab
+def create_fundamentals_tab(dataframes, iso):
+    """Create the fundamentals tab for a specific ISO"""
+    df = dataframes.get(iso, {}).get('fundamentals')
+    
+    if df is not None:
+        # Process and display the fundamentals data
+        # This is a placeholder - replace with your actual visualization
+        fundamentals_html = f"""
+        <div style="padding: 20px; background-color: #F9FAFB; border-radius: 5px;">
+            <h2 style="font-size: 1.5em; margin-bottom: 15px; color: black;">{iso} Fundamentals</h2>
+            <p style="color: #333333;">
+                Your fundamentals data has {len(df)} rows.
+                Replace this with your actual fundamentals visualization.
+            </p>
+        </div>
+        """
+    else:
+        # Placeholder for when no data is available
+        fundamentals_html = f"""
+        <div style="padding: 20px; background-color: #F9FAFB; border-radius: 5px;">
+            <h2 style="font-size: 1.5em; margin-bottom: 15px; color: black;">{iso} Fundamentals</h2>
+            <p style="color: #333333;">Fundamentals analysis will be available here in future updates.</p>
+        </div>
+        """
+    
+    fundamentals = pn.pane.HTML(fundamentals_html, sizing_mode='stretch_width')
+    return fundamentals
+
+# Main function to run the dashboard
+def run_yanus_dashboard(input_dataframes=None):
+    """Create and run the YANUS dashboard with the provided dataframes"""
+    # Get dataframes
+    dataframes = input_dataframes if input_dataframes is not None else get_dataframes()
+    
+    # Create tabs for each ISO
+    iso_tabs = {}
+    
+    for iso in dataframes.keys():
+        # Create the inner tabs for this ISO
+        price_tracker_tab = create_price_tracker_tab(dataframes, iso)
+        cash_tracking_tab = create_cash_tracking_tab(dataframes, iso)
+        seasonal_tab = create_seasonal_tab(dataframes, iso)
+        fundamentals_tab = create_fundamentals_tab(dataframes, iso)
+        
+        iso_tabs[iso] = pn.Tabs(
+            ('Price Tracker', price_tracker_tab),
+            ('Cash Tracking', cash_tracking_tab),
+            ('Seasonal', seasonal_tab),
+            ('Fundamentals', fundamentals_tab)
+        )
+    
+    # Create the top-level region tabs
+    region_tabs = pn.Tabs(
+        ('ERCOT', iso_tabs.get('ERCOT', pn.pane.HTML("No data for ERCOT"))),
+        ('PJM', iso_tabs.get('PJM', pn.pane.HTML("No data for PJM"))),
+        ('NYISO', iso_tabs.get('NYISO', pn.pane.HTML("No data for NYISO"))),
+        ('NEPOOL', iso_tabs.get('NEPOOL', pn.pane.HTML("No data for NEPOOL")))
+    )
+    
+    # Create the Google-style YANUS logo
+    google_style_logo = """
+    <div style="text-align: center; margin-bottom: 20px; font-family: Arial, sans-serif; font-size: 3em; font-weight: bold;">
+        <span style="color: #4285F4;">Y</span>
+        <span style="color: #EA4335;">A</span>
+        <span style="color: #FBBC05;">N</span>
+        <span style="color: #4285F4;">U</span>
+        <span style="color: #34A853;">S</span>
+    </div>
+    """
+    
+    # Create the dashboard
+    dashboard = pn.Column(
+        pn.pane.HTML(google_style_logo),
+        region_tabs,
+        sizing_mode='stretch_width'
+    )
+    
+    return dashboard
+
+# Function to get the local IP address
+def get_local_ip():
+    """Get the local IP address of this machine"""
+    try:
+        # Create a socket to determine the local IP address
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        # Doesn't need to be reachable
+        s.connect(('8.8.8.8', 1))
+        local_ip = s.getsockname()[0]
+        s.close()
+    except Exception:
+        # Fallback to hostname if the above method fails
+        hostname = socket.gethostname()
+        local_ip = socket.gethostbyname(hostname)
+    return local_ip
+
+# Main function to run Flask server
+if __name__ == "__main__" or '__main__' in locals():
+    # Get local IP address for sharing
+    local_ip = get_local_ip()
+    port = 5000  # Flask's default port
+    
+    # Print server information
+    print(f"\n=== YANUS Dashboard Server ===")
+    print(f"Server started at http://{local_ip}:{port}")
+    print(f"Share this link with others on your network: http://{local_ip}:{port}")
+    print("Press Ctrl+C to stop the server.")
+    print("=" * 30 + "\n")
+    
+    # Create a Flask app
+    app = flask.Flask(__name__)
+    
+    # Function to generate a new dashboard instance for each request
+    @app.route('/')
+    def index():
+        # Create a new dashboard instance
+        dashboard = run_yanus_dashboard()
+        # Return the dashboard as HTML
+        return pn.serve_component(dashboard, static_dirs={"static": ""})
+    
+    # Create a function to open the browser
+    def open_browser():
+        webbrowser.open(f"http://localhost:{port}")
+    
+    # Start the browser after a short delay
+    Thread(target=lambda: open_browser()).start()
+    
+    # Run the Flask app
+    app.run(host='0.0.0.0', port=port, debug=False, threaded=True)
+
+
+# To use with your own data in a Jupyter notebook:
+"""
+# Example usage:
+# 1. Create your dataframes for each ISO and tab type
+
+# ERCOT dataframes
+df_ercot_peak = pd.read_csv('ercot_peak.csv', parse_dates=['MARKETDATE'])
+df_ercot_offpeak = pd.read_csv('ercot_offpeak.csv', parse_dates=['MARKETDATE'])
+df_ercot_nights = pd.read_csv('ercot_nights.csv', parse_dates=['MARKETDATE'])
+df_ercot_atc = pd.read_csv('ercot_atc.csv', parse_dates=['MARKETDATE'])
+df_ercot_cash = pd.read_csv('ercot_cash.csv', parse_dates=['Date'])
+df_ercot_seasonal = pd.read_csv('ercot_seasonal.csv')
+df_ercot_fundamentals = pd.read_csv('ercot_fundamentals.csv')
+
+# PJM dataframes
+df_pjm_peak = pd.read_csv('pjm_peak.csv', parse_dates=['MARKETDATE'])
+# ... add other PJM dataframes
+
+# NYISO dataframes
+df_nyiso_peak = pd.read_csv('nyiso_peak.csv', parse_dates=['MARKETDATE'])
+# ... add other NYISO dataframes
+
+# NEPOOL dataframes
+df_nepool_peak = pd.read_csv('nepool_peak.csv', parse_dates=['MARKETDATE'])
+# ... add other NEPOOL dataframes
+
+# 2. Create a dictionary of dataframes
+dataframes = {
+    'ERCOT': {
+        'price_tracker': {
+            'PEAK': df_ercot_peak,
+            'OFFPEAK': df_ercot_offpeak,
+            'NIGHTS': df_ercot_nights,
+            'ATC': df_ercot_atc
+        },
+        'cash_tracking': df_ercot_cash,
+        'seasonal': df_ercot_seasonal,
+        'fundamentals': df_ercot_fundamentals
+    },
+    'PJM': {
+        'price_tracker': {
+            'PEAK': df_pjm_peak,
+            # ... add other peak types
+        },
+        # ... add other tabs
+    },
+    # ... add other ISOs
+}
+
+# 3. Run the dashboard with your dataframes
+dashboard = run_yanus_dashboard(dataframes)
+dashboard.show()
+"""
