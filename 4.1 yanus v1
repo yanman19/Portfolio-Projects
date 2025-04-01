@@ -1,0 +1,511 @@
+import pandas as pd
+import numpy as np
+import panel as pn
+from datetime import datetime
+import socket
+import flask
+from threading import Thread
+import webbrowser
+
+# Initialize Panel extension
+pn.extension()
+
+# Define month codes and trade types
+MONTH_CODES = {
+    1: 'F', 2: 'G', 3: 'H', 4: 'J', 5: 'K', 6: 'M',
+    7: 'N', 8: 'Q', 9: 'U', 10: 'V', 11: 'X', 12: 'Z'
+}
+
+REGIONS = ['ERCOT', 'PJM', 'NYISO', 'NEPOOL']
+
+PEAK_TYPES = ['PEAK', 'OFFPEAK', '2x16', '7x8', 'ATC']
+
+TRADE_TYPES = ['FP', 'SPARK', 'HR', 'SPREAD', 'GASBASIS']
+
+# Full list of all possible combinations for column naming
+PRODUCT_TAGS = [f"{peak}_{trade}" for peak in PEAK_TYPES for trade in TRADE_TYPES]
+
+# Function to parse the input dataframe based on column naming convention
+def parse_structured_data(df):
+    """
+    Parse a dataframe with columns named according to the convention:
+    {REGION}_{PEAK_TYPE}_{TRADE_TYPE}_{MONTH_CODE}
+    
+    For example: ERCOT_PEAK_FP_F, PJM_OFFPEAK_SPARK_G, etc.
+    
+    Returns a nested dictionary organized by region, product type, and data.
+    """
+    structured_data = {}
+    
+    # Extract the Year column if present, otherwise assume it's the index
+    if 'Year' in df.columns:
+        years = df['Year'].unique().tolist()
+    else:
+        years = df.index.unique().tolist()
+    
+    # Process for each region
+    for region in REGIONS:
+        structured_data[region] = {}
+        
+        # Process for each product tag (combination of peak type and trade type)
+        for product_tag in PRODUCT_TAGS:
+            peak_type, trade_type = product_tag.split('_')
+            
+            # Create filter for columns matching this region and product tag
+            column_filter = [col for col in df.columns if 
+                             col.startswith(f"{region}_{peak_type}_{trade_type}_") or
+                             col.startswith(f"{region}_{product_tag}_")]
+            
+            # If we have matching columns, process this product type
+            if column_filter:
+                # Extract just the month codes from the column names
+                month_columns = {}
+                for col in column_filter:
+                    parts = col.split('_')
+                    if len(parts) >= 4:  # Make sure we have enough parts
+                        month_code = parts[-1]  # The month code is the last part
+                        if len(month_code) == 1:  # Valid month codes are single characters
+                            month_columns[month_code] = col
+                
+                # If we have monthly data, create a pivot table-like structure
+                if month_columns:
+                    # Create a new dataframe with just the month columns
+                    product_df = pd.DataFrame(index=years)
+                    
+                    # Extract ordered month codes (F, G, H, etc.)
+                    ordered_columns = [code for code in 'FGHJKMNQUVXZ' if code in month_columns]
+                    
+                    # Add data for each month
+                    for month_code in ordered_columns:
+                        if month_code in month_columns:
+                            source_col = month_columns[month_code]
+                            if source_col in df.columns:
+                                product_df[month_code] = df[source_col].values
+                    
+                    # Calculate strips
+                    if 'F' in product_df.columns and 'G' in product_df.columns:
+                        product_df['FG'] = product_df[['F', 'G']].mean(axis=1).round(2)
+                        
+                    if 'N' in product_df.columns and 'Q' in product_df.columns:
+                        product_df['NQ'] = product_df[['N', 'Q']].mean(axis=1).round(2)
+                    
+                    jv_cols = [c for c in 'JKMNQUV' if c in product_df.columns]
+                    if len(jv_cols) > 0:
+                        product_df['JV'] = product_df[jv_cols].mean(axis=1).round(2)
+                    
+                    cal_cols = [c for c in ordered_columns if c in product_df.columns]
+                    if cal_cols:
+                        product_df['Cal'] = product_df[cal_cols].mean(axis=1).round(2)
+                    
+                    # Store the processed data
+                    key = f"{peak_type}_{trade_type}"
+                    structured_data[region][key] = product_df
+    
+    return structured_data
+
+# Sample data generation function to create synthetic data with the right column structure
+def generate_sample_structured_data():
+    """Generate sample data with the specified column structure for demo purposes"""
+    # Create a sample years range
+    years = list(range(2020, 2026))
+    
+    # Create an empty dataframe with Year as the index
+    df = pd.DataFrame(index=years)
+    df.index.name = 'Year'
+    
+    # For each region, peak type, and trade type combination
+    for region in REGIONS:
+        for peak_type in PEAK_TYPES:
+            for trade_type in TRADE_TYPES:
+                # Base price varies by region and product type
+                base_price = 0
+                
+                if region == 'ERCOT':
+                    base_price = 35
+                elif region == 'PJM':
+                    base_price = 40
+                elif region == 'NYISO':
+                    base_price = 45
+                elif region == 'NEPOOL':
+                    base_price = 50
+                
+                # Adjust base price by trade type
+                if trade_type == 'SPARK':
+                    base_price *= 1.2
+                elif trade_type == 'HR':
+                    base_price = base_price / 10  # Heat rates around 7-12
+                elif trade_type == 'SPREAD':
+                    base_price *= 0.8
+                elif trade_type == 'GASBASIS':
+                    base_price = base_price / 15  # Gas prices around 2-5
+                
+                # Adjust by peak type
+                if peak_type == 'OFFPEAK':
+                    base_price *= 0.7
+                elif peak_type == '2x16':
+                    base_price *= 0.9
+                elif peak_type == '7x8':
+                    base_price *= 0.6
+                elif peak_type == 'ATC':
+                    base_price *= 0.85
+                
+                # Generate data for each month
+                for month, code in MONTH_CODES.items():
+                    # Column name follows the convention: REGION_PEAKTYPE_TRADETYPE_MONTHCODE
+                    col_name = f"{region}_{peak_type}_{trade_type}_{code}"
+                    
+                    # Generate synthetic prices with seasonality and annual trend
+                    prices = []
+                    for year in years:
+                        # Year trend factor (prices increase slightly each year)
+                        year_factor = (year - 2020) * 0.05 * base_price
+                        
+                        # Seasonal factor (higher in summer, lower in winter)
+                        if month >= 6 and month <= 8:  # Summer
+                            season_factor = 0.2 * base_price
+                        elif month >= 11 or month <= 2:  # Winter
+                            season_factor = 0.1 * base_price
+                        else:  # Spring/Fall
+                            season_factor = 0
+                        
+                        # Random noise
+                        noise = (np.random.random() - 0.5) * 0.1 * base_price
+                        
+                        # Calculate final price
+                        price = base_price + year_factor + season_factor + noise
+                        prices.append(round(price, 2))
+                    
+                    # Add the column to the dataframe
+                    df[col_name] = prices
+    
+    return df
+
+# Function to create HTML table for an asset with styling
+def create_asset_table_html(asset_name, pivot_df):
+    """Create a styled HTML table directly without using pandas styling"""
+    # Define color mapping
+    def get_cell_color(column):
+        if column in ['F', 'G', 'FG']:
+            return "#DBEAFE"  # Light blue
+        elif column in ['N', 'Q', 'NQ']:
+            return "#FFEDD5"  # Light orange
+        elif column in ['J', 'K', 'M', 'U', 'V', 'JV']:
+            return "#DCFCE7"  # Light green
+        elif column == 'Cal':
+            return "#FEF9C3"  # Light yellow
+        else:
+            return "white"
+    
+    # Reset index to get Year as a column
+    table_df = pivot_df.reset_index()
+    
+    # Define standardized dimensions
+    year_col_width = "80px"
+    data_col_width = "65px"
+    row_height = "40px"
+    
+    # Start building HTML table
+    html = f'<h3>{asset_name} - Average Monthly Prices</h3>\n'
+    html += '<table border="1" style="border-collapse: collapse; width: 100%; table-layout: fixed;">\n'
+    
+    # Header row
+    html += '<tr style="height: 50px;">\n'
+    html += f'<th style="width: {year_col_width}; background-color: #F3F4F6; color: black; padding: 8px; text-align: left;">Year</th>\n'
+    
+    for col in pivot_df.columns:
+        bg_color = get_cell_color(col)
+        html += f'<th style="width: {data_col_width}; background-color: {bg_color}; color: black; padding: 8px; text-align: center; overflow: hidden; text-overflow: ellipsis;">{col}</th>\n'
+    
+    html += '</tr>\n'
+    
+    # Data rows
+    for _, row in table_df.iterrows():
+        year = int(row["Year"])
+        
+        # Check if this is the current year (2025)
+        current_year = 2025  # Hard-coded current year
+        highlight_row = (year == current_year)
+        
+        html += f'<tr style="height: {row_height};">\n'
+        html += f'<td style="width: {year_col_width}; background-color: #F3F4F6; color: black; padding: 8px; font-weight: bold;">{year}</td>\n'
+        
+        for col in pivot_df.columns:
+            # If highlighting the row, use purple, otherwise use the column color
+            bg_color = "#e9d5ff" if highlight_row else get_cell_color(col)  # Light purple if highlighted
+            
+            value = row[col]
+            formatted_value = f"{value:.2f}" if pd.notna(value) else "-"
+            html += f'<td style="width: {data_col_width}; background-color: {bg_color}; color: black; padding: 8px; text-align: right;">{formatted_value}</td>\n'
+        
+        html += '</tr>\n'
+    
+    html += '</table>\n'
+    html += '<div style="margin-bottom: 30px;"></div>\n'
+    
+    return html
+
+# Function to create the price tracker tab with dropdown selectors for a specific region
+def create_price_tracker_tab(structured_data, region):
+    """Create the price tracker tab content with dropdown selectors for peak type and trade type"""
+    # Get available product combinations for this region
+    available_products = structured_data[region].keys()
+    
+    # Extract all unique peak types and trade types that exist in the data
+    peak_types = sorted(list(set([prod.split('_')[0] for prod in available_products])))
+    trade_types = sorted(list(set([prod.split('_')[1] for prod in available_products])))
+    
+    # Create dropdown selectors
+    trade_type_select = pn.widgets.Select(
+        name='Trade Type', 
+        options=[
+            ('Fixed Price', 'FP'), 
+            ('Heat Rate', 'HR'), 
+            ('Spark Spread', 'SPARK'), 
+            ('Gas Basis', 'GASBASIS'), 
+            ('Spreads', 'SPREAD')
+        ],
+        value='FP',
+        width=200
+    )
+    
+    peak_type_select = pn.widgets.Select(
+        name='Peak Type',
+        options=[
+            ('Peak', 'PEAK'), 
+            ('Offpeak', 'OFFPEAK'), 
+            ('2x16', '2x16'), 
+            ('7x8', '7x8'),
+            ('ATC', 'ATC')
+        ],
+        value='PEAK',
+        width=200
+    )
+    
+    # Create a container for the tables that will be updated based on dropdown selections
+    tables_container = pn.pane.HTML("", width=800)
+    
+    # Function to update tables based on dropdown selections
+    def update_tables(event):
+        peak_type = peak_type_select.value
+        trade_type = trade_type_select.value
+        
+        # Construct the product key
+        product_key = f"{peak_type}_{trade_type}"
+        
+        # Check if this product combination exists for this region
+        if product_key in structured_data[region]:
+            pivot_df = structured_data[region][product_key]
+            
+            # Create HTML for the table
+            table_html = create_asset_table_html(f"{region} {peak_type} {trade_type}", pivot_df)
+            
+            # Add the legend
+            legend_html = """
+            <div style="margin-top: 20px; font-size: 0.9em; color: black;">
+                <p>Month Codes: F-Jan, G-Feb, H-Mar, J-Apr, K-May, M-Jun, N-Jul, Q-Aug, U-Sep, V-Oct, X-Nov, Z-Dec</p>
+                <p>
+                    <span style="display: inline-block; width: 15px; height: 15px; background-color: #DBEAFE;"></span> Jan/Feb &nbsp;&nbsp;
+                    <span style="display: inline-block; width: 15px; height: 15px; background-color: #FFEDD5;"></span> Jul/Aug &nbsp;&nbsp;
+                    <span style="display: inline-block; width: 15px; height: 15px; background-color: white; border: 1px solid #E5E7EB;"></span> Other months
+                </p>
+                <p style="margin-top: 10px; font-weight: bold;">Strip Definitions:</p>
+                <ul>
+                    <li><span style="display: inline-block; width: 15px; height: 15px; background-color: #DBEAFE;"></span> FG: Average of Jan-Feb</li>
+                    <li><span style="display: inline-block; width: 15px; height: 15px; background-color: #FFEDD5;"></span> NQ: Average of Jul-Aug</li>
+                    <li><span style="display: inline-block; width: 15px; height: 15px; background-color: #DCFCE7;"></span> JV: Average of Apr-Oct (J through V)</li>
+                    <li><span style="display: inline-block; width: 15px; height: 15px; background-color: #FEF9C3;"></span> Cal: Average of all months (Calendar year)</li>
+                </ul>
+            </div>
+            """
+            
+            # Set the full HTML content
+            tables_container.object = table_html + legend_html
+        else:
+            # Display placeholder message when the data is not available
+            placeholder_html = f"""
+            <div style="padding: 20px; background-color: #F9FAFB; border-radius: 5px; margin-top: 20px;">
+                <h2 style="font-size: 1.5em; margin-bottom: 15px; color: black;">
+                    {region} - {peak_type_select.labels[peak_type_select.options.index(peak_type)]} - {trade_type_select.labels[trade_type_select.options.index(trade_type)]}
+                </h2>
+                <p style="color: #333333;">
+                    Data for this combination is not available or will be added in future updates.
+                </p>
+            </div>
+            """
+            tables_container.object = placeholder_html
+    
+    # Connect the event handlers
+    trade_type_select.param.watch(update_tables, 'value')
+    peak_type_select.param.watch(update_tables, 'value')
+    
+    # Initialize with the default view
+    update_tables(None)
+    
+    # Create a layout with dropdowns and tables
+    dropdowns = pn.Row(trade_type_select, peak_type_select, width=450)
+    layout = pn.Column(
+        dropdowns,
+        tables_container,
+        sizing_mode='stretch_width'
+    )
+    
+    return layout
+
+# Function to create the fundamentals tab
+def create_fundamentals_tab(region):
+    """Create the fundamentals tab content"""
+    fundamentals_html = f"""
+    <div style="padding: 20px; background-color: #F9FAFB; border-radius: 5px;">
+        <h2 style="font-size: 1.5em; margin-bottom: 15px; color: black;">{region} Fundamentals</h2>
+        <p style="color: #333333;">Fundamentals analysis will be available here in future updates.</p>
+    </div>
+    """
+    
+    fundamentals = pn.pane.HTML(fundamentals_html, sizing_mode='stretch_width')
+    
+    return fundamentals
+
+# Function to create a placeholder cash tracking tab
+def create_placeholder_cash_tracking_tab(region):
+    """Create a placeholder cash tracking tab"""
+    cash_tracking_html = f"""
+    <div style="padding: 20px; background-color: #F9FAFB; border-radius: 5px;">
+        <h2 style="font-size: 1.5em; margin-bottom: 15px; color: black;">{region} Cash Tracking</h2>
+        <p style="color: #333333;">Cash tracking data and analytics will be available here in future updates.</p>
+    </div>
+    """
+    
+    cash_tracking = pn.pane.HTML(cash_tracking_html, sizing_mode='stretch_width')
+    return cash_tracking
+
+# Function to create a placeholder seasonal tab
+def create_placeholder_seasonal_tab(region):
+    """Create a placeholder seasonal analysis tab"""
+    seasonal_html = f"""
+    <div style="padding: 20px; background-color: #F9FAFB; border-radius: 5px;">
+        <h2 style="font-size: 1.5em; margin-bottom: 15px; color: black;">{region} Seasonal Analysis</h2>
+        <p style="color: #333333;">Seasonal patterns and trend analysis will be available here in future updates.</p>
+    </div>
+    """
+    
+    seasonal = pn.pane.HTML(seasonal_html, sizing_mode='stretch_width')
+    return seasonal
+
+# Main function to run the dashboard with structured data
+def run_yanus_dashboard(input_df=None):
+    """Create and run the YANUS dashboard with structured data"""
+    # Generate or use input data
+    if input_df is None:
+        df = generate_sample_structured_data()
+    else:
+        df = input_df
+    
+    # Parse the structured data
+    structured_data = parse_structured_data(df)
+    
+    # Create tabs for each region
+    region_tabs = {}
+    
+    for region in REGIONS:
+        # Create the inner tabs for this region
+        price_tracker_tab = create_price_tracker_tab(structured_data, region)
+        cash_tracking_tab = create_placeholder_cash_tracking_tab(region)
+        seasonal_tab = create_placeholder_seasonal_tab(region)
+        fundamentals_tab = create_fundamentals_tab(region)
+        
+        region_tabs[region] = pn.Tabs(
+            ('Price Tracker', price_tracker_tab),
+            ('Cash Tracking', cash_tracking_tab),
+            ('Seasonal', seasonal_tab),
+            ('Fundamentals', fundamentals_tab)
+        )
+    
+    # Create the top-level region tabs
+    main_tabs = pn.Tabs(
+        ('ERCOT', region_tabs['ERCOT']),
+        ('PJM', region_tabs['PJM']),
+        ('NYISO', region_tabs['NYISO']),
+        ('NEPOOL', region_tabs['NEPOOL'])
+    )
+    
+    # Create the Google-style YANUS logo
+    google_style_logo = """
+    <div style="text-align: center; margin-bottom: 20px; font-family: Arial, sans-serif; font-size: 3em; font-weight: bold;">
+        <span style="color: #4285F4;">Y</span>
+        <span style="color: #EA4335;">A</span>
+        <span style="color: #FBBC05;">N</span>
+        <span style="color: #4285F4;">U</span>
+        <span style="color: #34A853;">S</span>
+    </div>
+    """
+    
+    # Create the dashboard
+    dashboard = pn.Column(
+        pn.pane.HTML(google_style_logo),
+        main_tabs,
+        sizing_mode='stretch_width'
+    )
+    
+    return dashboard
+
+# Function to get the local IP address
+def get_local_ip():
+    """Get the local IP address of this machine"""
+    try:
+        # Create a socket to determine the local IP address
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        # Doesn't need to be reachable
+        s.connect(('8.8.8.8', 1))
+        local_ip = s.getsockname()[0]
+        s.close()
+    except Exception:
+        # Fallback to hostname if the above method fails
+        hostname = socket.gethostname()
+        local_ip = socket.gethostbyname(hostname)
+    return local_ip
+
+# Main function to run Flask server
+if __name__ == "__main__" or '__main__' in locals():
+    # Get local IP address for sharing
+    local_ip = get_local_ip()
+    port = 5000  # Flask's default port
+    
+    # Print server information
+    print(f"\n=== YANUS Dashboard Server ===")
+    print(f"Server started at http://{local_ip}:{port}")
+    print(f"Share this link with others on your network: http://{local_ip}:{port}")
+    print("Press Ctrl+C to stop the server.")
+    print("=" * 30 + "\n")
+    
+    # Create a Flask app
+    app = flask.Flask(__name__)
+    
+    # Function to generate a new dashboard instance for each request
+    @app.route('/')
+    def index():
+        # Create a new dashboard instance
+        dashboard = run_yanus_dashboard()
+        # Return the dashboard as HTML
+        return pn.serve_component(dashboard, static_dirs={"static": ""})
+    
+    # Create a function to open the browser
+    def open_browser():
+        webbrowser.open(f"http://localhost:{port}")
+    
+    # Start the browser after a short delay
+    Thread(target=lambda: open_browser()).start()
+    
+    # Run the Flask app
+    app.run(host='0.0.0.0', port=port, debug=False, threaded=True)
+
+
+# To use with your own data in a Jupyter notebook:
+"""
+# Example usage:
+# 1. Import your data from CSV or other source
+# df = pd.read_csv('your_data.csv')
+
+# 2. Run the dashboard with your data
+# dashboard = run_yanus_dashboard(df)
+# dashboard.show()
+"""
