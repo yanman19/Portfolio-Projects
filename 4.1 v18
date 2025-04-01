@@ -1,0 +1,553 @@
+import pandas as pd
+import numpy as np
+import panel as pn
+from datetime import datetime
+import socket
+import webbrowser
+from threading import Thread
+
+# Initialize Panel extension
+pn.extension()
+
+# ============================================================================
+# DATAFRAME INPUT SECTION - ADD YOUR DATAFRAMES HERE
+# ============================================================================
+
+def get_dataframes():
+    """
+    Return a dictionary of ERCOT price tracker dataframes organized by peak type.
+    
+    Replace this with your actual dataframe loading code
+    """
+    # This is a placeholder - replace with your actual code
+    dataframes = {
+        'PEAK': None,      # Replace with your ERCOT PEAK dataframe
+        'OFFPEAK': None,   # Replace with your ERCOT OFFPEAK dataframe
+        'NIGHTS': None,    # Replace with your ERCOT NIGHTS dataframe 
+        'ATC': None        # Replace with your ERCOT ATC dataframe
+    }
+    
+    return dataframes
+
+# ============================================================================
+# END OF DATAFRAME INPUT SECTION
+# ============================================================================
+
+# Function to process dataframe for a specific trade type - CUSTOMIZED FOR YOUR COLUMNS
+def process_dataframe_for_trade_type(df, trade_type):
+    """Process a dataframe to create a pivot table for a specific trade type"""
+    if df is None:
+        return None
+    
+    # Extract columns for the specified trade type based on your column naming patterns
+    trade_columns = []
+    
+    if trade_type == 'FP':
+        # Match columns ending with _FP (like NorthDA_FP, HSC_FP)
+        trade_columns = [col for col in df.columns if isinstance(col, str) and col.endswith('_FP')]
+    elif trade_type == 'HR':
+        # Match columns containing _HR_ (like ERCOT_NORTH_HR_DA)
+        trade_columns = [col for col in df.columns if isinstance(col, str) and '_HR_' in col]
+    elif trade_type == 'SPARK':
+        # Match columns containing _SPARK_ (like ERCOT_NORTH_SPARK_DA)
+        trade_columns = [col for col in df.columns if isinstance(col, str) and '_SPARK_' in col]
+    elif trade_type == 'GASBASIS':
+        # Match columns ending with _GASBASIS (like HSC_GASBASIS)
+        trade_columns = [col for col in df.columns if isinstance(col, str) and col.endswith('_GASBASIS')]
+    elif trade_type == 'SPREAD':
+        # Match columns ending with _SPREAD (like H/N_DA_SPREAD)
+        trade_columns = [col for col in df.columns if isinstance(col, str) and col.endswith('_SPREAD')]
+    
+    if not trade_columns:
+        return None
+    
+    # Use the MARKETDATE column to get year and month
+    if 'MARKETDATE' not in df.columns:
+        return None
+    
+    df_copy = df.copy()
+    df_copy['Year'] = df_copy['MARKETDATE'].dt.year
+    df_copy['Month'] = df_copy['MARKETDATE'].dt.month
+    
+    # Month code mapping
+    month_codes = {
+        1: 'F', 2: 'G', 3: 'H', 4: 'J', 5: 'K', 6: 'M', 
+        7: 'N', 8: 'Q', 9: 'U', 10: 'V', 11: 'X', 12: 'Z'
+    }
+    df_copy['MonthCode'] = df_copy['Month'].map(month_codes)
+    
+    # Create a pivot table with Year as index, MonthCode as columns
+    # For each asset, create a separate pivot table and then concatenate them
+    pivot_tables = []
+    
+    for col in trade_columns:
+        try:
+            # Create pivot table for this column
+            asset_pivot = df_copy.pivot_table(
+                index='Year', 
+                columns='MonthCode',
+                values=col,
+                aggfunc='mean'
+            ).round(2)
+            
+            # Calculate strips for this asset
+            ordered_columns = [month_codes[i] for i in range(1, 13)]
+            
+            # Ensure all months are included in correct order
+            for month_code in ordered_columns:
+                if month_code not in asset_pivot.columns:
+                    asset_pivot[month_code] = np.nan
+            
+            asset_pivot = asset_pivot.reindex(columns=ordered_columns)
+            
+            # Calculate strips - FG
+            if 'F' in asset_pivot.columns and 'G' in asset_pivot.columns:
+                f_col = asset_pivot['F'].fillna(0)
+                g_col = asset_pivot['G'].fillna(0)
+                asset_pivot['FG'] = (f_col + g_col).div(
+                    (f_col != 0).astype(int) + (g_col != 0).astype(int)
+                ).replace(np.inf, np.nan).round(2)
+            
+            # Calculate strips - NQ
+            if 'N' in asset_pivot.columns and 'Q' in asset_pivot.columns:
+                n_col = asset_pivot['N'].fillna(0)
+                q_col = asset_pivot['Q'].fillna(0)
+                asset_pivot['NQ'] = (n_col + q_col).div(
+                    (n_col != 0).astype(int) + (q_col != 0).astype(int)
+                ).replace(np.inf, np.nan).round(2)
+            
+            # Calculate strips - JV
+            jv_cols = [c for c in 'JKMNQUV' if c in asset_pivot.columns]
+            if jv_cols:
+                jv_values = asset_pivot[jv_cols].fillna(0)
+                count_nonzero = (jv_values != 0).sum(axis=1)
+                asset_pivot['JV'] = jv_values.sum(axis=1).div(count_nonzero).replace(np.inf, np.nan).round(2)
+            
+            # Calculate strips - Cal
+            cal_cols = [c for c in ordered_columns if c in asset_pivot.columns]
+            if cal_cols:
+                cal_values = asset_pivot[cal_cols].fillna(0)
+                count_nonzero = (cal_values != 0).sum(axis=1)
+                asset_pivot['Cal'] = cal_values.sum(axis=1).div(count_nonzero).replace(np.inf, np.nan).round(2)
+            
+            # Add asset name as a prefix to all column names
+            # Extract asset name based on your column naming patterns
+            if trade_type == 'FP':
+                asset_name = col.split('_FP')[0]
+            elif trade_type == 'HR':
+                parts = col.split('_HR_')
+                asset_name = parts[0].split('_')[-1] + '_' + parts[1]
+            elif trade_type == 'SPARK':
+                parts = col.split('_SPARK_')
+                asset_name = parts[0].split('_')[-1] + '_' + parts[1]
+            elif trade_type == 'GASBASIS':
+                asset_name = col.split('_GASBASIS')[0]
+            elif trade_type == 'SPREAD':
+                asset_name = col.split('_SPREAD')[0]
+            else:
+                asset_name = col
+                
+            asset_pivot.columns = [f"{asset_name}_{c}" for c in asset_pivot.columns]
+            
+            pivot_tables.append(asset_pivot)
+        except Exception as e:
+            print(f"Error processing column {col}: {e}")
+            continue
+    
+    # If we have any pivot tables, concatenate them
+    if pivot_tables:
+        return pd.concat(pivot_tables, axis=1)
+    else:
+        return None
+
+# Function to create HTML table for an asset with styling
+def create_asset_table_html(asset_name, pivot_df):
+    """Create a styled HTML table directly without using pandas styling"""
+    if pivot_df is None or pivot_df.empty:
+        return f"<p>No data available for {asset_name}</p>"
+    
+    # Define color mapping
+    def get_cell_color(column):
+        # Use explicit string checking instead of 'in' operator on the column name
+        col_str = str(column)
+        if '_FG' in col_str:
+            return "#DBEAFE"  # Light blue
+        elif '_NQ' in col_str:
+            return "#FFEDD5"  # Light orange
+        elif '_JV' in col_str:
+            return "#DCFCE7"  # Light green
+        elif '_Cal' in col_str:
+            return "#FEF9C3"  # Light yellow
+        elif any(f"_{m}" in col_str for m in ['F', 'G']):
+            return "#DBEAFE"  # Light blue
+        elif any(f"_{m}" in col_str for m in ['N', 'Q']):
+            return "#FFEDD5"  # Light orange
+        elif any(f"_{m}" in col_str for m in ['J', 'K', 'M', 'U', 'V']):
+            return "#DCFCE7"  # Light green
+        else:
+            return "white"
+    
+    # Make sure we have a proper DataFrame with index as expected
+    try:
+        table_df = pivot_df.reset_index()
+    except Exception as e:
+        print(f"Error resetting index: {e}")
+        return f"<p>Error processing data for {asset_name}: {e}</p>"
+    
+    # Define standardized dimensions
+    year_col_width = "80px"
+    data_col_width = "65px"
+    row_height = "40px"
+    
+    # Start building HTML table
+    html = f'<h3>{asset_name}</h3>\n'
+    html += '<table border="1" style="border-collapse: collapse; width: 100%; table-layout: fixed;">\n'
+    
+    # Header row
+    html += '<tr style="height: 50px;">\n'
+    html += f'<th style="width: {year_col_width}; background-color: #F3F4F6; color: black; padding: 8px; text-align: left;">Year</th>\n'
+    
+    for col in pivot_df.columns:
+        bg_color = get_cell_color(col)
+        # Format the column header to show just the month code
+        col_str = str(col)
+        display_col = col_str.split('_')[-1] if '_' in col_str else col_str
+        html += f'<th style="width: {data_col_width}; background-color: {bg_color}; color: black; padding: 8px; text-align: center; overflow: hidden; text-overflow: ellipsis;">{display_col}</th>\n'
+    
+    html += '</tr>\n'
+    
+    # Data rows
+    current_year = 2025  # Hard-coded current year
+
+    for _, row in table_df.iterrows():
+        try:
+            # Safely get the year value using explicit indexing
+            if 'Year' in table_df.columns:
+                year_val = row['Year']
+                if pd.notna(year_val):
+                    try:
+                        year = int(year_val)
+                    except (ValueError, TypeError):
+                        year = 0  # Default if conversion fails
+                else:
+                    year = 0  # Default for NA values
+            else:
+                # Try to get year from index if not in columns
+                year = int(row.name) if pd.notna(row.name) else 0
+                
+            # Check if this is the current year (2025) - use safe comparison
+            highlight_row = (year == current_year)
+            
+            html += f'<tr style="height: {row_height};">\n'
+            html += f'<td style="width: {year_col_width}; background-color: #F3F4F6; color: black; padding: 8px; font-weight: bold;">{year}</td>\n'
+            
+            # Process each data cell
+            for col in pivot_df.columns:
+                # If highlighting the row, use purple, otherwise use the column color
+                bg_color = "#e9d5ff" if highlight_row else get_cell_color(col)
+                
+                # Safely get the cell value with explicit checking
+                try:
+                    cell_value = row[col]
+                    if pd.isna(cell_value):
+                        formatted_value = "-"
+                    else:
+                        try:
+                            # Try to format as number if possible
+                            num_val = float(cell_value)
+                            formatted_value = f"{num_val:.2f}"
+                        except (ValueError, TypeError):
+                            # Use as string if not a number
+                            formatted_value = str(cell_value)
+                except (KeyError, TypeError):
+                    formatted_value = "-"
+                
+                html += f'<td style="width: {data_col_width}; background-color: {bg_color}; color: black; padding: 8px; text-align: right;">{formatted_value}</td>\n'
+            
+            html += '</tr>\n'
+        except Exception as e:
+            print(f"Error processing row: {e}")
+            continue
+    
+    html += '</table>\n'
+    html += '<div style="margin-bottom: 30px;"></div>\n'
+    
+    return html
+
+# Function to update tables based on dropdown selections
+def update_tables(event, trade_type_select, peak_type_select, tables_container, dataframes):
+    """Update tables based on dropdown selections"""
+    trade_type = trade_type_select.value
+    peak_type = peak_type_select.value
+    
+    # Map trade types to display names
+    trade_type_map = {
+        'FP': 'Fixed Price',
+        'HR': 'Heat Rate',
+        'SPARK': 'Spark Spread',
+        'GASBASIS': 'Gas Basis',
+        'SPREAD': 'Spreads'
+    }
+    
+    if not trade_type or not peak_type:
+        tables_container.object = "<p>Please select valid Trade Type and Peak Type</p>"
+        return
+    
+    if peak_type not in dataframes:
+        tables_container.object = f"<p>No data available for peak type: {peak_type}</p>"
+        return
+    
+    # Get the dataframe for this peak type
+    df = dataframes.get(peak_type)
+    if df is None:
+        tables_container.object = f"<p>No data available for ERCOT {peak_type}</p>"
+        return
+    
+    # Process dataframe for the selected trade type
+    pivot_df = process_dataframe_for_trade_type(df, trade_type)
+    
+    if pivot_df is not None and not pivot_df.empty:
+        # Create HTML for the table
+        table_html = create_asset_table_html(
+            f"ERCOT {peak_type} {trade_type_map.get(trade_type, trade_type)}", 
+            pivot_df
+        )
+        
+        # Add the legend
+        legend_html = """
+        <div style="margin-top: 20px; font-size: 0.9em; color: black;">
+            <p>Month Codes: F-Jan, G-Feb, H-Mar, J-Apr, K-May, M-Jun, N-Jul, Q-Aug, U-Sep, V-Oct, X-Nov, Z-Dec</p>
+            <p>
+                <span style="display: inline-block; width: 15px; height: 15px; background-color: #DBEAFE;"></span> Jan/Feb &nbsp;&nbsp;
+                <span style="display: inline-block; width: 15px; height: 15px; background-color: #FFEDD5;"></span> Jul/Aug &nbsp;&nbsp;
+                <span style="display: inline-block; width: 15px; height: 15px; background-color: white; border: 1px solid #E5E7EB;"></span> Other months
+            </p>
+            <p style="margin-top: 10px; font-weight: bold;">Strip Definitions:</p>
+            <ul>
+                <li><span style="display: inline-block; width: 15px; height: 15px; background-color: #DBEAFE;"></span> FG: Average of Jan-Feb</li>
+                <li><span style="display: inline-block; width: 15px; height: 15px; background-color: #FFEDD5;"></span> NQ: Average of Jul-Aug</li>
+                <li><span style="display: inline-block; width: 15px; height: 15px; background-color: #DCFCE7;"></span> JV: Average of Apr-Oct (J through V)</li>
+                <li><span style="display: inline-block; width: 15px; height: 15px; background-color: #FEF9C3;"></span> Cal: Average of all months (Calendar year)</li>
+            </ul>
+        </div>
+        """
+        
+        # Set the full HTML content
+        tables_container.object = table_html + legend_html
+    else:
+        # Display placeholder message when the data is not available
+        placeholder_html = f"""
+        <div style="padding: 20px; background-color: #F9FAFB; border-radius: 5px; margin-top: 20px;">
+            <h2 style="font-size: 1.5em; margin-bottom: 15px; color: black;">
+                ERCOT {peak_type} {trade_type_map.get(trade_type, trade_type)}
+            </h2>
+            <p style="color: #333333;">
+                No data available for this combination.
+            </p>
+        </div>
+        """
+        tables_container.object = placeholder_html
+
+# Function to create the price tracker tab
+def create_price_tracker_tab(dataframes):
+    """Create the price tracker tab with dropdown selectors"""
+    # Get available peak types
+    peak_types = [pt for pt, df in dataframes.items() if df is not None]
+    
+    # If no dataframes available, return a placeholder
+    if not peak_types:
+        return pn.pane.HTML("<p>No data available for Price Tracker</p>")
+    
+    # Define available trade types based on your column naming patterns
+    all_trade_types = ['FP', 'HR', 'SPARK', 'GASBASIS', 'SPREAD']
+    
+    # Create dropdown selectors
+    # Map trade types to display names
+    trade_type_map = {
+        'FP': 'Fixed Price',
+        'HR': 'Heat Rate',
+        'SPARK': 'Spark Spread',
+        'GASBASIS': 'Gas Basis',
+        'SPREAD': 'Spreads'
+    }
+    
+    # Create dropdown options
+    trade_type_options = [(trade_type_map.get(tt, tt), tt) for tt in all_trade_types]
+    peak_type_options = [(pt, pt) for pt in peak_types]
+    
+    # Default values
+    default_trade_type = 'FP'  # Default to Fixed Price
+    default_peak_type = peak_type_options[0][1] if peak_type_options else None
+    
+    # Create dropdown selectors
+    trade_type_select = pn.widgets.Select(
+        name='Trade Type', 
+        options=trade_type_options,
+        value=default_trade_type,
+        width=200
+    )
+    
+    peak_type_select = pn.widgets.Select(
+        name='Peak Type',
+        options=peak_type_options,
+        value=default_peak_type,
+        width=200
+    )
+    
+    # Create a container for the tables that will be updated based on dropdown selections
+    tables_container = pn.pane.HTML("", width=800)
+    
+    # Create a wrapper for the update function that includes all needed parameters
+    def update_callback(event):
+        update_tables(event, trade_type_select, peak_type_select, tables_container, dataframes)
+    
+    # Connect the event handlers
+    trade_type_select.param.watch(update_callback, 'value')
+    peak_type_select.param.watch(update_callback, 'value')
+    
+    # Initialize with the default view
+    update_callback(None)
+    
+    # Create a layout with dropdowns and tables
+    dropdowns = pn.Row(trade_type_select, peak_type_select, width=450)
+    layout = pn.Column(
+        dropdowns,
+        tables_container,
+        sizing_mode='stretch_width'
+    )
+    
+    return layout
+
+# Simple placeholder tabs for other sections
+def create_cash_tracking_tab():
+    """Create a placeholder cash tracking tab"""
+    html = """
+    <div style="padding: 20px; background-color: #F9FAFB; border-radius: 5px;">
+        <h2 style="font-size: 1.5em; margin-bottom: 15px; color: black;">ERCOT Cash Tracking</h2>
+        <p style="color: #333333;">Cash tracking data and analytics will be available in future updates.</p>
+    </div>
+    """
+    return pn.pane.HTML(html, sizing_mode='stretch_width')
+
+def create_seasonal_tab():
+    """Create a placeholder seasonal tab"""
+    html = """
+    <div style="padding: 20px; background-color: #F9FAFB; border-radius: 5px;">
+        <h2 style="font-size: 1.5em; margin-bottom: 15px; color: black;">ERCOT Seasonal Analysis</h2>
+        <p style="color: #333333;">Seasonal patterns and trend analysis will be available in future updates.</p>
+    </div>
+    """
+    return pn.pane.HTML(html, sizing_mode='stretch_width')
+
+def create_fundamentals_tab():
+    """Create a placeholder fundamentals tab"""
+    html = """
+    <div style="padding: 20px; background-color: #F9FAFB; border-radius: 5px;">
+        <h2 style="font-size: 1.5em; margin-bottom: 15px; color: black;">ERCOT Fundamentals</h2>
+        <p style="color: #333333;">Fundamentals analysis will be available in future updates.</p>
+    </div>
+    """
+    return pn.pane.HTML(html, sizing_mode='stretch_width')
+
+# Create a function that generates a fresh dashboard instance
+def create_dashboard(dataframes=None):
+    """Create a new dashboard instance with the provided dataframes"""
+    # Get dataframes
+    dfs = dataframes if dataframes is not None else get_dataframes()
+    
+    # Create the tabs for ERCOT
+    price_tracker_tab = create_price_tracker_tab(dfs)
+    cash_tracking_tab = create_cash_tracking_tab()  # Simple placeholder
+    seasonal_tab = create_seasonal_tab()  # Simple placeholder
+    fundamentals_tab = create_fundamentals_tab()  # Simple placeholder
+    
+    # Create the ERCOT tabs
+    ercot_tabs = pn.Tabs(
+        ('Price Tracker', price_tracker_tab),
+        ('Cash Tracking', cash_tracking_tab),
+        ('Seasonal', seasonal_tab),
+        ('Fundamentals', fundamentals_tab)
+    )
+    
+    # Create the Google-style YANUS logo
+    google_style_logo = """
+    <div style="text-align: center; margin-bottom: 20px; font-family: Arial, sans-serif; font-size: 3em; font-weight: bold;">
+        <span style="color: #4285F4;">Y</span>
+        <span style="color: #EA4335;">A</span>
+        <span style="color: #FBBC05;">N</span>
+        <span style="color: #4285F4;">U</span>
+        <span style="color: #34A853;">S</span>
+    </div>
+    """
+    
+    # Create the dashboard with ERCOT title
+    dashboard = pn.Column(
+        pn.pane.HTML(google_style_logo),
+        pn.pane.HTML("<h1 style='text-align: center; color: #333333;'>ERCOT Dashboard</h1>"),
+        ercot_tabs,
+        sizing_mode='stretch_width'
+    )
+    
+    return dashboard
+
+# Function to get the local IP address
+def get_local_ip():
+    """Get the local IP address of this machine"""
+    try:
+        # Create a socket to determine the local IP address
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        # Doesn't need to be reachable
+        s.connect(('8.8.8.8', 1))
+        local_ip = s.getsockname()[0]
+        s.close()
+    except Exception:
+        # Fallback to hostname if the above method fails
+        hostname = socket.gethostname()
+        local_ip = socket.gethostbyname(hostname)
+    return local_ip
+
+# Main function to run the dashboard
+if __name__ == "__main__" or '__main__' in locals():
+    # Get local IP address for sharing
+    local_ip = get_local_ip()
+    port = 5006  # Panel's default port
+    
+    # Print server information
+    print(f"\n=== YANUS ERCOT Dashboard Server ===")
+    print(f"Server started at http://{local_ip}:{port}")
+    print(f"Share this link with others on your network: http://{local_ip}:{port}")
+    print("Press Ctrl+C to stop the server.")
+    print("=" * 30 + "\n")
+    
+    # Create a function to open the browser
+    def open_browser():
+        webbrowser.open(f"http://localhost:{port}")
+    
+    # Start the browser after a short delay
+    Thread(target=lambda: open_browser()).start()
+    
+    # Use Panel's server to provide independent instances for each client
+    pn.serve(
+        {'/': create_dashboard},  # Create a new dashboard for each visit
+        port=port, 
+        address="0.0.0.0",  # Listen on all network interfaces
+        allow_websocket_origin=[f"{local_ip}:{port}", f"localhost:{port}"],
+        show=False,  # We'll open the browser manually
+        title="YANUS ERCOT Dashboard"
+    )
+
+
+# To use with your own data in a Jupyter notebook, replace the get_dataframes function
+# with your actual code:
+
+"""
+def get_dataframes():
+    # Your code to load dataframes
+    dataframes = {
+        'PEAK': ercot_peak_prices_df,
+        'OFFPEAK': ercot_offpeak_prices_df,
+        'NIGHTS': ercot_nights_prices_df,
+        'ATC': ercot_atc_prices_df
+    }
+    return dataframes
+"""
