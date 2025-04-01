@@ -1,0 +1,67 @@
+import panel as pn
+import socket
+import webbrowser
+from threading import Thread
+
+# Initialize Panel extension
+pn.extension()
+
+# Create an empty page
+empty_page = pn.pane.HTML("""
+<div style="text-align: center; margin-top: 100px;">
+    <h1 style="color: #333;">Empty Page</h1>
+    <p style="color: #666;">This is a simple empty page with no tabs or complex functionality.</p>
+</div>
+""", width=800)
+
+# Create the empty dashboard
+empty_dashboard = pn.Column(
+    empty_page,
+    sizing_mode='stretch_width'
+)
+
+# Function to get the local IP address
+def get_local_ip():
+    """Get the local IP address of this machine"""
+    try:
+        # Create a socket to determine the local IP address
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        # Doesn't need to be reachable
+        s.connect(('8.8.8.8', 1))
+        local_ip = s.getsockname()[0]
+        s.close()
+    except Exception:
+        # Fallback to hostname if the above method fails
+        hostname = socket.gethostname()
+        local_ip = socket.gethostbyname(hostname)
+    return local_ip
+
+# Main function to run the dashboard
+if __name__ == "__main__":
+    # Get local IP address for sharing
+    local_ip = get_local_ip()
+    port = 5006  # Panel's default port
+    
+    # Print server information
+    print(f"\n=== Empty Page Server ===")
+    print(f"Server started at http://{local_ip}:{port}")
+    print(f"Share this link with others on your network: http://{local_ip}:{port}")
+    print("Press Ctrl+C to stop the server.")
+    print("=" * 30 + "\n")
+    
+    # Create a function to open the browser
+    def open_browser():
+        webbrowser.open(f"http://localhost:{port}")
+    
+    # Start the browser after a short delay
+    Thread(target=lambda: open_browser()).start()
+    
+    # Use Panel's serve function
+    pn.serve(
+        empty_dashboard,
+        port=port, 
+        address="0.0.0.0",  # Listen on all network interfaces
+        allow_websocket_origin=[f"{local_ip}:{port}", f"localhost:{port}"],
+        show=False,  # We'll open the browser manually
+        title="Empty Page"
+    )
