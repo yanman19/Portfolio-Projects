@@ -1,0 +1,771 @@
+import pandas as pd
+import numpy as np
+import panel as pn
+from datetime import datetime
+import socket
+import flask
+from threading import Thread
+import webbrowser
+
+# Initialize Panel extension
+pn.extension()
+
+# Sample data generation function
+def generate_sample_data():
+    """Generate sample time series data for commodities"""
+    assets = ['ERCOT North', 'ERCOT Houston', 'ERCOT West', 'Waha', 'Houston']
+    start_date = datetime(2010, 1, 1)
+    end_date = datetime(2025, 3, 27)
+    
+    # Create a date range for our daily data
+    date_range = pd.date_range(start=start_date, end=end_date, freq='D')
+    
+    # Base prices for different assets
+    base_prices = {
+        'ERCOT North': 35,
+        'ERCOT Houston': 38,
+        'ERCOT West': 32,
+        'Waha': 2.5,
+        'Houston': 40
+    }
+    
+    # Create an empty dataframe to store all data
+    all_data = []
+    
+    # Generate data for each asset
+    for asset in assets:
+        base_price = base_prices[asset]
+        
+        # Generate synthetic prices with trend and seasonality
+        for current_date in date_range:
+            year_factor = (current_date.year - 2010) * (np.random.random() * 0.1 + 0.02) * base_price
+            
+            # More pronounced seasonality for power prices
+            if 'ERCOT' in asset:
+                # Higher in summer months (May-Sep)
+                if current_date.month >= 5 and current_date.month <= 9:
+                    month_seasonal = np.sin((current_date.month - 2) / 12 * 2 * np.pi) * base_price * 0.4
+                else:
+                    month_seasonal = np.sin((current_date.month - 2) / 12 * 2 * np.pi) * base_price * 0.2
+            else:
+                month_seasonal = np.sin(current_date.month / 12 * 2 * np.pi) * base_price * 0.15
+            
+            # Add some volatility for more realistic energy prices
+            volatility = 0.1 if 'ERCOT' in asset else 0.06
+            noise = (np.random.random() - 0.5) * base_price * volatility
+            
+            # Add occasional price spikes for ERCOT (especially in summer)
+            spike = 0
+            if 'ERCOT' in asset and np.random.random() < 0.01:
+                if current_date.month >= 6 and current_date.month <= 8:
+                    spike = base_price * (1 + np.random.random() * 3)
+            
+            price = base_price + year_factor + month_seasonal + noise + spike
+            
+            all_data.append({
+                'Asset': asset,
+                'Date': current_date,
+                'Price': round(price, 2)
+            })
+    
+    # Convert to dataframe
+    df = pd.DataFrame(all_data)
+    return df
+
+# Function to pivot and process data
+def process_data(df):
+    """Process data into yearly-monthly format with strips"""
+    # Extract components
+    df['Year'] = df['Date'].dt.year
+    df['Month'] = df['Date'].dt.month
+    
+    # Month code mapping
+    month_codes = {
+        1: 'F', 2: 'G', 3: 'H', 4: 'J', 5: 'K', 6: 'M', 
+        7: 'N', 8: 'Q', 9: 'U', 10: 'V', 11: 'X', 12: 'Z'
+    }
+    df['MonthCode'] = df['Month'].map(month_codes)
+    
+    # Aggregate by year, month and asset
+    agg_df = df.groupby(['Asset', 'Year', 'Month', 'MonthCode'])['Price'].mean().reset_index()
+    
+    # Get the full range of years across all assets
+    min_year = agg_df['Year'].min()
+    max_year = agg_df['Year'].max()
+    all_years = list(range(min_year, max_year + 1))
+    
+    # Get all month codes in correct order
+    ordered_columns = [month_codes[i] for i in range(1, 13)]
+    
+    # Dictionary to store processed data
+    assets_data = {}
+    
+    # Process each asset
+    for asset in agg_df['Asset'].unique():
+        asset_df = agg_df[agg_df['Asset'] == asset].copy()
+        
+        # Pivot to get the format we want
+        pivoted = asset_df.pivot_table(
+            index='Year', 
+            columns='MonthCode', 
+            values='Price',
+            aggfunc='mean'
+        ).round(2)
+        
+        # Ensure all years are included (fill with NaN for missing years)
+        missing_years = set(all_years) - set(pivoted.index)
+        if missing_years:
+            # Create a DataFrame with the missing years and NaN values
+            missing_df = pd.DataFrame(
+                index=list(missing_years),
+                columns=pivoted.columns
+            )
+            # Concatenate with the original pivot table
+            pivoted = pd.concat([pivoted, missing_df])
+            # Sort by year
+            pivoted = pivoted.sort_index()
+        
+        # Ensure all months are included and in correct order
+        for col in ordered_columns:
+            if col not in pivoted.columns:
+                pivoted[col] = np.nan
+        
+        # Reorder columns to match month order
+        pivoted = pivoted.reindex(columns=ordered_columns)
+        
+        # Calculate strips (without _Strip suffix)
+        # F-G (Jan-Feb)
+        pivoted['FG'] = pivoted[['F', 'G']].mean(axis=1).round(2)
+        
+        # N-Q (Jul-Aug)
+        pivoted['NQ'] = pivoted[['N', 'Q']].mean(axis=1).round(2)
+        
+        # J-V (Apr-Oct, J through V)
+        pivoted['JV'] = pivoted[['J', 'K', 'M', 'N', 'Q', 'U', 'V']].mean(axis=1).round(2)
+        
+        # Cal (all months)
+        pivoted['Cal'] = pivoted[ordered_columns].mean(axis=1).round(2)
+        
+        # Store in our dictionary
+        assets_data[asset] = pivoted
+    
+    return assets_data
+
+# ================================================================
+# COLUMN MAPPING SECTION - ADD YOUR COLUMNS HERE
+# ================================================================
+# This section is where you define your column mappings
+# Format: Column_{tradetype}_{peaktype}
+
+def setup_column_mapping(df):
+    """
+    This function maps your columns to the appropriate trade types and peak types.
+    
+    MODIFY THIS FUNCTION to map your actual column names.
+    
+    Expected format of columns: Column_{tradetype}_{peaktype}
+    For example: "Jan_FIXEDPRICE_PEAK", "Feb_HR_OFFPEAK", etc.
+    
+    Valid trade types: FIXEDPRICE, HR, SPARK, GASBASIS
+    Valid peak types: PEAK, OFFPEAK, 2x16, 7x8, ATC
+    
+    Returns a dictionary with mappings for each region, trade type, and peak type.
+    """
+    
+    # Dictionary to store mapping information
+    column_mapping = {
+        'ERCOT': {},
+        'PJM': {},
+        'NYISO': {},
+        'NEPOOL': {}
+    }
+    
+    # Dictionary to map trade types to display names
+    trade_type_display = {
+        'FIXEDPRICE': 'Fixed Price',
+        'HR': 'Heat Rate',
+        'SPARK': 'Spark Spread',
+        'GASBASIS': 'Gas Basis'
+    }
+    
+    # Dictionary to map peak types to display names
+    peak_type_display = {
+        'PEAK': 'Peak',
+        'OFFPEAK': 'Offpeak',
+        '2x16': '2x16',
+        '7x8': '7x8',
+        'ATC': 'ATC'
+    }
+    
+    # Month to code mapping (for sorting and display)
+    month_to_code = {
+        'Jan': 'F', 'Feb': 'G', 'Mar': 'H', 'Apr': 'J', 'May': 'K', 'Jun': 'M',
+        'Jul': 'N', 'Aug': 'Q', 'Sep': 'U', 'Oct': 'V', 'Nov': 'X', 'Dec': 'Z'
+    }
+    
+    # ===============================================================
+    # ADD YOUR COLUMN MAPPINGS BELOW THIS LINE
+    # ===============================================================
+    
+    # Example for ERCOT Fixed Price Peak (uncomment and modify with your actual columns)
+    # column_mapping['ERCOT']['FIXEDPRICE_PEAK'] = {
+    #     'F': 'Jan_FIXEDPRICE_PEAK',  # January
+    #     'G': 'Feb_FIXEDPRICE_PEAK',  # February
+    #     'H': 'Mar_FIXEDPRICE_PEAK',  # March
+    #     'J': 'Apr_FIXEDPRICE_PEAK',  # April
+    #     'K': 'May_FIXEDPRICE_PEAK',  # May
+    #     'M': 'Jun_FIXEDPRICE_PEAK',  # June
+    #     'N': 'Jul_FIXEDPRICE_PEAK',  # July
+    #     'Q': 'Aug_FIXEDPRICE_PEAK',  # August
+    #     'U': 'Sep_FIXEDPRICE_PEAK',  # September
+    #     'V': 'Oct_FIXEDPRICE_PEAK',  # October
+    #     'X': 'Nov_FIXEDPRICE_PEAK',  # November
+    #     'Z': 'Dec_FIXEDPRICE_PEAK',  # December
+    # }
+    
+    # Example for ERCOT Heat Rate Offpeak
+    # column_mapping['ERCOT']['HR_OFFPEAK'] = {
+    #     'F': 'Jan_HR_OFFPEAK',
+    #     'G': 'Feb_HR_OFFPEAK',
+    #     # ... add other months as needed
+    # }
+    
+    # Add more mappings for other combinations as needed
+    # column_mapping['ERCOT']['SPARK_2x16'] = { ... }
+    # column_mapping['PJM']['FIXEDPRICE_PEAK'] = { ... }
+    # column_mapping['NYISO']['GASBASIS_ATC'] = { ... }
+    
+    # ===============================================================
+    # END OF COLUMN MAPPING SECTION
+    # ===============================================================
+    
+    # Helper function to process columns automatically if they follow the naming convention
+    def auto_process_columns():
+        for col in df.columns:
+            if '_' in col:
+                parts = col.split('_')
+                if len(parts) >= 3:
+                    # Assuming format is [month/name]_[tradetype]_[peaktype]
+                    prefix = parts[0]
+                    tradetype = parts[1]
+                    peaktype = parts[2]
+                    
+                    # Skip if not a valid trade type or peak type
+                    if tradetype not in trade_type_display or peaktype not in peak_type_display:
+                        continue
+                    
+                    # Determine the region based on the column name or prefix
+                    # This is a simple example - modify as needed for your data
+                    region = None
+                    if 'ERCOT' in col:
+                        region = 'ERCOT'
+                    elif 'PJM' in col:
+                        region = 'PJM'
+                    elif 'NYISO' in col:
+                        region = 'NYISO'
+                    elif 'NEPOOL' in col:
+                        region = 'NEPOOL'
+                    else:
+                        # If no region in column name, default to ERCOT for this example
+                        region = 'ERCOT'
+                    
+                    # Determine the month code if prefix is a month name
+                    month_code = None
+                    if prefix in month_to_code:
+                        month_code = month_to_code[prefix]
+                    
+                    if month_code and region:
+                        key = f"{tradetype}_{peaktype}"
+                        if key not in column_mapping[region]:
+                            column_mapping[region][key] = {}
+                        column_mapping[region][key][month_code] = col
+    
+    # Uncomment to auto-process columns if they follow the naming convention
+    # auto_process_columns()
+    
+    return column_mapping, trade_type_display, peak_type_display
+
+# Function to create HTML table for an asset with styling
+def create_asset_table_html(asset_name, pivot_df):
+    """Create a styled HTML table directly without using pandas styling"""
+    # Define color mapping
+    def get_cell_color(column):
+        if column in ['F', 'G', 'FG']:
+            return "#DBEAFE"  # Light blue
+        elif column in ['N', 'Q', 'NQ']:
+            return "#FFEDD5"  # Light orange
+        elif column in ['J', 'K', 'M', 'U', 'V', 'JV']:
+            return "#DCFCE7"  # Light green
+        elif column == 'Cal':
+            return "#FEF9C3"  # Light yellow
+        else:
+            return "white"
+    
+    # Reset index to get Year as a column
+    table_df = pivot_df.reset_index()
+    
+    # Define standardized dimensions
+    year_col_width = "80px"
+    data_col_width = "65px"
+    row_height = "40px"
+    
+    # Start building HTML table
+    html = f'<h3>{asset_name} - Average Monthly Prices</h3>\n'
+    html += '<table border="1" style="border-collapse: collapse; width: 100%; table-layout: fixed;">\n'
+    
+    # Header row
+    html += '<tr style="height: 50px;">\n'
+    html += f'<th style="width: {year_col_width}; background-color: #F3F4F6; color: black; padding: 8px; text-align: left;">Year</th>\n'
+    
+    for col in pivot_df.columns:
+        bg_color = get_cell_color(col)
+        html += f'<th style="width: {data_col_width}; background-color: {bg_color}; color: black; padding: 8px; text-align: center; overflow: hidden; text-overflow: ellipsis;">{col}</th>\n'
+    
+    html += '</tr>\n'
+    
+    # Data rows
+    for _, row in table_df.iterrows():
+        year = int(row["Year"])
+        
+        # Check if this is the current year (2025)
+        current_year = 2025  # Hard-coded current year
+        highlight_row = (year == current_year)
+        
+        html += f'<tr style="height: {row_height};">\n'
+        html += f'<td style="width: {year_col_width}; background-color: #F3F4F6; color: black; padding: 8px; font-weight: bold;">{year}</td>\n'
+        
+        for col in pivot_df.columns:
+            # If highlighting the row, use purple, otherwise use the column color
+            bg_color = "#e9d5ff" if highlight_row else get_cell_color(col)  # Light purple if highlighted
+            
+            value = row[col]
+            formatted_value = f"{value:.2f}" if pd.notna(value) else "-"
+            html += f'<td style="width: {data_col_width}; background-color: {bg_color}; color: black; padding: 8px; text-align: right;">{formatted_value}</td>\n'
+        
+        html += '</tr>\n'
+    
+    html += '</table>\n'
+    html += '<div style="margin-bottom: 30px;"></div>\n'
+    
+    return html
+
+# Function to process data from column mapping
+def process_mapped_data(df, column_map, trade_type, peak_type):
+    """Process data using column mapping"""
+    key = f"{trade_type}_{peak_type}"
+    if key not in column_map:
+        return None
+    
+    # Get the mapping for this combination
+    mapping = column_map[key]
+    
+    # Define the ordered month codes
+    ordered_months = 'FGHJKMNQUVXZ'
+    
+    # Create a new dataframe for the pivot table-like data
+    pivot_df = pd.DataFrame(index=df.index)
+    
+    # Add each month column to the pivot table
+    for month_code in ordered_months:
+        if month_code in mapping and mapping[month_code] in df.columns:
+            pivot_df[month_code] = df[mapping[month_code]]
+    
+    # Calculate strips if the appropriate columns exist
+    if 'F' in pivot_df.columns and 'G' in pivot_df.columns:
+        pivot_df['FG'] = pivot_df[['F', 'G']].mean(axis=1).round(2)
+    
+    if 'N' in pivot_df.columns and 'Q' in pivot_df.columns:
+        pivot_df['NQ'] = pivot_df[['N', 'Q']].mean(axis=1).round(2)
+    
+    jv_cols = [c for c in 'JKMNQUV' if c in pivot_df.columns]
+    if jv_cols:
+        pivot_df['JV'] = pivot_df[jv_cols].mean(axis=1).round(2)
+    
+    cal_cols = [c for c in ordered_months if c in pivot_df.columns]
+    if cal_cols:
+        pivot_df['Cal'] = pivot_df[cal_cols].mean(axis=1).round(2)
+    
+    return pivot_df
+
+# Function to create the price tracker tab with dropdown selectors for custom data
+def create_custom_price_tracker_tab(df, region, column_maps, trade_type_display, peak_type_display):
+    """Create the price tracker tab content with dropdown selectors for peak type and trade type"""
+    # Get the column mappings for this region
+    region_mapping = column_maps[region]
+    
+    # Extract available trade type and peak type combinations for this region
+    available_combinations = list(region_mapping.keys())
+    available_trade_types = set()
+    available_peak_types = set()
+    
+    for combo in available_combinations:
+        if '_' in combo:
+            trade_type, peak_type = combo.split('_')
+            available_trade_types.add(trade_type)
+            available_peak_types.add(peak_type)
+    
+    # Create dropdown options
+    trade_type_options = [(trade_type_display.get(tt, tt), tt) for tt in available_trade_types]
+    peak_type_options = [(peak_type_display.get(pt, pt), pt) for pt in available_peak_types]
+    
+    # Default values
+    default_trade_type = trade_type_options[0][1] if trade_type_options else None
+    default_peak_type = peak_type_options[0][1] if peak_type_options else None
+    
+    # Create dropdown selectors
+    trade_type_select = pn.widgets.Select(
+        name='Trade Type', 
+        options=trade_type_options,
+        value=default_trade_type,
+        width=200
+    )
+    
+    peak_type_select = pn.widgets.Select(
+        name='Peak Type',
+        options=peak_type_options,
+        value=default_peak_type,
+        width=200
+    )
+    
+    # Create a container for the tables that will be updated based on dropdown selections
+    tables_container = pn.pane.HTML("", width=800)
+    
+    # Function to update tables based on dropdown selections
+    def update_tables(event):
+        trade_type = trade_type_select.value
+        peak_type = peak_type_select.value
+        
+        if trade_type and peak_type:
+            # Process data for the selected combination
+            pivot_df = process_mapped_data(df, region_mapping, trade_type, peak_type)
+            
+            if pivot_df is not None and not pivot_df.empty:
+                # Create HTML for the table
+                table_html = create_asset_table_html(
+                    f"{region} {peak_type_display.get(peak_type, peak_type)} {trade_type_display.get(trade_type, trade_type)}", 
+                    pivot_df
+                )
+                
+                # Add the legend
+                legend_html = """
+                <div style="margin-top: 20px; font-size: 0.9em; color: black;">
+                    <p>Month Codes: F-Jan, G-Feb, H-Mar, J-Apr, K-May, M-Jun, N-Jul, Q-Aug, U-Sep, V-Oct, X-Nov, Z-Dec</p>
+                    <p>
+                        <span style="display: inline-block; width: 15px; height: 15px; background-color: #DBEAFE;"></span> Jan/Feb &nbsp;&nbsp;
+                        <span style="display: inline-block; width: 15px; height: 15px; background-color: #FFEDD5;"></span> Jul/Aug &nbsp;&nbsp;
+                        <span style="display: inline-block; width: 15px; height: 15px; background-color: white; border: 1px solid #E5E7EB;"></span> Other months
+                    </p>
+                    <p style="margin-top: 10px; font-weight: bold;">Strip Definitions:</p>
+                    <ul>
+                        <li><span style="display: inline-block; width: 15px; height: 15px; background-color: #DBEAFE;"></span> FG: Average of Jan-Feb</li>
+                        <li><span style="display: inline-block; width: 15px; height: 15px; background-color: #FFEDD5;"></span> NQ: Average of Jul-Aug</li>
+                        <li><span style="display: inline-block; width: 15px; height: 15px; background-color: #DCFCE7;"></span> JV: Average of Apr-Oct (J through V)</li>
+                        <li><span style="display: inline-block; width: 15px; height: 15px; background-color: #FEF9C3;"></span> Cal: Average of all months (Calendar year)</li>
+                    </ul>
+                </div>
+                """
+                
+                # Set the full HTML content
+                tables_container.object = table_html + legend_html
+            else:
+                # Display placeholder message when the data is not available
+                placeholder_html = f"""
+                <div style="padding: 20px; background-color: #F9FAFB; border-radius: 5px; margin-top: 20px;">
+                    <h2 style="font-size: 1.5em; margin-bottom: 15px; color: black;">
+                        {region} - {peak_type_display.get(peak_type, peak_type)} - {trade_type_display.get(trade_type, trade_type)}
+                    </h2>
+                    <p style="color: #333333;">
+                        Data for this combination is not available or will be added in future updates.
+                    </p>
+                </div>
+                """
+                tables_container.object = placeholder_html
+    
+    # Connect the event handlers
+    trade_type_select.param.watch(update_tables, 'value')
+    peak_type_select.param.watch(update_tables, 'value')
+    
+    # Initialize with the default view
+    update_tables(None)
+    
+    # Create a layout with dropdowns and tables
+    dropdowns = pn.Row(trade_type_select, peak_type_select, width=450)
+    layout = pn.Column(
+        dropdowns,
+        tables_container,
+        sizing_mode='stretch_width'
+    )
+    
+    return layout
+
+# Function to create the price tracker tab with dropdown selectors
+def create_price_tracker_tab(assets_data):
+    """Create the price tracker tab content with dropdown selectors for peak type and trade type"""
+    # Create dropdown selectors
+    trade_type_select = pn.widgets.Select(
+        name='Trade Type', 
+        options=['Fixed Price', 'HR', 'Spark (10HR)', 'Gas Basis', 'Spreads'],
+        value='Fixed Price',
+        width=200
+    )
+    
+    peak_type_select = pn.widgets.Select(
+        name='Peak Type',
+        options=['Peak', 'Offpeak', '2x16', '7x8'],
+        value='Peak',
+        width=200
+    )
+    
+    # Create a container for the tables that will be updated based on dropdown selections
+    tables_container = pn.pane.HTML("", width=800)
+    
+    # Function to update tables based on dropdown selections
+    def update_tables(event):
+        trade_type = trade_type_select.value
+        peak_type = peak_type_select.value
+        
+        # For now, only show data if Fixed Price and Peak are selected
+        if trade_type == 'Fixed Price' and peak_type == 'Peak':
+            # Create HTML for all asset tables
+            all_tables_html = ""
+            for asset_name, pivot_df in assets_data.items():
+                all_tables_html += create_asset_table_html(asset_name, pivot_df)
+            
+            # Legend HTML
+            legend_html = """
+            <div style="margin-top: 20px; font-size: 0.9em; color: black;">
+                <p>Month Codes: F-Jan, G-Feb, H-Mar, J-Apr, K-May, M-Jun, N-Jul, Q-Aug, U-Sep, V-Oct, X-Nov, Z-Dec</p>
+                <p>
+                    <span style="display: inline-block; width: 15px; height: 15px; background-color: #DBEAFE;"></span> Jan/Feb &nbsp;&nbsp;
+                    <span style="display: inline-block; width: 15px; height: 15px; background-color: #FFEDD5;"></span> Jul/Aug &nbsp;&nbsp;
+                    <span style="display: inline-block; width: 15px; height: 15px; background-color: white; border: 1px solid #E5E7EB;"></span> Other months
+                </p>
+                <p style="margin-top: 10px; font-weight: bold;">Strip Definitions:</p>
+                <ul>
+                    <li><span style="display: inline-block; width: 15px; height: 15px; background-color: #DBEAFE;"></span> FG: Average of Jan-Feb</li>
+                    <li><span style="display: inline-block; width: 15px; height: 15px; background-color: #FFEDD5;"></span> NQ: Average of Jul-Aug</li>
+                    <li><span style="display: inline-block; width: 15px; height: 15px; background-color: #DCFCE7;"></span> JV: Average of Apr-Oct (J through V)</li>
+                    <li><span style="display: inline-block; width: 15px; height: 15px; background-color: #FEF9C3;"></span> Cal: Average of all months (Calendar year)</li>
+                </ul>
+            </div>
+            """
+            
+            # Combine all HTML
+            full_html = all_tables_html + legend_html
+            tables_container.object = full_html
+        else:
+            # Display a placeholder message for other combinations
+            placeholder_html = f"""
+            <div style="padding: 20px; background-color: #F9FAFB; border-radius: 5px; margin-top: 20px;">
+                <h2 style="font-size: 1.5em; margin-bottom: 15px; color: black;">
+                    {trade_type} - {peak_type}
+                </h2>
+                <p style="color: #333333;">
+                    Data for this combination will be available in future updates.
+                </p>
+            </div>
+            """
+            tables_container.object = placeholder_html
+    
+    # Connect the event handlers
+    trade_type_select.param.watch(update_tables, 'value')
+    peak_type_select.param.watch(update_tables, 'value')
+    
+    # Initialize with the default view
+    update_tables(None)
+    
+    # Create a layout with dropdowns and tables
+    dropdowns = pn.Row(trade_type_select, peak_type_select, width=450)
+    layout = pn.Column(
+        dropdowns,
+        tables_container,
+        sizing_mode='stretch_width'
+    )
+    
+    return layout
+
+# Function to create the fundamentals tab
+def create_fundamentals_tab():
+    """Create the fundamentals tab content"""
+    fundamentals_html = """
+    <div style="padding: 20px; background-color: #F9FAFB; border-radius: 5px;">
+        <h2 style="font-size: 1.5em; margin-bottom: 15px; color: black;">Fundamentals</h2>
+        <p style="color: #333333;">Fundamentals analysis will be available here in future updates.</p>
+    </div>
+    """
+    
+    fundamentals = pn.pane.HTML(fundamentals_html, sizing_mode='stretch_width')
+    
+    return fundamentals
+
+# Function to create a placeholder cash tracking tab
+def create_placeholder_cash_tracking_tab(region_name):
+    """Create a placeholder cash tracking tab"""
+    cash_tracking_html = f"""
+    <div style="padding: 20px; background-color: #F9FAFB; border-radius: 5px;">
+        <h2 style="font-size: 1.5em; margin-bottom: 15px; color: black;">{region_name} Cash Tracking</h2>
+        <p style="color: #333333;">Cash tracking data and analytics will be available here in future updates.</p>
+    </div>
+    """
+    
+    cash_tracking = pn.pane.HTML(cash_tracking_html, sizing_mode='stretch_width')
+    return cash_tracking
+
+# Function to create a placeholder seasonal tab
+def create_placeholder_seasonal_tab(region_name):
+    """Create a placeholder seasonal analysis tab"""
+    seasonal_html = f"""
+    <div style="padding: 20px; background-color: #F9FAFB; border-radius: 5px;">
+        <h2 style="font-size: 1.5em; margin-bottom: 15px; color: black;">{region_name} Seasonal Analysis</h2>
+        <p style="color: #333333;">Seasonal patterns and trend analysis will be available here in future updates.</p>
+    </div>
+    """
+    
+    seasonal = pn.pane.HTML(seasonal_html, sizing_mode='stretch_width')
+    return seasonal
+
+# Main function to run the dashboard
+def run_yanus_dashboard(df=None):
+    """Create and run the YANUS dashboard"""
+    # Generate data if not provided
+    if df is None:
+        data_df = generate_sample_data()
+        # Process data using the original method
+        assets_data = process_data(data_df)
+        
+        # Create the inner tabs for ERCOT region using original method
+        ercot_price_tracker_tab = create_price_tracker_tab(assets_data)
+    else:
+        # Set up column mapping for the provided dataframe
+        column_maps, trade_type_display, peak_type_display = setup_column_mapping(df)
+        
+        # Create the inner tabs for ERCOT region using custom data
+        ercot_price_tracker_tab = create_custom_price_tracker_tab(df, 'ERCOT', column_maps, trade_type_display, peak_type_display)
+        
+    # Create other tabs
+    ercot_cash_tracking_tab = create_placeholder_cash_tracking_tab("ERCOT")
+    ercot_seasonal_tab = create_placeholder_seasonal_tab("ERCOT")
+    ercot_fundamentals_tab = create_fundamentals_tab()
+    
+    # Create inner tabs for ERCOT
+    ercot_tabs = pn.Tabs(
+        ('Price Tracker', ercot_price_tracker_tab),
+        ('Cash Tracking', ercot_cash_tracking_tab),
+        ('Seasonal', ercot_seasonal_tab),
+        ('Fundamentals', ercot_fundamentals_tab)
+    )
+    
+    # Create placeholder tabs for other regions
+    pjm_placeholder = pn.pane.HTML(
+        """<div style="padding: 20px; background-color: #F9FAFB; border-radius: 5px;">
+            <h2 style="font-size: 1.5em; margin-bottom: 15px; color: black;">PJM Region</h2>
+            <p style="color: #333333;">PJM data analysis will be available in future updates.</p>
+        </div>""",
+        sizing_mode='stretch_width'
+    )
+    
+    nyiso_placeholder = pn.pane.HTML(
+        """<div style="padding: 20px; background-color: #F9FAFB; border-radius: 5px;">
+            <h2 style="font-size: 1.5em; margin-bottom: 15px; color: black;">NYISO Region</h2>
+            <p style="color: #333333;">NYISO data analysis will be available in future updates.</p>
+        </div>""",
+        sizing_mode='stretch_width'
+    )
+    
+    nepool_placeholder = pn.pane.HTML(
+        """<div style="padding: 20px; background-color: #F9FAFB; border-radius: 5px;">
+            <h2 style="font-size: 1.5em; margin-bottom: 15px; color: black;">NEPOOL Region</h2>
+            <p style="color: #333333;">NEPOOL data analysis will be available in future updates.</p>
+        </div>""",
+        sizing_mode='stretch_width'
+    )
+    
+    # Create the top-level region tabs
+    region_tabs = pn.Tabs(
+        ('ERCOT', ercot_tabs),
+        ('PJM', pjm_placeholder),
+        ('NYISO', nyiso_placeholder),
+        ('NEPOOL', nepool_placeholder)
+    )
+    
+    # Create the Google-style YANUS logo
+    google_style_logo = """
+    <div style="text-align: center; margin-bottom: 20px; font-family: Arial, sans-serif; font-size: 3em; font-weight: bold;">
+        <span style="color: #4285F4;">Y</span>
+        <span style="color: #EA4335;">A</span>
+        <span style="color: #FBBC05;">N</span>
+        <span style="color: #4285F4;">U</span>
+        <span style="color: #34A853;">S</span>
+    </div>
+    """
+    
+    # Create the dashboard
+    dashboard = pn.Column(
+        pn.pane.HTML(google_style_logo),
+        region_tabs,
+        sizing_mode='stretch_width'
+    )
+    
+    return dashboard
+
+# Function to get the local IP address
+def get_local_ip():
+    """Get the local IP address of this machine"""
+    try:
+        # Create a socket to determine the local IP address
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        # Doesn't need to be reachable
+        s.connect(('8.8.8.8', 1))
+        local_ip = s.getsockname()[0]
+        s.close()
+    except Exception:
+        # Fallback to hostname if the above method fails
+        hostname = socket.gethostname()
+        local_ip = socket.gethostbyname(hostname)
+    return local_ip
+
+# Main function to run Flask server
+if __name__ == "__main__" or '__main__' in locals():
+    # Get local IP address for sharing
+    local_ip = get_local_ip()
+    port = 5000  # Flask's default port
+    
+    # Print server information
+    print(f"\n=== YANUS Dashboard Server ===")
+    print(f"Server started at http://{local_ip}:{port}")
+    print(f"Share this link with others on your network: http://{local_ip}:{port}")
+    print("Press Ctrl+C to stop the server.")
+    print("=" * 30 + "\n")
+    
+    # Create a Flask app
+    app = flask.Flask(__name__)
+    
+    # Function to generate a new dashboard instance for each request
+    @app.route('/')
+    def index():
+        # Create a new dashboard instance
+        dashboard = run_yanus_dashboard()
+        # Return the dashboard as HTML
+        return pn.serve_component(dashboard, static_dirs={"static": ""})
+    
+    # Create a function to open the browser
+    def open_browser():
+        webbrowser.open(f"http://localhost:{port}")
+    
+    # Start the browser after a short delay
+    Thread(target=lambda: open_browser()).start()
+    
+    # Run the Flask app
+    app.run(host='0.0.0.0', port=port, debug=False, threaded=True)
+
+
+# To use with your own data in a Jupyter notebook:
+"""
+# Example usage:
+# 1. Import your data from CSV or other source
+# df = pd.read_csv('your_data.csv')
+
+# 2. Run the dashboard with your data
+# dashboard = run_yanus_dashboard(df)
+# dashboard.show()
+"""
