@@ -1,0 +1,229 @@
+Here's the full code that you can copy and paste into a Jupyter notebook:
+
+```python
+import panel as pn
+import pandas as pd
+import param
+import socket
+from bokeh.models.widgets.tables import NumberFormatter
+
+# Initialize Panel
+pn.extension('tabulator')
+pn.config.sizing_mode = 'stretch_width'
+
+# =================================================================
+# PUT YOUR DATAFRAMES HERE
+# =================================================================
+
+# PUT YOUR PEAK DATAFRAME HERE
+df_PEAK = None  # REPLACE THIS WITH YOUR PEAK DATAFRAME
+
+# PUT YOUR OFFPEAK DATAFRAME HERE
+df_OFFPEAK = None  # REPLACE THIS WITH YOUR OFFPEAK DATAFRAME
+
+# PUT YOUR NIGHTS DATAFRAME HERE
+df_NIGHTS = None  # REPLACE THIS WITH YOUR NIGHTS DATAFRAME
+
+# PUT YOUR ATC DATAFRAME HERE
+df_ATC = None  # REPLACE THIS WITH YOUR ATC DATAFRAME
+
+# Dictionary to hold all dataframes by peak type
+dataframes = {
+    'PEAK': df_PEAK,
+    'OFFPEAK': df_OFFPEAK,
+    'NIGHTS': df_NIGHTS,
+    'ATC': df_ATC
+}
+
+# =================================================================
+# Dashboard logic
+# =================================================================
+
+# Month commodity codes to month names mapping
+month_mapping = {
+    'F': 'Jan', 'G': 'Feb', 'H': 'Mar', 'J': 'Apr', 'K': 'May', 'M': 'Jun',
+    'N': 'Jul', 'Q': 'Aug', 'U': 'Sep', 'V': 'Oct', 'X': 'Nov', 'Z': 'Dec'
+}
+
+class YanusDashboard(param.Parameterized):
+    peak_type = param.Selector(objects=['PEAK', 'OFFPEAK', 'NIGHTS', 'ATC'], default='PEAK')
+    trade_type = param.Selector(objects=['SPARK', 'HR', 'FIXED PRICE', 'GAS BASIS'], default='SPARK')
+    
+    def __init__(self, **params):
+        super(YanusDashboard, self).__init__(**params)
+        self.trade_type_mapping = {
+            'SPARK': '_SPARK',
+            'HR': '_HR', 
+            'FIXED PRICE': '_FP', 
+            'GAS BASIS': '_GASBASIS'
+        }
+        
+    @param.depends('peak_type', 'trade_type')
+    def get_pivot_table(self):
+        # Get the selected dataframe
+        df = dataframes[self.peak_type]
+        
+        if df is None:
+            return pn.pane.Markdown(f"## ERROR: {self.peak_type} dataframe is not defined")
+        
+        # Get the suffix for the selected trade type
+        suffix = self.trade_type_mapping[self.trade_type]
+        
+        # Filter columns for the selected trade type
+        trade_cols = [col for col in df.columns if suffix in col]
+        
+        if not trade_cols:
+            return pn.pane.Markdown(f"No columns with suffix '{suffix}' found in {self.peak_type} dataframe")
+        
+        # Create data for the pivot table
+        pivot_data = []
+        
+        for year in sorted(df['Year'].unique()):
+            year_data = {'Year': year}
+            
+            for month in ['F', 'G', 'H', 'J', 'K', 'M', 'N', 'Q', 'U', 'V', 'X', 'Z']:
+                # Find all columns for this month, year, and trade type
+                month_cols = [col for col in trade_cols if month in col and str(year) in col]
+                
+                if month_cols:
+                    # Calculate the average value for this month and year
+                    values = df.loc[df['Year'] == year, month_cols].mean(axis=1).mean()
+                    year_data[f"{month} ({month_mapping[month]})"] = round(values, 2)
+                else:
+                    year_data[f"{month} ({month_mapping[month]})"] = None
+            
+            pivot_data.append(year_data)
+        
+        # Create a dataframe from the pivot data
+        pivot_df = pd.DataFrame(pivot_data)
+        
+        # Create a formatted tabulator table
+        formatters = {col: NumberFormatter(format="0.00") for col in pivot_df.columns if col != 'Year'}
+        
+        pivot_table = pn.widgets.Tabulator(
+            pivot_df,
+            disabled=True,
+            formatters=formatters,
+            sizing_mode='stretch_width',
+            header_align='left',
+            show_index=False
+        )
+        
+        return pn.Column(
+            pn.pane.Markdown(f"## {self.peak_type} - {self.trade_type}"),
+            pivot_table
+        )
+    
+    def view(self):
+        # Create the price tracker tab
+        price_tracker = pn.Column(
+            pn.Row(
+                pn.Column(
+                    pn.pane.Markdown("### Peak Type"),
+                    pn.widgets.Select.from_param(
+                        self.param.peak_type,
+                        name="Select Peak Type",
+                        width=200
+                    )
+                ),
+                pn.Column(
+                    pn.pane.Markdown("### Trade Type"),
+                    pn.widgets.Select.from_param(
+                        self.param.trade_type,
+                        name="Select Trade Type",
+                        width=200
+                    )
+                ),
+                width=800
+            ),
+            self.get_pivot_table,
+            sizing_mode="stretch_width"
+        )
+        
+        # Create other tabs (placeholders)
+        cash_tab = pn.pane.Markdown("# Cash Data\nReplace this with your Cash visualization")
+        seasonal_tab = pn.pane.Markdown("# Seasonal Data\nReplace this with your Seasonal visualization")
+        fundamentals_tab = pn.pane.Markdown("# Fundamentals Data\nReplace this with your Fundamentals visualization")
+        
+        # Create ERCOT tabs
+        ercot_tabs = pn.Tabs(
+            ('Price Tracker', price_tracker),
+            ('Cash', cash_tab),
+            ('Seasonal', seasonal_tab),
+            ('Fundamentals', fundamentals_tab)
+        )
+        
+        return pn.Tabs(('ERCOT', ercot_tabs))
+
+# Create YANUS Google-style logo
+def create_logo():
+    html = """
+    <div style="text-align:center; margin-bottom:20px;">
+        <h1 style="font-size:3em; font-weight:bold; letter-spacing:0.03em;">
+            <span style="color:#4285F4;">Y</span>
+            <span style="color:#EA4335;">A</span>
+            <span style="color:#FBBC05;">N</span>
+            <span style="color:#4285F4;">U</span>
+            <span style="color:#34A853;">S</span>
+        </h1>
+        <h3>ERCOT Power Dashboard</h3>
+    </div>
+    """
+    return pn.pane.HTML(html)
+
+# Function to get the machine's IP address
+def get_ip_address():
+    try:
+        # Get the primary IP address
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(("8.8.8.8", 80))
+        ip = s.getsockname()[0]
+        s.close()
+        return ip
+    except:
+        return "127.0.0.1"  # Fallback to localhost if can't determine IP
+
+# Create dashboard instance
+dashboard = YanusDashboard()
+
+# Create template
+template = pn.template.FastListTemplate(
+    title="YANUS Dashboard",
+    sidebar=[],
+    main=[
+        create_logo(),
+        dashboard.view()
+    ],
+    accent_base_color="#4285F4",
+    header_background="#FFFFFF"
+)
+
+# Get IP address for sharing information
+ip_address = get_ip_address()
+port = 5006
+
+# Print sharing information
+print("=" * 80)
+print(f"YANUS DASHBOARD IS RUNNING")
+print("=" * 80)
+print(f"Local URL: http://localhost:{port}/")
+print(f"Network URL (share this): http://{ip_address}:{port}/")
+print("=" * 80)
+
+# For Jupyter notebook, display the dashboard inline and also serve it for network access
+template.show()
+
+# To make it accessible to others on your network, uncomment this line:
+# pn.serve(template, address="0.0.0.0", port=port, show=False, websocket_origin="*", allow_websocket_origin=["*"])
+```
+
+To run this in a Jupyter notebook:
+
+1. Copy and paste the entire code above into a notebook cell
+2. Replace the `None` values for your dataframes with your actual dataframes
+3. Run the cell
+4. The dashboard will show inline in your notebook
+5. To make it shareable with others, uncomment the last line that starts with `# pn.serve(template...`
+6. The URLs printed will show you how others can access your dashboard
+
+Note: When running in a Jupyter notebook, you'll see the dashboard display inside the notebook. If you also want to share it externally, uncomment that last line.​​​​​​​​​​​​​​​​
