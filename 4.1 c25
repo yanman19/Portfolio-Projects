@@ -1,0 +1,45 @@
+def create_seasonal_pivot(df, value_column):
+    df = df.copy()
+    df['MARKETDATE'] = pd.to_datetime(df['MARKETDATE'])
+    df['Year'] = df['MARKETDATE'].dt.year
+    df['Month'] = df['MARKETDATE'].dt.month
+    df['MonthCode'] = df['MARKETDATE'].dt.month.map({
+        1: 'F', 2: 'G', 3: 'H', 4: 'J', 5: 'K', 6: 'M',
+        7: 'N', 8: 'Q', 9: 'U', 10: 'V', 11: 'X', 12: 'Z'
+    })
+
+    pivot = df.pivot_table(index='Year', columns='MonthCode', values=value_column, aggfunc='mean')
+    fg_months = ['F', 'G']
+    nq_months = ['N', 'Q']
+    jv_months = ['J', 'K', 'M', 'U', 'V']
+
+    pivot['FG'] = pivot[fg_months].mean(axis=1)
+    pivot['NQ'] = pivot[nq_months].mean(axis=1)
+    pivot['JV'] = pivot[jv_months].mean(axis=1)
+    pivot['CAL'] = pivot[[c for c in pivot.columns if c in list('FGHJKMNQUVXZ')]].mean(axis=1)
+
+    pivot = pivot.round(1)
+    pivot = pivot.replace({np.nan: ""})
+
+    def color_cells(val, row_year, col):
+        if row_year == datetime.now().year:
+            return 'background-color: #E6E6FA'
+        if col in ['FG', 'F', 'G']:
+            return 'background-color: #ADD8E6'
+        if col in ['NQ', 'N', 'Q']:
+            return 'background-color: #FFDAB9'
+        if col in ['J', 'K', 'M', 'U', 'V']:
+            return 'background-color: #90EE90'
+        return ''
+
+    def style_func(row):
+        year = row.name
+        return [color_cells(row[col], year, col) for col in row.index]
+
+    styled = pivot.style.apply(style_func, axis=1)
+
+    styled.set_table_styles(
+        [{'selector': 'th, td', 'props': [('text-align', 'center'), ('min-width', '60px'), ('max-width', '60px')]}]
+    )
+
+    return styled
