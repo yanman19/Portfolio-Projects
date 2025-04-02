@@ -1,0 +1,138 @@
+import pandas as pd
+import numpy as np
+from datetime import datetime
+import panel as pn
+from math import ceil
+
+pn.extension('tabulator')
+
+def create_seasonal_pivot(df, value_column):
+    df = df.copy()
+    df['MARKETDATE'] = pd.to_datetime(df['MARKETDATE'])
+    df['Year'] = df['MARKETDATE'].dt.year
+    df['Month'] = df['MARKETDATE'].dt.month
+    df['MonthCode'] = df['Month'].map({
+        1: 'F', 2: 'G', 3: 'H', 4: 'J', 5: 'K', 6: 'M',
+        7: 'N', 8: 'Q', 9: 'U', 10: 'V', 11: 'X', 12: 'Z'
+    })
+
+    pivot = df.pivot_table(index='Year', columns='MonthCode', values=value_column, aggfunc='mean')
+
+    fg_months = ['F', 'G']
+    hj_months = ['H', 'J']
+    nq_months = ['N', 'Q']
+    q4_months = ['V', 'X', 'Z']
+
+    pivot['FG'] = pivot[fg_months].mean(axis=1)
+    pivot['HJ'] = pivot[hj_months].mean(axis=1)
+    pivot['NQ'] = pivot[nq_months].mean(axis=1)
+    pivot['Q4'] = pivot[q4_months].mean(axis=1)
+    pivot['CAL'] = pivot[[c for c in pivot.columns if c in list('FGHJKMNQUVXZ')]].mean(axis=1)
+
+    ordered_cols = [c for c in list('FGHJKMNQUVXZ') if c in pivot.columns] + ['FG', 'HJ', 'NQ', 'Q4', 'CAL']
+    pivot = pivot[ordered_cols]
+    pivot.columns.name = None
+    pivot = pivot.applymap(lambda x: f"{x:.1f}" if pd.notnull(x) else "")
+
+    def color_cells(val, row_year, col):
+        if row_year == datetime.now().year:
+            return 'background-color: #E6E6FA'
+        if col in ['FG', 'F', 'G']:
+            return 'background-color: #ADD8E6'
+        if col in ['HJ', 'H', 'J']:
+            return 'background-color: #90EE90'
+        if col in ['NQ', 'N', 'Q']:
+            return 'background-color: #FFDAB9'
+        if col in ['Q4', 'V', 'X', 'Z']:
+            return 'background-color: #FFFFE0'
+        return ''
+
+    def style_func(row):
+        year = row.name
+        return [color_cells(row[col], year, col) for col in row.index]
+
+    styled = pivot.style.apply(style_func, axis=1)
+    styled.set_table_styles([
+        {'selector': 'th, td', 'props': [
+            ('text-align', 'center'),
+            ('min-width', '60px'),
+            ('max-width', '60px'),
+            ('border', '1px solid #ccc'),
+            ('padding', '4px'),
+            ('font-family', 'Arial, sans-serif')
+        ]},
+        {'selector': 'table', 'props': [('border-collapse', 'collapse'), ('margin', '0 auto')]}
+    ])
+    return styled
+
+def create_tab_content(df, all_columns):
+    trade_types = ['SPARK', 'FP', 'HR', 'GASBASIS', 'SPREAD']
+    dropdown = pn.widgets.Select(name='Trade Type:', options=trade_types)
+
+    table_area = pn.Column()
+
+    def update_table(event=None):
+        keyword = dropdown.value
+        matching_cols = [col for col in all_columns if keyword in col]
+        table_area.clear()
+        num_cols = len(matching_cols)
+        rows = ceil(num_cols / 2)
+
+        for i in range(rows):
+            cols_in_row = matching_cols[i * 2:(i + 1) * 2]
+            row_items = []
+            for col in cols_in_row:
+                styled_pivot = create_seasonal_pivot(df, col)
+                title = pn.pane.Markdown(
+                    f"<div style='text-align:center; font-size:20px; font-weight:600; margin-top:25px;'>{col}</div>",
+                    width=620
+                )
+                table = pn.pane.HTML(styled_pivot.render(), width=620, height=400, margin=(0, 10, 20, 10))
+                row_items.append(pn.Column(title, table, width=640))
+            table_area.append(pn.Row(*row_items, sizing_mode='stretch_width'))
+
+    dropdown.param.watch(update_table, 'value')
+    update_table()
+
+    return pn.Column(dropdown, table_area, width=1350)
+
+def generate_yanus_tabs(data_dict, column_list):
+    tabs = []
+    for label, df in data_dict.items():
+        tab_content = create_tab_content(df, column_list)
+        tabs.append((label.upper(), tab_content))
+
+    header_html = """
+    <div style="display: flex; justify-content: center; font-size: 48px; font-family: Arial, sans-serif; margin-top: 20px; margin-bottom: 40px;">
+        <span style="color: #4285F4;">Y</span>
+        <span style="color: #DB4437;">A</span>
+        <span style="color: #F4B400;">N</span>
+        <span style="color: #0F9D58;">U</span>
+        <span style="color: #4285F4;">S</span>
+    </div>
+    """
+
+    return pn.Column(pn.pane.HTML(header_html), pn.Tabs(*tabs, tabs_location='above'))
+
+# Load your data
+peak_df = pd.read_csv("peak.csv")
+offpeak_df = pd.read_csv("offpeak.csv")
+nights_df = pd.read_csv("nights.csv")
+atc_df = pd.read_csv("atc.csv")
+
+# Column list
+all_columns = ['SPARK1', 'SPARK2', 'FP1', 'HR1', 'GASBASIS1', 'SPREAD1', 'SPREAD2']  # replace with real column names
+
+# Tab labels mapped to DataFrames
+dataframes = {
+    'Peak': peak_df,
+    'Offpeak': offpeak_df,
+    'Nights': nights_df,
+    'ATC': atc_df
+}
+
+# Create and export the dashboard
+multi_tab_dashboard = generate_yanus_tabs(dataframes, all_columns)
+multi_tab_dashboard.save("YANUS.html", embed=True)
+
+print("YANUS dashboard saved as 'YANUS.html'")
