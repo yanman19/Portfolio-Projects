@@ -1,0 +1,343 @@
+import pandas as pd
+import numpy as np
+from datetime import datetime
+import panel as pn
+
+pn.extension('tabulator')
+
+def create_seasonal_pivot(df, value_column):
+    df = df.copy()
+    df['MARKETDATE'] = pd.to_datetime(df['MARKETDATE'])
+    df['Year'] = df['MARKETDATE'].dt.year
+    df['Month'] = df['MARKETDATE'].dt.month
+    df['MonthCode'] = df['Month'].map({
+        1: 'F', 2: 'G', 3: 'H', 4: 'J', 5: 'K', 6: 'M',
+        7: 'N', 8: 'Q', 9: 'U', 10: 'V', 11: 'X', 12: 'Z'
+    })
+
+    pivot = df.pivot_table(index='Year', columns='MonthCode', values=value_column, aggfunc='mean')
+
+    fg = ['F', 'G']
+    hj = ['H', 'J']
+    nq = ['N', 'Q']
+    q4 = ['V', 'X', 'Z']
+
+    pivot['FG'] = pivot[fg].mean(axis=1)
+    pivot['HJ'] = pivot[hj].mean(axis=1)
+    pivot['NQ'] = pivot[nq].mean(axis=1)
+    pivot['Q4'] = pivot[q4].mean(axis=1)
+    pivot['CAL'] = pivot[[c for c in pivot.columns if c in list('FGHJKMNQUVXZ')]].mean(axis=1)
+
+    final_cols = [c for c in list('FGHJKMNQUVXZ') if c in pivot.columns] + ['FG', 'HJ', 'NQ', 'Q4', 'CAL']
+    pivot = pivot[final_cols]
+    pivot.columns.name = None
+    pivot = pivot.applymap(lambda x: f"{x:.1f}" if pd.notnull(x) else "")
+
+    def color_cells(val, row_year, col):
+        if row_year == datetime.now().year:
+            return 'background-color: #E6E6FA'
+        if col in ['FG', 'F', 'G']:
+            return 'background-color: #ADD8E6'
+        if col in ['HJ', 'H', 'J']:
+            return 'background-color: #90EE90'
+        if col in ['NQ', 'N', 'Q']:
+            return 'background-color: #FFDAB9'
+        if col in ['Q4', 'V', 'X', 'Z']:
+            return 'background-color: #FFFFE0'
+        return ''
+
+    def style_func(row):
+        year = row.name
+        return [color_cells(row[col], year, col) for col in row.index]
+
+    styled = pivot.style.apply(style_func, axis=1)
+    styled.set_table_styles([
+        {'selector': 'th, td', 'props': [
+            ('text-align', 'center'),
+            ('min-width', '40px'),    # Narrower minimum width
+            ('width', 'auto'),        # Let columns size naturally
+            ('max-width', '65px'),    # But limit maximum size
+            ('border', '1px solid #ccc'),
+            ('padding', '4px 2px'),   # Less horizontal padding
+            ('font-family', 'Arial, sans-serif'),
+            ('font-size', '11px'),    # Smaller font for more columns
+            ('white-space', 'nowrap') # Prevent text wrapping
+        ]},
+        {'selector': 'table', 'props': [
+            ('border-collapse', 'collapse'), 
+            ('margin', '0 auto'),
+            ('width', '100%'),
+            ('table-layout', 'auto')  # Optimize table layout
+        ]},
+        {'selector': 'th', 'props': [
+            ('font-weight', 'bold'),
+            ('font-size', '11px')
+        ]}
+    ])
+    return styled
+
+def create_tab_content(df, all_columns):
+    # Create dropdown with center alignment
+    trade_types = ['SPARK', 'FP', 'HR', 'GASBASIS', 'SPREAD']
+    dropdown = pn.widgets.Select(
+        name='Trade Type:', 
+        options=trade_types,
+        width=180,
+        margin=(0, 0, 15, 0),
+        css_classes=['centered-dropdown']
+    )
+    
+    # Create a centered container for the dropdown
+    dropdown_container = pn.Row(
+        pn.layout.HSpacer(),
+        dropdown,
+        pn.layout.HSpacer(),
+        css_classes=['centered-row'],
+        width=1300
+    )
+
+    grid_area = pn.Column(sizing_mode='fixed', width=1300, css_classes=['grid-container'])
+
+    def update_table(event=None):
+        keyword = dropdown.value
+        matching_cols = [col for col in all_columns if keyword in col]
+        grid_area.clear()
+        
+        # Process tables two at a time with reduced height
+        for i in range(0, len(matching_cols), 2):
+            # Create row to hold two tables - reduced height
+            row = pn.Row(sizing_mode='fixed', width=1300, height=350, css_classes=['table-row'])
+            
+            # First table - compact size
+            col = matching_cols[i]
+            styled = create_seasonal_pivot(df, col)
+            title1 = pn.pane.Markdown(f"<div style='text-align:center; font-size:16px; font-weight:600; margin-bottom:5px;'>{col}</div>")
+            table1 = pn.pane.HTML(styled.render(), width=580, height=300)
+            table_block1 = pn.Column(
+                title1, 
+                table1, 
+                width=600,
+                margin=(0, 20, 0, 0),
+                css_classes=['table-container']
+            )
+            row.append(table_block1)
+            
+            # Second table - compact size
+            if i + 1 < len(matching_cols):
+                col = matching_cols[i + 1]
+                styled = create_seasonal_pivot(df, col)
+                title2 = pn.pane.Markdown(f"<div style='text-align:center; font-size:16px; font-weight:600; margin-bottom:5px;'>{col}</div>")
+                table2 = pn.pane.HTML(styled.render(), width=580, height=300)
+                table_block2 = pn.Column(
+                    title2, 
+                    table2, 
+                    width=600,
+                    margin=(0, 0, 0, 20),
+                    css_classes=['table-container']
+                )
+                row.append(table_block2)
+            
+            # Add row to grid
+            grid_area.append(row)
+            # Smaller spacer between rows
+            grid_area.append(pn.Spacer(height=20))
+
+    # Add CSS to ensure tables don't overlap and everything is centered
+    pn.config.raw_css.append("""
+    .table-container {
+        border: 1px solid #f0f0f0;
+        padding: 10px;
+        background-color: white;
+        box-shadow: 0px 0px 5px rgba(0,0,0,0.1);
+        overflow: hidden;
+    }
+    
+    /* Center the dropdown */
+    .centered-dropdown {
+        display: flex;
+        justify-content: center;
+    }
+    
+    /* Center the dropdown container */
+    .centered-row {
+        display: flex;
+        justify-content: center;
+        width: 100% !important;
+        text-align: center;
+    }
+    
+    /* Fix dropdown label alignment */
+    .bk-input-group {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+    }
+    
+    /* Center the bk label */
+    label.bk-input-label {
+        text-align: center;
+        width: 100%;
+    }
+    
+    /* Grid container for proper centering */
+    .grid-container {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+    }
+    
+    /* Table row for proper centering */
+    .table-row {
+        display: flex;
+        justify-content: center;
+        width: 100%;
+    }
+    """)
+    
+    dropdown.param.watch(update_table, 'value')
+    update_table()
+
+    return pn.Column(
+        dropdown_container,
+        pn.Spacer(height=5),
+        grid_area, 
+        width=1300,
+        align="center",
+        css_classes=['content-container'],
+        margin=(0, 0, 0, 0)  # Remove margins
+    )
+
+def generate_yanus_tabs(data_dict, column_list):
+    tabs = []
+    for label, df in data_dict.items():
+        tabs.append((label.upper(), create_tab_content(df, column_list)))
+
+    # Create a completely centered YANUS title with Google colors
+    header_html = """
+    <div style="text-align: center; font-size: 48px; font-family: Arial, sans-serif; margin: 20px auto 40px auto; width: 100%;">
+        <span style="color: #4285F4;">Y</span>
+        <span style="color: #DB4437;">A</span>
+        <span style="color: #F4B400;">N</span>
+        <span style="color: #0F9D58;">U</span>
+        <span style="color: #4285F4;">S</span>
+    </div>
+    """
+
+    # CSS to ensure proper spacing, centering, and prevent overlapping
+    pn.config.raw_css.append("""
+    /* General body styles */
+    body {
+        overflow-x: hidden;
+        text-align: center;
+    }
+    
+    /* Ensure the header is centered */
+    .bk-root {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+    }
+    
+    /* Force center the top tabs */
+    .bk-header.bk-above {
+        justify-content: center !important;
+        display: flex !important;
+        width: 100% !important;
+        text-align: center !important;
+        margin: 0 auto !important;
+    }
+    
+    /* Make sure tab buttons are centered */
+    .bk-header .bk-tab-row {
+        display: flex;
+        justify-content: center !important;
+        width: 100% !important;
+    }
+    
+    /* Style the tabs */
+    .bk-tab {
+        padding: 10px 20px !important;
+        font-weight: 500 !important;
+        font-size: 14px !important;
+    }
+    
+    /* Style the active tab */
+    .bk-tab.bk-active {
+        background-color: #f0f0f0 !important;
+        border-bottom: 2px solid #4285F4 !important;
+    }
+    
+    /* Center the tab content */
+    .panel-tab {
+        display: flex !important;
+        flex-direction: column !important;
+        align-items: center !important;
+        justify-content: flex-start !important;
+        margin: 0 auto !important;
+    }
+    
+    /* Center panel container */
+    .panel-container {
+        display: flex !important;
+        flex-direction: column !important;
+        align-items: center !important;
+        width: 100% !important;
+    }
+    """)
+    
+    # Use a special container to force center alignment of tabs
+    tabs_container = pn.Column(
+        pn.pane.HTML(header_html, css_classes=['title-container']),
+        css_classes=['header-container'],
+        width=1300,
+        align='center'
+    )
+    
+    tabs_panel = pn.Tabs(
+        *tabs, 
+        tabs_location='above',
+        sizing_mode='fixed',
+        width=1300,
+        css_classes=['centered-tabs']
+    )
+    
+    content = pn.Column(
+        tabs_container,
+        tabs_panel,
+        align="center",
+        width=1300,
+        sizing_mode='fixed',
+        css_classes=['panel-container']
+    )
+    
+    # Center the entire dashboard
+    return pn.Row(
+        pn.layout.HSpacer(),
+        content,
+        pn.layout.HSpacer(),
+        sizing_mode="stretch_width",
+        css_classes=['main-container']
+    )
+
+# Load your data
+peak_df = pd.read_csv("peak.csv")
+offpeak_df = pd.read_csv("offpeak.csv")
+nights_df = pd.read_csv("nights.csv")
+atc_df = pd.read_csv("atc.csv")
+
+# Column names to include
+all_columns = ['SPARK1', 'SPARK2', 'FP1', 'HR1', 'GASBASIS1', 'SPREAD1', 'SPREAD2']  # replace as needed
+
+# Tab mappings
+dataframes = {
+    'Peak': peak_df,
+    'Offpeak': offpeak_df,
+    'Nights': nights_df,
+    'ATC': atc_df
+}
+
+# Create dashboard and export
+multi_tab_dashboard = generate_yanus_tabs(dataframes, all_columns)
+multi_tab_dashboard.save("YANUS.html", embed=True)
+
+print("YANUS dashboard saved as 'YANUS.html'")
