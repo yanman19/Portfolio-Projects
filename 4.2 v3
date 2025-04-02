@@ -1,0 +1,22 @@
+# Inside create_tab_content(...)
+
+def update_table(event=None):
+    keyword = dropdown.value
+    matching_cols = [col for col in all_columns if keyword in col]
+    table_area.clear()
+    num_cols = len(matching_cols)
+    rows = ceil(num_cols / 2)
+
+    for i in range(rows):
+        cols_in_row = matching_cols[i * 2:(i + 1) * 2]
+        row_items = []
+        for col in cols_in_row:
+            styled_pivot = create_seasonal_pivot(df, col)
+            title = pn.pane.Markdown(
+                f"<div style='text-align:center; font-size:20px; font-weight:600; margin-top:25px;'>{col}</div>",
+                width=600
+            )
+            table = pn.pane.HTML(styled_pivot.render(), width=600, height=400)
+            row_items.append(pn.Column(title, table, width=610, margin=(0, 10, 0, 10)))
+        row = pn.Row(*row_items, width=1250)
+        table_area.append(row)
