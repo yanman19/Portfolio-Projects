@@ -1,0 +1,3 @@
+df['MONTH'] = pd.Series(df.index).str[:3].apply(lambda x: datetime.strptime(x, '%b').month)
+df['YEAR'] = pd.Series(df.index).str[3:].apply(lambda x: int('20' + x))
+df['MARKETDATE'] = pd.to_datetime({'year': df['YEAR'], 'month': df['MONTH'], 'day': 1})
