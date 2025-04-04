@@ -1,0 +1,23 @@
+import pandas as pd
+from datetime import datetime
+
+def get_contract_price(contract_name, month_year):
+    # placeholder for the actual logic
+    return 100  # example price
+
+def build_price_dataframe(contract_list, month_year_list):
+    data = {}
+    for contract in contract_list:
+        prices = []
+        for my in month_year_list:
+            price = get_contract_price(contract, my)
+            prices.append(price)
+        data[contract] = prices
+
+    df = pd.DataFrame(data, index=month_year_list)
+
+    df['MONTH'] = df.index.str[:3].apply(lambda x: datetime.strptime(x, '%b').month)
+    df['YEAR'] = df.index.str[3:].apply(lambda x: int('20' + x))
+    df['MARKETDATE'] = pd.to_datetime({'year': df['YEAR'], 'month': df['MONTH'], 'day': 1})
+
+    return df
