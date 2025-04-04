@@ -1,0 +1,337 @@
+import pandas as pd
+import numpy as np
+from datetime import datetime
+import panel as pn
+
+pn.extension('tabulator')
+
+def create_seasonal_pivot(df, value_column):
+    df = df.copy()
+    df['MARKETDATE'] = pd.to_datetime(df['MARKETDATE'])
+    df['Year'] = df['MARKETDATE'].dt.year
+    df['Month'] = df['MARKETDATE'].dt.month
+    df['MonthCode'] = df['Month'].map({
+        1: 'F', 2: 'G', 3: 'H', 4: 'J', 5: 'K', 6: 'M',
+        7: 'N', 8: 'Q', 9: 'U', 10: 'V', 11: 'X', 12: 'Z'
+    })
+
+    pivot = df.pivot_table(index='Year', columns='MonthCode', values=value_column, aggfunc='mean')
+    pivot = pivot.loc[~pivot.isna().all(axis=1)]
+
+    fg = ['F', 'G']
+    hj = ['H', 'J']
+    nq = ['N', 'Q']
+    q4 = ['V', 'X', 'Z']
+
+    pivot['FG'] = pivot[[c for c in fg if c in pivot.columns]].mean(axis=1)
+    pivot['HJ'] = pivot[[c for c in hj if c in pivot.columns]].mean(axis=1)
+    pivot['NQ'] = pivot[[c for c in nq if c in pivot.columns]].mean(axis=1)
+    pivot['Q4'] = pivot[[c for c in q4 if c in pivot.columns]].mean(axis=1)
+
+    month_codes = list('FGHJKMNQUVXZ')
+    available_month_codes = [c for c in month_codes if c in pivot.columns]
+    pivot['CAL'] = pivot[available_month_codes].mean(axis=1)
+
+    final_cols = [c for c in month_codes if c in pivot.columns] + ['FG', 'HJ', 'NQ', 'Q4', 'CAL']
+    pivot = pivot[final_cols]
+    pivot.columns.name = None
+    pivot = pivot.applymap(lambda x: f"{x:.1f}" if pd.notnull(x) else "")
+
+    def color_cells(val, row_year, col):
+        if row_year == datetime.now().year:
+            return 'background-color: #E6E6FA'
+        if col in ['FG', 'F', 'G']:
+            return 'background-color: #ADD8E6'
+        if col in ['HJ', 'H', 'J']:
+            return 'background-color: #90EE90'
+        if col in ['NQ', 'N', 'Q']:
+            return 'background-color: #FFDAB9'
+        if col in ['Q4', 'V', 'X', 'Z']:
+            return 'background-color: #FFFFE0'
+        return ''
+
+    def style_func(row):
+        year = row.name
+        return [color_cells(row[col], year, col) for col in row.index]
+
+    styled = pivot.style.apply(style_func, axis=1)
+    styled.set_table_styles([
+        {'selector': 'th, td', 'props': [
+            ('text-align', 'center'),
+            ('min-width', '50px'),
+            ('max-width', '70px'),
+            ('border', '1px solid #ccc'),
+            ('padding', '5px'),
+            ('font-family', 'Arial, sans-serif'),
+            ('font-size', '12px')
+        ]},
+        {'selector': 'table', 'props': [
+            ('border-collapse', 'collapse'),
+            ('margin', '0 auto'),
+            ('width', '100%')
+        ]}
+    ])
+    return styled
+
+def parse_columns_by_category(df, tab_label):
+    """
+    Parse columns into categories based on naming patterns
+    """
+    regions = ['NORTH', 'HOUSTON', 'WEST', 'SOUTH']
+    trade_types = ['SPARK_7', 'SPARK_10', 'FP', 'HR', 'GASBASIS']
+    
+    # Create a dictionary to store categorized columns
+    categorized_columns = {trade_type: {region: [] for region in regions + ['OTHER']} 
+                          for trade_type in trade_types}
+    
+    # Categorize columns based on naming patterns
+    for col in df.columns:
+        # Skip MARKETDATE column
+        if col == 'MARKETDATE':
+            continue
+            
+        # Check if the column belongs to the current tab
+        if tab_label.upper() not in col.upper():
+            continue
+            
+        # Find which trade type this column belongs to
+        trade_type_match = next((tt for tt in trade_types if tt in col), None)
+        if not trade_type_match:
+            continue
+            
+        # Find which region this column belongs to
+        region_match = next((r for r in regions if r in col), 'OTHER')
+        
+        # Add column to the appropriate category
+        categorized_columns[trade_type_match][region_match].append(col)
+    
+    return categorized_columns
+
+def create_tab_content(df, tab_label):
+    # Parse columns into categories
+    categorized_columns = parse_columns_by_category(df, tab_label)
+    
+    # Create widgets
+    trade_types = ['SPARK_7', 'SPARK_10', 'FP', 'HR', 'GASBASIS']
+    trade_type_dropdown = pn.widgets.Select(name='Trade Type:', options=trade_types, width=200)
+    
+    regions = ['NORTH', 'HOUSTON', 'WEST', 'SOUTH', 'OTHER']
+    region_multiselect = pn.widgets.MultiSelect(
+        name='Regions:',
+        options=regions,
+        value=regions,  # Default to selecting all regions
+        width=200
+    )
+    
+    grid_area = pn.Column(sizing_mode='fixed', width=2500)
+
+    def render_tables(event=None):
+        # Clear previous content
+        grid_area.clear()
+        
+        # Get selected trade type and regions
+        selected_trade_type = trade_type_dropdown.value
+        selected_regions = region_multiselect.value
+        
+        # Get columns for the selected trade type and regions
+        all_selected_columns = []
+        for region in selected_regions:
+            all_selected_columns.extend(categorized_columns[selected_trade_type][region])
+        
+        # Sort columns for consistent display
+        all_selected_columns.sort()
+        
+        # Render the tables in rows of 2
+        for i in range(0, len(all_selected_columns), 2):
+            row = pn.Row(sizing_mode='fixed', width=2500)
+
+            # First column in the row
+            col1 = all_selected_columns[i]
+            styled1 = create_seasonal_pivot(df, col1)
+            title1 = pn.pane.Markdown(f"<div style='text-align:center; font-size:20px; font-weight:600; margin-bottom:10px;'>{col1}</div>")
+            table1 = pn.pane.HTML(styled1.render(), width=1200, height=400)
+            block1 = pn.Column(title1, table1, width=1200)
+            row.append(block1)
+
+            # Second column in the row (if available)
+            if i + 1 < len(all_selected_columns):
+                col2 = all_selected_columns[i + 1]
+                styled2 = create_seasonal_pivot(df, col2)
+                title2 = pn.pane.Markdown(f"<div style='text-align:center; font-size:20px; font-weight:600; margin-bottom:10px;'>{col2}</div>")
+                table2 = pn.pane.HTML(styled2.render(), width=1200, height=400)
+                block2 = pn.Column(title2, table2, width=1200)
+                row.append(block2)
+
+            grid_area.append(row)
+            grid_area.append(pn.Spacer(height=40))
+
+    # Register event handlers
+    trade_type_dropdown.param.watch(render_tables, 'value')
+    region_multiselect.param.watch(render_tables, 'value')
+    
+    # Initial render
+    render_tables()
+
+    return pn.Column(
+        pn.Row(trade_type_dropdown, region_multiselect, width=500, margin=(0, 0, 20, 0)),
+        pn.Spacer(height=10),
+        grid_area,
+        width=2500
+    )
+
+def parse_spread_columns(spread_df):
+    """
+    Parse spread columns into categories based on naming patterns
+    """
+    spread_types = ['H/N_DA', 'H/N_RT', 'W/N_DA', 'W/N_RT', 'S/N_DA', 'S/N_RT']
+    peak_categories = ['ATC', 'PEAK', 'OFFPEAK', 'NIGHTS']
+    
+    # Create a dictionary to store categorized columns
+    categorized_spreads = {spread_type: {peak: [] for peak in peak_categories} 
+                          for spread_type in spread_types}
+    
+    # Categorize columns based on naming patterns
+    for col in spread_df.columns:
+        # Skip MARKETDATE column
+        if col == 'MARKETDATE':
+            continue
+            
+        # Find which spread type this column belongs to
+        spread_type_match = next((st for st in spread_types if st in col), None)
+        if not spread_type_match:
+            continue
+            
+        # Find which peak category this column belongs to
+        peak_match = next((pc for pc in peak_categories if pc in col), None)
+        if not peak_match:
+            continue
+            
+        # Add column to the appropriate category
+        categorized_spreads[spread_type_match][peak_match].append(col)
+    
+    return categorized_spreads
+
+def create_spreads_tab(spread_df):
+    # Parse spread columns into categories
+    categorized_spreads = parse_spread_columns(spread_df)
+    
+    # Create widgets
+    spread_types = ['H/N_DA', 'H/N_RT', 'W/N_DA', 'W/N_RT', 'S/N_DA', 'S/N_RT']
+    spread_type_dropdown = pn.widgets.Select(name='Spread Type:', options=spread_types, width=200)
+    
+    peak_categories = ['ATC', 'PEAK', 'OFFPEAK', 'NIGHTS']
+    peak_multiselect = pn.widgets.MultiSelect(
+        name='Categories:',
+        options=peak_categories,
+        value=peak_categories,  # Default to selecting all categories
+        width=200
+    )
+    
+    grid_area = pn.Column(sizing_mode='fixed', width=2500)
+
+    def update_spreads(event=None):
+        # Clear previous content
+        grid_area.clear()
+        
+        # Get selected spread type and peak categories
+        selected_spread_type = spread_type_dropdown.value
+        selected_peaks = peak_multiselect.value
+        
+        # Get columns for the selected spread type and peak categories
+        all_selected_columns = []
+        for peak in selected_peaks:
+            all_selected_columns.extend(categorized_spreads[selected_spread_type][peak])
+        
+        # Sort columns to ensure consistent ordering
+        all_selected_columns.sort()
+        
+        # Render the tables in rows of 2
+        for i in range(0, len(all_selected_columns), 2):
+            row = pn.Row(sizing_mode='fixed', width=2500)
+
+            # First column in the row
+            col1 = all_selected_columns[i]
+            styled1 = create_seasonal_pivot(spread_df, col1)
+            title1 = pn.pane.Markdown(f"<div style='text-align:center; font-size:20px; font-weight:600; margin-bottom:10px;'>{col1}</div>")
+            table1 = pn.pane.HTML(styled1.render(), width=1200, height=400)
+            block1 = pn.Column(title1, table1, width=1200)
+            row.append(block1)
+
+            # Second column in the row (if available)
+            if i + 1 < len(all_selected_columns):
+                col2 = all_selected_columns[i + 1]
+                styled2 = create_seasonal_pivot(spread_df, col2)
+                title2 = pn.pane.Markdown(f"<div style='text-align:center; font-size:20px; font-weight:600; margin-bottom:10px;'>{col2}</div>")
+                table2 = pn.pane.HTML(styled2.render(), width=1200, height=400)
+                block2 = pn.Column(title2, table2, width=1200)
+                row.append(block2)
+
+            grid_area.append(row)
+            grid_area.append(pn.Spacer(height=40))
+
+    # Register event handlers
+    spread_type_dropdown.param.watch(update_spreads, 'value')
+    peak_multiselect.param.watch(update_spreads, 'value')
+    
+    # Initial render
+    update_spreads()
+
+    return pn.Column(
+        pn.Row(spread_type_dropdown, peak_multiselect, width=500),
+        pn.Spacer(height=10),
+        grid_area,
+        width=2500
+    )
+
+def generate_price_tracker_tabs(data_dict, spread_df):
+    tabs = []
+    for label, df in data_dict.items():
+        tabs.append((label.upper(), create_tab_content(df, label)))
+    tabs.append(("SPREADS", create_spreads_tab(spread_df)))
+    return pn.Tabs(*tabs, tabs_location='above', width=2500)
+
+def generate_main_dashboard(price_tracker_tabs, timestamp):
+    header_html = """
+    <div style="font-size: 48px; font-family: Arial, sans-serif; margin: 20px 0 10px 0; text-align: left;">
+        <span style="color: #4285F4;">Y</span>
+        <span style="color: #DB4437;">A</span>
+        <span style="color: #F4B400;">N</span>
+        <span style="color: #0F9D58;">U</span>
+        <span style="color: #4285F4;">S</span>
+    </div>
+    """
+    last_updated_html = f"""
+    <div style="font-size: 16px; font-family: Arial, sans-serif; margin-bottom: 30px; text-align: left; color: gray;">
+        Last updated: {timestamp}
+    </div>
+    """
+    top_level_tabs = pn.Tabs(
+        ('Price Tracker', price_tracker_tabs),
+        ('Cash', pn.Column(pn.Spacer(height=20), width=2500)),
+        ('Seasonal', pn.Column(pn.Spacer(height=20), width=2500)),
+        ('Fundamentals', pn.Column(pn.Spacer(height=20), width=2500)),
+        tabs_location='above',
+        width=2500
+    )
+    return pn.Column(pn.pane.HTML(header_html), pn.pane.HTML(last_updated_html), top_level_tabs, width=2500)
+
+# Main execution
+peak_df = pd.read_csv("peak.csv")
+offpeak_df = pd.read_csv("offpeak.csv")
+nights_df = pd.read_csv("nights.csv")
+atc_df = pd.read_csv("atc.csv")
+spread_df = pd.read_csv("spreads.csv")
+
+dataframes = {
+    'Peak': peak_df,
+    'Offpeak': offpeak_df,
+    'Nights': nights_df,
+    'ATC': atc_df
+}
+
+timestamp = datetime.now().strftime("%m/%d %H:%M")
+price_tracker_tabs = generate_price_tracker_tabs(dataframes, spread_df)
+dashboard = generate_main_dashboard(price_tracker_tabs, timestamp)
+dashboard.save("YANUS.html", embed=True)
+
+print("YANUS dashboard saved as 'YANUS.html'")
