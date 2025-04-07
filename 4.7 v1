@@ -1,0 +1,65 @@
+def create_seasonal_pivot(df, value_column):
+    df = df.copy()
+    df['MARKETDATE'] = pd.to_datetime(df['MARKETDATE'])
+    df['Year'] = df['MARKETDATE'].dt.year
+    df['Month'] = df['MARKETDATE'].dt.month
+    df['MonthCode'] = df['Month'].map({
+        1: 'F', 2: 'G', 3: 'H', 4: 'J', 5: 'K', 6: 'M',
+        7: 'N', 8: 'Q', 9: 'U', 10: 'V', 11: 'X', 12: 'Z'
+    })
+
+    grouped = df.groupby(['Year', 'MonthCode'])
+    weighted_avg = grouped.apply(lambda g: (g[value_column] * g['HOURS']).sum() / g['HOURS'].sum()).unstack()
+
+    fg = ['F', 'G']
+    hj = ['H', 'J']
+    nq = ['N', 'Q']
+    q4 = ['V', 'X', 'Z']
+    all_months = list('FGHJKMNQUVXZ')
+
+    weighted_avg['FG'] = weighted_avg[fg].multiply(df.groupby(['Year', 'MonthCode'])['HOURS'].sum().unstack()[fg]).sum(axis=1) / df.groupby(['Year', 'MonthCode'])['HOURS'].sum().unstack()[fg].sum(axis=1)
+    weighted_avg['HJ'] = weighted_avg[hj].multiply(df.groupby(['Year', 'MonthCode'])['HOURS'].sum().unstack()[hj]).sum(axis=1) / df.groupby(['Year', 'MonthCode'])['HOURS'].sum().unstack()[hj].sum(axis=1)
+    weighted_avg['NQ'] = weighted_avg[nq].multiply(df.groupby(['Year', 'MonthCode'])['HOURS'].sum().unstack()[nq]).sum(axis=1) / df.groupby(['Year', 'MonthCode'])['HOURS'].sum().unstack()[nq].sum(axis=1)
+    weighted_avg['Q4'] = weighted_avg[q4].multiply(df.groupby(['Year', 'MonthCode'])['HOURS'].sum().unstack()[q4]).sum(axis=1) / df.groupby(['Year', 'MonthCode'])['HOURS'].sum().unstack()[q4].sum(axis=1)
+    weighted_avg['CAL'] = weighted_avg[all_months].multiply(df.groupby(['Year', 'MonthCode'])['HOURS'].sum().unstack()[all_months]).sum(axis=1) / df.groupby(['Year', 'MonthCode'])['HOURS'].sum().unstack()[all_months].sum(axis=1)
+
+    final_cols = [c for c in all_months if c in weighted_avg.columns] + ['FG', 'HJ', 'NQ', 'Q4', 'CAL']
+    weighted_avg = weighted_avg[final_cols]
+    weighted_avg.columns.name = None
+    weighted_avg = weighted_avg.applymap(lambda x: f"{x:.1f}" if pd.notnull(x) else "")
+
+    def color_cells(val, row_year, col):
+        if row_year == datetime.now().year:
+            return 'background-color: #E6E6FA'
+        if col in ['FG', 'F', 'G']:
+            return 'background-color: #ADD8E6'
+        if col in ['HJ', 'H', 'J']:
+            return 'background-color: #90EE90'
+        if col in ['NQ', 'N', 'Q']:
+            return 'background-color: #FFDAB9'
+        if col in ['Q4', 'V', 'X', 'Z']:
+            return 'background-color: #FFFFE0'
+        return ''
+
+    def style_func(row):
+        year = row.name
+        return [color_cells(row[col], year, col) for col in row.index]
+
+    styled = weighted_avg.style.apply(style_func, axis=1)
+    styled.set_table_styles([
+        {'selector': 'th, td', 'props': [
+            ('text-align', 'center'),
+            ('min-width', '50px'),
+            ('max-width', '70px'),
+            ('border', '1px solid #ccc'),
+            ('padding', '5px'),
+            ('font-family', 'Arial, sans-serif'),
+            ('font-size', '12px')
+        ]},
+        {'selector': 'table', 'props': [
+            ('border-collapse', 'collapse'),
+            ('margin', '0 auto'),
+            ('width', '100%')
+        ]}
+    ])
+    return styled
