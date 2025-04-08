@@ -1,0 +1,53 @@
+def create_tab_content(df, all_columns):
+    trade_types = ['SPARK', 'FP', 'HR', 'GASBASIS', 'SPREAD']
+    trade_dropdown = pn.widgets.Select(
+        name='Trade Type:',
+        options=trade_types,
+        width=200,
+        margin=(0, 0, 20, 0)
+    )
+
+    dropdown_container = pn.Row(trade_dropdown, width=300, margin=(0, 0, 20, 0))
+    grid_area = pn.Column(sizing_mode='fixed', width=2500)
+
+    def update_trade_table(event=None):
+        keyword = trade_dropdown.value
+        matching_cols = [col for col in all_columns if keyword in col]
+        grid_area.clear()
+
+        for i in range(0, len(matching_cols), 2):
+            row = pn.Row(sizing_mode='fixed', width=2500)
+
+            col1 = matching_cols[i]
+            styled1 = create_seasonal_pivot(df, col1)
+            title1 = pn.pane.Markdown(
+                f"<div style='text-align:center; font-size:20px; font-weight:600; margin-bottom:10px; width:100%'>{col1}</div>"
+            )
+            table1 = pn.pane.HTML(styled1.render(), width=1200, height=400)
+            block1 = pn.Column(title1, table1, width=1200, css_classes=['table-container'])
+
+            row.append(block1)
+
+            if i + 1 < len(matching_cols):
+                col2 = matching_cols[i + 1]
+                styled2 = create_seasonal_pivot(df, col2)
+                title2 = pn.pane.Markdown(
+                    f"<div style='text-align:center; font-size:20px; font-weight:600; margin-bottom:10px; width:100%'>{col2}</div>"
+                )
+                table2 = pn.pane.HTML(styled2.render(), width=1200, height=400)
+                block2 = pn.Column(title2, table2, width=1200, css_classes=['table-container'])
+                row.append(block2)
+
+            grid_area.append(row)
+            grid_area.append(pn.Spacer(height=40))
+
+    trade_dropdown.param.watch(update_trade_table, 'value')
+    update_trade_table()
+
+    return pn.Column(
+        dropdown_container,
+        pn.Spacer(height=10),
+        grid_area,
+        width=2500,
+        css_classes=['content-container']
+    )
