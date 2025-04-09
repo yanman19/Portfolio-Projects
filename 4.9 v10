@@ -1,0 +1,541 @@
+import pandas as pd
+import numpy as np
+from datetime import datetime
+import panel as pn
+import holoviews as hv
+from holoviews import opts
+
+pn.extension('tabulator', 'holoviews')
+hv.extension('bokeh')
+
+def create_seasonal_pivot(df, value_column):
+    df = df.copy()
+    df['MARKETDATE'] = pd.to_datetime(df['MARKETDATE'])
+    df['Year'] = df['MARKETDATE'].dt.year
+    df['Month'] = df['MARKETDATE'].dt.month
+    df['MonthCode'] = df['Month'].map({
+        1: 'F', 2: 'G', 3: 'H', 4: 'J', 5: 'K', 6: 'M',
+        7: 'N', 8: 'Q', 9: 'U', 10: 'V', 11: 'X', 12: 'Z'
+    })
+
+    pivot = df.pivot_table(index='Year', columns='MonthCode', values=value_column, aggfunc='mean')
+
+    fg = ['F', 'G']
+    hj = ['H', 'J']
+    nq = ['N', 'Q']
+    q4 = ['V', 'X', 'Z']
+
+    pivot['FG'] = pivot[fg].mean(axis=1)
+    pivot['HJ'] = pivot[hj].mean(axis=1)
+    pivot['NQ'] = pivot[nq].mean(axis=1)
+    pivot['Q4'] = pivot[q4].mean(axis=1)
+    pivot['CAL'] = pivot[[c for c in pivot.columns if c in list('FGHJKMNQUVXZ')]].mean(axis=1)
+
+    final_cols = [c for c in list('FGHJKMNQUVXZ') if c in pivot.columns] + ['FG', 'HJ', 'NQ', 'Q4', 'CAL']
+    pivot = pivot[final_cols]
+    pivot.columns.name = None
+    pivot = pivot.applymap(lambda x: f"{x:.1f}" if pd.notnull(x) else "")
+
+    def color_cells(val, row_year, col):
+        if row_year == datetime.now().year:
+            return 'background-color: #E6E6FA'
+        if col in ['FG', 'F', 'G']:
+            return 'background-color: #ADD8E6'
+        if col in ['HJ', 'H', 'J']:
+            return 'background-color: #90EE90'
+        if col in ['NQ', 'N', 'Q']:
+            return 'background-color: #FFDAB9'
+        if col in ['Q4', 'V', 'X', 'Z']:
+            return 'background-color: #FFFFE0'
+        return ''
+
+    def style_func(row):
+        year = row.name
+        return [color_cells(row[col], year, col) for col in row.index]
+
+    styled = pivot.style.apply(style_func, axis=1)
+    styled.set_table_styles([
+        {'selector': 'th, td', 'props': [
+            ('text-align', 'center'),
+            ('min-width', '50px'),
+            ('max-width', '70px'),
+            ('border', '1px solid #ccc'),
+            ('padding', '5px'),
+            ('font-family', 'Arial, sans-serif'),
+            ('font-size', '12px')
+        ]},
+        {'selector': 'table', 'props': [
+            ('border-collapse', 'collapse'),
+            ('margin', '0 auto'),
+            ('width', '100%')
+        ]}
+    ])
+    return styled
+
+def create_tab_content(df, all_columns):
+    trade_types = ['SPARK', 'FP', 'HR', 'GASBASIS', 'SPREAD']
+    dropdown = pn.widgets.Select(
+        name='Trade Type:',
+        options=trade_types,
+        width=200,
+        margin=(0, 0, 20, 0)
+    )
+
+    dropdown_container = pn.Row(dropdown, width=300, margin=(0, 0, 20, 0))
+    grid_area = pn.Column(sizing_mode='fixed', width=2500)
+
+    def update_table(event=None):
+        keyword = dropdown.value
+        matching_cols = [col for col in all_columns if keyword in col]
+        grid_area.clear()
+
+        for i in range(0, len(matching_cols), 2):
+            row = pn.Row(sizing_mode='fixed', width=2500)
+
+            col1 = matching_cols[i]
+            styled1 = create_seasonal_pivot(df, col1)
+            title1 = pn.pane.Markdown(
+                f"<div style='text-align:center; font-size:20px; font-weight:600; margin-bottom:10px; width:100%'>{col1}</div>"
+            )
+            table1 = pn.pane.HTML(styled1.render(), width=1200, height=400)
+            block1 = pn.Column(title1, table1, width=1200, css_classes=['table-container'])
+
+            row.append(block1)
+
+            if i + 1 < len(matching_cols):
+                col2 = matching_cols[i + 1]
+                styled2 = create_seasonal_pivot(df, col2)
+                title2 = pn.pane.Markdown(
+                    f"<div style='text-align:center; font-size:20px; font-weight:600; margin-bottom:10px; width:100%'>{col2}</div>"
+                )
+                table2 = pn.pane.HTML(styled2.render(), width=1200, height=400)
+                block2 = pn.Column(title2, table2, width=1200, css_classes=['table-container'])
+                row.append(block2)
+
+            grid_area.append(row)
+            grid_area.append(pn.Spacer(height=40))
+
+    pn.config.raw_css.append("""
+    .table-container {
+        border: 1px solid #f0f0f0;
+        padding: 15px;
+        background-color: white;
+        box-shadow: 0px 0px 5px rgba(0,0,0,0.1);
+        overflow: hidden;
+    }
+
+    .bk-input-group {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    label.bk-input-label {
+        text-align: left;
+        width: 100%;
+    }
+    """)
+
+    dropdown.param.watch(update_table, 'value')
+    update_table()
+
+    return pn.Column(
+        dropdown_container,
+        pn.Spacer(height=10),
+        grid_area,
+        width=2500,
+        css_classes=['content-container']
+    )
+
+def create_fundamentals_content(df, all_columns):
+    grid_area = pn.Column(sizing_mode='fixed', width=2500)
+    
+    for i in range(0, len(all_columns), 2):
+        row = pn.Row(sizing_mode='fixed', width=2500)
+
+        col1 = all_columns[i]
+        styled1 = create_seasonal_pivot(df, col1)
+        title1 = pn.pane.Markdown(
+            f"<div style='text-align:center; font-size:20px; font-weight:600; margin-bottom:10px; width:100%'>{col1}</div>"
+        )
+        table1 = pn.pane.HTML(styled1.render(), width=1200, height=400)
+        block1 = pn.Column(title1, table1, width=1200, css_classes=['table-container'])
+
+        row.append(block1)
+
+        if i + 1 < len(all_columns):
+            col2 = all_columns[i + 1]
+            styled2 = create_seasonal_pivot(df, col2)
+            title2 = pn.pane.Markdown(
+                f"<div style='text-align:center; font-size:20px; font-weight:600; margin-bottom:10px; width:100%'>{col2}</div>"
+            )
+            table2 = pn.pane.HTML(styled2.render(), width=1200, height=400)
+            block2 = pn.Column(title2, table2, width=1200, css_classes=['table-container'])
+            row.append(block2)
+
+        grid_area.append(row)
+        grid_area.append(pn.Spacer(height=40))
+
+    return pn.Column(
+        pn.Spacer(height=10),
+        grid_area,
+        width=2500,
+        css_classes=['content-container']
+    )
+
+def create_seasonal_charts(df, columns):
+    """
+    Create seasonal line charts for each column, with years as different colored lines
+    and month-day as the x-axis, focusing on a window of 30 days before and 15 days
+    after the current date, with a historical min-max range shown in light gray.
+    Uses the MARKETDATE column for date handling.
+    """
+    # Prepare the dataframe
+    df = df.copy()
+    
+    # Ensure MARKETDATE is datetime and extract components
+    df['MARKETDATE'] = pd.to_datetime(df['MARKETDATE'])
+    df['Year'] = df['MARKETDATE'].dt.year
+    df['Month'] = df['MARKETDATE'].dt.month
+    df['Day'] = df['MARKETDATE'].dt.day
+    
+    # Create month-day string for display
+    df['month_day'] = df['MARKETDATE'].dt.strftime('%m-%d')
+    
+    # Strip the year component to focus on month-day patterns
+    # This allows comparing across years
+    current_year = datetime.now().year
+    reference_year = 2000  # Using a consistent reference year for all dates
+    
+    # Create a reference date for proper sorting (all with same year)
+    df['ref_date'] = pd.to_datetime(df['Month'].astype(str) + '/' + 
+                                    df['Day'].astype(str) + '/' + 
+                                    str(reference_year))
+    
+    # Get today's month and day for reference line
+    today = datetime.now()
+    today_md = today.strftime('%m-%d')
+    today_ref = pd.to_datetime(f"{today.month}/{today.day}/{reference_year}")
+    
+    # Filter to show 30 days before and 15 days after today's date
+    # First need to create a list of all possible month-day combinations
+    all_dates = []
+    for month in range(1, 13):
+        days_in_month = 31
+        if month in [4, 6, 9, 11]:
+            days_in_month = 30
+        elif month == 2:
+            days_in_month = 29  # Using 29 for leap years
+            
+        for day in range(1, days_in_month + 1):
+            all_dates.append(pd.to_datetime(f"{month}/{day}/{reference_year}"))
+    
+    # Sort dates
+    all_dates.sort()
+    
+    # Find position of today in the date list
+    today_idx = None
+    for i, date in enumerate(all_dates):
+        if date.month == today.month and date.day == today.day:
+            today_idx = i
+            break
+    
+    if today_idx is None:
+        today_idx = 0  # Fallback
+        
+    # Calculate window indices
+    start_idx = max(0, today_idx - 30)
+    end_idx = min(len(all_dates) - 1, today_idx + 15)
+    
+    # Get window dates
+    window_dates = all_dates[start_idx:end_idx+1]
+    
+    # Filter dataframe to only include dates in the window
+    df_filtered = pd.DataFrame()
+    for date in window_dates:
+        temp = df[(df['Month'] == date.month) & (df['Day'] == date.day)]
+        df_filtered = pd.concat([df_filtered, temp])
+    
+    # Sort by reference date for proper display order
+    df_filtered = df_filtered.sort_values('ref_date')
+    
+    # Create grid area for the charts
+    grid_area = pn.Column(sizing_mode='fixed', width=2500)
+    
+    # Define color palette for years (up to 10 years)
+    colors = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', 
+              '#8c564b', '#e377c2', '#7f7f7f', '#bcbd22', '#17becf']
+    
+    # Get unique years
+    years = sorted(df_filtered['Year'].unique())
+    
+    # Create line charts for each column, two per row
+    for i in range(0, len(columns), 2):
+        row = pn.Row(sizing_mode='fixed', width=2500)
+        
+        # First column
+        if i < len(columns):
+            col1 = columns[i]
+            
+            # Skip if column doesn't exist in the dataframe
+            if col1 not in df_filtered.columns:
+                continue
+            
+            # Create figure
+            fig1 = plt.figure(figsize=(12, 6))
+            ax1 = fig1.add_subplot(111)
+            
+            # Plot lines for each year
+            for j, year in enumerate(years):
+                year_data = df_filtered[df_filtered['Year'] == year]
+                if not year_data.empty:
+                    # Highlight current year with thicker line
+                    line_width = 3 if year == current_year else 1.5
+                    alpha = 1.0 if year == current_year else 0.7
+                    
+                    # Plot the line
+                    ax1.plot(year_data['ref_date'], year_data[col1], 
+                            label=str(year), 
+                            linewidth=line_width,
+                            alpha=alpha,
+                            color=colors[j % len(colors)])
+            
+            # Create historical min-max range
+            historical_years = [y for y in years if y != current_year]
+            if historical_years:
+                historical_df = df_filtered[df_filtered['Year'].isin(historical_years)]
+                if not historical_df.empty:
+                    # Group by reference date
+                    grouped = historical_df.groupby('ref_date')[col1].agg(['min', 'max'])
+                    # Plot the range as a shaded area
+                    ax1.fill_between(grouped.index, grouped['min'], grouped['max'], 
+                                    color='gray', alpha=0.2, label='Historical Range')
+            
+            # Format the x-axis to show month-day
+            import matplotlib.dates as mdates
+            ax1.xaxis.set_major_formatter(mdates.DateFormatter('%m-%d'))
+            ax1.xaxis.set_major_locator(mdates.DayLocator(interval=5))
+            plt.xticks(rotation=45)
+            
+            # Add a vertical line for today
+            ax1.axvline(x=today_ref, color='black', linestyle='--', linewidth=1.5)
+            
+            # Add labels and title
+            ax1.set_xlabel('Date (Month-Day)')
+            ax1.set_ylabel(col1)
+            ax1.set_title(col1)
+            ax1.grid(True, alpha=0.3)
+            ax1.legend(loc='best')
+            
+            # Adjust layout
+            plt.tight_layout()
+            
+            # Create panel for the chart
+            chart1 = pn.pane.Matplotlib(fig1, tight=True, sizing_mode='scale_width', height=500)
+            
+            # Add note about the time window
+            note1 = pn.pane.Markdown(
+                f"<div style='text-align:center; font-size:12px; color:gray; margin-top:5px;'>"
+                f"Showing 30 days before and 15 days after current date ({today.strftime('%m-%d')}). "
+                f"Gray area shows historical min-max range.</div>"
+            )
+            
+            block1 = pn.Column(chart1, note1, width=1200, css_classes=['chart-container'])
+            row.append(block1)
+        
+        # Second column (if exists)
+        if i + 1 < len(columns):
+            col2 = columns[i + 1]
+            
+            # Skip if column doesn't exist in the dataframe
+            if col2 not in df_filtered.columns:
+                continue
+            
+            # Create figure
+            fig2 = plt.figure(figsize=(12, 6))
+            ax2 = fig2.add_subplot(111)
+            
+            # Plot lines for each year
+            for j, year in enumerate(years):
+                year_data = df_filtered[df_filtered['Year'] == year]
+                if not year_data.empty:
+                    # Highlight current year with thicker line
+                    line_width = 3 if year == current_year else 1.5
+                    alpha = 1.0 if year == current_year else 0.7
+                    
+                    # Plot the line
+                    ax2.plot(year_data['ref_date'], year_data[col2], 
+                            label=str(year), 
+                            linewidth=line_width,
+                            alpha=alpha,
+                            color=colors[j % len(colors)])
+            
+            # Create historical min-max range
+            historical_years = [y for y in years if y != current_year]
+            if historical_years:
+                historical_df = df_filtered[df_filtered['Year'].isin(historical_years)]
+                if not historical_df.empty:
+                    # Group by reference date
+                    grouped = historical_df.groupby('ref_date')[col2].agg(['min', 'max'])
+                    # Plot the range as a shaded area
+                    ax2.fill_between(grouped.index, grouped['min'], grouped['max'], 
+                                    color='gray', alpha=0.2, label='Historical Range')
+            
+            # Format the x-axis to show month-day
+            import matplotlib.dates as mdates
+            ax2.xaxis.set_major_formatter(mdates.DateFormatter('%m-%d'))
+            ax2.xaxis.set_major_locator(mdates.DayLocator(interval=5))
+            plt.xticks(rotation=45)
+            
+            # Add a vertical line for today
+            ax2.axvline(x=today_ref, color='black', linestyle='--', linewidth=1.5)
+            
+            # Add labels and title
+            ax2.set_xlabel('Date (Month-Day)')
+            ax2.set_ylabel(col2)
+            ax2.set_title(col2)
+            ax2.grid(True, alpha=0.3)
+            ax2.legend(loc='best')
+            
+            # Adjust layout
+            plt.tight_layout()
+            
+            # Create panel for the chart
+            chart2 = pn.pane.Matplotlib(fig2, tight=True, sizing_mode='scale_width', height=500)
+            
+            # Add note about the time window
+            note2 = pn.pane.Markdown(
+                f"<div style='text-align:center; font-size:12px; color:gray; margin-top:5px;'>"
+                f"Showing 30 days before and 15 days after current date ({today.strftime('%m-%d')}). "
+                f"Gray area shows historical min-max range.</div>"
+            )
+            
+            block2 = pn.Column(chart2, note2, width=1200, css_classes=['chart-container'])
+            row.append(block2)
+        
+        # Only add the row if it has content
+        if len(row) > 0:
+            grid_area.append(row)
+            grid_area.append(pn.Spacer(height=40))
+    
+    return pn.Column(
+        pn.Spacer(height=10),
+        grid_area,
+        width=2500,
+        css_classes=['content-container']
+    )
+
+def generate_seasonal_tabs(data_dict, column_list):
+    """
+    Generate tabs for the seasonal view with 7X16 and NIGHTS tabs.
+    """
+    tabs = []
+    # Only create tabs for 7X16 and NIGHTS
+    tab_keys = ['7X16', 'NIGHTS']
+    
+    for label in tab_keys:
+        if label in data_dict:
+            tabs.append((label, create_seasonal_charts(data_dict[label], column_list)))
+    
+    return pn.Tabs(*tabs, tabs_location='above', width=2500)
+
+def generate_price_tracker_tabs(data_dict, column_list):
+    tabs = []
+    for label, df in data_dict.items():
+        tabs.append((label.upper(), create_tab_content(df, column_list)))
+    tabs.append(("SPREADS", pn.Column(pn.Spacer(height=20), width=2500)))
+    return pn.Tabs(*tabs, tabs_location='above', width=2500)
+
+def generate_fundamentals_tabs(data_dict, column_list):
+    tabs = []
+    for label, df in data_dict.items():
+        tabs.append((label.upper(), create_fundamentals_content(df, column_list)))
+    return pn.Tabs(*tabs, tabs_location='above', width=2500)
+
+def generate_seasonal_tabs(data_dict, column_list):
+    tabs = []
+    for label, df in data_dict.items():
+        tabs.append((label.upper(), create_seasonal_charts(df, column_list)))
+    return pn.Tabs(*tabs, tabs_location='above', width=2500)
+
+def generate_main_dashboard(price_tracker_tabs, fundamentals_tabs, seasonal_tabs, timestamp):
+    header_html = """
+    <div style="font-size: 48px; font-family: Arial, sans-serif; margin: 20px 0 10px 0; text-align: left;">
+        <span style="color: #4285F4;">Y</span>
+        <span style="color: #DB4437;">A</span>
+        <span style="color: #F4B400;">N</span>
+        <span style="color: #0F9D58;">U</span>
+        <span style="color: #4285F4;">S</span>
+    </div>
+    """
+
+    last_updated_html = f"""
+    <div style="font-size: 16px; font-family: Arial, sans-serif; margin-bottom: 30px; text-align: left; color: gray;">
+        Last updated: {timestamp}
+    </div>
+    """
+
+    pn.config.raw_css.append("""
+    .chart-container {
+        border: 1px solid #f0f0f0;
+        padding: 15px;
+        background-color: white;
+        box-shadow: 0px 0px 5px rgba(0,0,0,0.1);
+        overflow: hidden;
+        border-radius: 5px;
+    }
+    """)
+
+    top_level_tabs = pn.Tabs(
+        ('Price Tracker', price_tracker_tabs),
+        ('Cash', pn.Column(pn.Spacer(height=20), width=2500)),
+        ('Seasonal', seasonal_tabs),
+        ('Fundamentals', fundamentals_tabs),
+        tabs_location='above',
+        width=2500
+    )
+
+    return pn.Column(
+        pn.pane.HTML(header_html),
+        pn.pane.HTML(last_updated_html),
+        top_level_tabs,
+        width=2500
+    )
+
+# Price tracker data
+peak_df = pd.read_csv("peak.csv")
+offpeak_df = pd.read_csv("offpeak.csv")
+nights_df = pd.read_csv("nights.csv")
+atc_df = pd.read_csv("atc.csv")
+
+all_columns = ['SPARK1', 'SPARK2', 'FP1', 'HR1', 'GASBASIS1', 'SPREAD1', 'SPREAD2']
+
+dataframes = {
+    'Peak': peak_df,
+    'Offpeak': offpeak_df,
+    'Nights': nights_df,
+    'ATC': atc_df
+}
+
+# Fundamentals data - using your existing dictionaries
+fundies_dataframes = {
+    'Peak 2X16': fundies_dataframes['Peak 2X16'],
+    'Nights': fundies_dataframes['Nights'],
+    'ATC': fundies_dataframes['ATC']
+}
+
+# Seasonal data - using your specified dictionary
+# The seasonal tab only has 7X16 and NIGHTS as you specified
+seasonal_dataframes = {
+    '7X16': seasonal_dataframes['7X16'],
+    'NIGHTS': seasonal_dataframes['7X8']  # Mapping 7X8 to NIGHTS as per your description
+}
+
+timestamp = datetime.now().strftime("%m/%d %H:%M")
+price_tracker_tabs = generate_price_tracker_tabs(dataframes, all_columns)
+fundamentals_tabs = generate_fundamentals_tabs(fundies_dataframes, fundies_columns)
+seasonal_tabs = generate_seasonal_tabs(seasonal_dataframes, fundies_columns) # Using same columns as fundamentals
+dashboard = generate_main_dashboard(price_tracker_tabs, fundamentals_tabs, seasonal_tabs, timestamp)
+dashboard.save("YANUS.html", embed=True)
+
+print("YANUS dashboard saved as 'YANUS.html'")
