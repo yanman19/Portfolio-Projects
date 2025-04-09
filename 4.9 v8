@@ -1,0 +1,579 @@
+import pandas as pd
+import numpy as np
+from datetime import datetime
+import panel as pn
+import holoviews as hv
+from holoviews import opts
+
+pn.extension('tabulator', 'holoviews')
+hv.extension('bokeh')
+
+def create_seasonal_pivot(df, value_column):
+    df = df.copy()
+    df['MARKETDATE'] = pd.to_datetime(df['MARKETDATE'])
+    df['Year'] = df['MARKETDATE'].dt.year
+    df['Month'] = df['MARKETDATE'].dt.month
+    df['MonthCode'] = df['Month'].map({
+        1: 'F', 2: 'G', 3: 'H', 4: 'J', 5: 'K', 6: 'M',
+        7: 'N', 8: 'Q', 9: 'U', 10: 'V', 11: 'X', 12: 'Z'
+    })
+
+    pivot = df.pivot_table(index='Year', columns='MonthCode', values=value_column, aggfunc='mean')
+
+    fg = ['F', 'G']
+    hj = ['H', 'J']
+    nq = ['N', 'Q']
+    q4 = ['V', 'X', 'Z']
+
+    pivot['FG'] = pivot[fg].mean(axis=1)
+    pivot['HJ'] = pivot[hj].mean(axis=1)
+    pivot['NQ'] = pivot[nq].mean(axis=1)
+    pivot['Q4'] = pivot[q4].mean(axis=1)
+    pivot['CAL'] = pivot[[c for c in pivot.columns if c in list('FGHJKMNQUVXZ')]].mean(axis=1)
+
+    final_cols = [c for c in list('FGHJKMNQUVXZ') if c in pivot.columns] + ['FG', 'HJ', 'NQ', 'Q4', 'CAL']
+    pivot = pivot[final_cols]
+    pivot.columns.name = None
+    pivot = pivot.applymap(lambda x: f"{x:.1f}" if pd.notnull(x) else "")
+
+    def color_cells(val, row_year, col):
+        if row_year == datetime.now().year:
+            return 'background-color: #E6E6FA'
+        if col in ['FG', 'F', 'G']:
+            return 'background-color: #ADD8E6'
+        if col in ['HJ', 'H', 'J']:
+            return 'background-color: #90EE90'
+        if col in ['NQ', 'N', 'Q']:
+            return 'background-color: #FFDAB9'
+        if col in ['Q4', 'V', 'X', 'Z']:
+            return 'background-color: #FFFFE0'
+        return ''
+
+    def style_func(row):
+        year = row.name
+        return [color_cells(row[col], year, col) for col in row.index]
+
+    styled = pivot.style.apply(style_func, axis=1)
+    styled.set_table_styles([
+        {'selector': 'th, td', 'props': [
+            ('text-align', 'center'),
+            ('min-width', '50px'),
+            ('max-width', '70px'),
+            ('border', '1px solid #ccc'),
+            ('padding', '5px'),
+            ('font-family', 'Arial, sans-serif'),
+            ('font-size', '12px')
+        ]},
+        {'selector': 'table', 'props': [
+            ('border-collapse', 'collapse'),
+            ('margin', '0 auto'),
+            ('width', '100%')
+        ]}
+    ])
+    return styled
+
+def create_tab_content(df, all_columns):
+    trade_types = ['SPARK', 'FP', 'HR', 'GASBASIS', 'SPREAD']
+    dropdown = pn.widgets.Select(
+        name='Trade Type:',
+        options=trade_types,
+        width=200,
+        margin=(0, 0, 20, 0)
+    )
+
+    dropdown_container = pn.Row(dropdown, width=300, margin=(0, 0, 20, 0))
+    grid_area = pn.Column(sizing_mode='fixed', width=2500)
+
+    def update_table(event=None):
+        keyword = dropdown.value
+        matching_cols = [col for col in all_columns if keyword in col]
+        grid_area.clear()
+
+        for i in range(0, len(matching_cols), 2):
+            row = pn.Row(sizing_mode='fixed', width=2500)
+
+            col1 = matching_cols[i]
+            styled1 = create_seasonal_pivot(df, col1)
+            title1 = pn.pane.Markdown(
+                f"<div style='text-align:center; font-size:20px; font-weight:600; margin-bottom:10px; width:100%'>{col1}</div>"
+            )
+            table1 = pn.pane.HTML(styled1.render(), width=1200, height=400)
+            block1 = pn.Column(title1, table1, width=1200, css_classes=['table-container'])
+
+            row.append(block1)
+
+            if i + 1 < len(matching_cols):
+                col2 = matching_cols[i + 1]
+                styled2 = create_seasonal_pivot(df, col2)
+                title2 = pn.pane.Markdown(
+                    f"<div style='text-align:center; font-size:20px; font-weight:600; margin-bottom:10px; width:100%'>{col2}</div>"
+                )
+                table2 = pn.pane.HTML(styled2.render(), width=1200, height=400)
+                block2 = pn.Column(title2, table2, width=1200, css_classes=['table-container'])
+                row.append(block2)
+
+            grid_area.append(row)
+            grid_area.append(pn.Spacer(height=40))
+
+    pn.config.raw_css.append("""
+    .table-container {
+        border: 1px solid #f0f0f0;
+        padding: 15px;
+        background-color: white;
+        box-shadow: 0px 0px 5px rgba(0,0,0,0.1);
+        overflow: hidden;
+    }
+
+    .bk-input-group {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    label.bk-input-label {
+        text-align: left;
+        width: 100%;
+    }
+    """)
+
+    dropdown.param.watch(update_table, 'value')
+    update_table()
+
+    return pn.Column(
+        dropdown_container,
+        pn.Spacer(height=10),
+        grid_area,
+        width=2500,
+        css_classes=['content-container']
+    )
+
+def create_fundamentals_content(df, all_columns):
+    grid_area = pn.Column(sizing_mode='fixed', width=2500)
+    
+    for i in range(0, len(all_columns), 2):
+        row = pn.Row(sizing_mode='fixed', width=2500)
+
+        col1 = all_columns[i]
+        styled1 = create_seasonal_pivot(df, col1)
+        title1 = pn.pane.Markdown(
+            f"<div style='text-align:center; font-size:20px; font-weight:600; margin-bottom:10px; width:100%'>{col1}</div>"
+        )
+        table1 = pn.pane.HTML(styled1.render(), width=1200, height=400)
+        block1 = pn.Column(title1, table1, width=1200, css_classes=['table-container'])
+
+        row.append(block1)
+
+        if i + 1 < len(all_columns):
+            col2 = all_columns[i + 1]
+            styled2 = create_seasonal_pivot(df, col2)
+            title2 = pn.pane.Markdown(
+                f"<div style='text-align:center; font-size:20px; font-weight:600; margin-bottom:10px; width:100%'>{col2}</div>"
+            )
+            table2 = pn.pane.HTML(styled2.render(), width=1200, height=400)
+            block2 = pn.Column(title2, table2, width=1200, css_classes=['table-container'])
+            row.append(block2)
+
+        grid_area.append(row)
+        grid_area.append(pn.Spacer(height=40))
+
+    return pn.Column(
+        pn.Spacer(height=10),
+        grid_area,
+        width=2500,
+        css_classes=['content-container']
+    )
+
+def create_seasonal_charts(df, columns):
+    """
+    Create seasonal line charts for each column, with years as different colored lines
+    and month-day (m_d) as the x-axis, focusing on a window of 30 days before and 15 days
+    after the current date, with a historical min-max range shown in light gray.
+    """
+    # Prepare the dataframe
+    df = df.copy()
+    
+    # Get month and day columns - different approaches depending on what's available
+    if 'Month' in df.columns and 'Day' in df.columns:
+        # If Month and Day columns exist, use them directly
+        pass  # Already have Month and Day
+    elif 'MARKETDATE' in df.columns:
+        # Extract Month and Day from MARKETDATE if it exists
+        df['MARKETDATE'] = pd.to_datetime(df['MARKETDATE'])
+        df['Month'] = df['MARKETDATE'].dt.month
+        df['Day'] = df['MARKETDATE'].dt.day
+    elif 'm_d' in df.columns:
+        # Try to extract Month and Day from m_d column
+        try:
+            df['m_d'] = pd.to_datetime(df['m_d'])
+            df['Month'] = df['m_d'].dt.month
+            df['Day'] = df['m_d'].dt.day
+        except:
+            pass
+    
+    # Ensure we have Month and Day columns
+    if 'Month' not in df.columns or 'Day' not in df.columns:
+        raise ValueError("Could not determine Month and Day from dataframe columns")
+    
+    # Create a numerical x-axis value based on month and day (e.g., Jan 1 = 101, Dec 31 = 1231)
+    # This ensures proper ordering without date parsing issues
+    df['x_value'] = df['Month'] * 100 + df['Day']
+    
+    # Calculate current date x_value for reference line and window filtering
+    today = datetime.now()
+    today_x = today.month * 100 + today.day
+    
+    # Calculate the reference window (30 days before today and 15 days after)
+    # We'll use a simplified approach by just adding/subtracting from the x_value
+    # This won't be perfect for month boundaries but works well enough for visualization
+    
+    # Get all possible x_values in order
+    all_dates = []
+    for m in range(1, 13):
+        # Get appropriate number of days for each month
+        days_in_month = 31 if m in [1, 3, 5, 7, 8, 10, 12] else 30
+        if m == 2:
+            days_in_month = 29  # Include leap year day to be safe
+        
+        for d in range(1, days_in_month + 1):
+            all_dates.append(m * 100 + d)
+    
+    # Find position of today in the ordered date list
+    if today_x in all_dates:
+        today_idx = all_dates.index(today_x)
+    else:
+        # Fallback if date not found
+        today_idx = 0
+        
+    # Calculate window start and end
+    window_start_idx = max(0, today_idx - 30)
+    window_end_idx = min(len(all_dates) - 1, today_idx + 15)
+    
+    window_dates = all_dates[window_start_idx:window_end_idx + 1]
+    
+    # Filter dataframe to only show dates in the window
+    df = df[df['x_value'].isin(window_dates)]
+    
+    # Sort by x_value for proper ordering
+    df = df.sort_values('x_value')
+    
+    grid_area = pn.Column(sizing_mode='fixed', width=2500)
+    
+    # Define a color palette for the years (up to 10 years)
+    colors = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', 
+              '#8c564b', '#e377c2', '#7f7f7f', '#bcbd22', '#17becf']
+    
+    # Get unique years
+    years = sorted(df['Year'].unique())
+    current_year = datetime.now().year
+    
+    # Create formatting for x-axis ticks
+    # Create x_tick_labels for better display
+    df['x_label'] = df.apply(lambda row: f"{row['Month']}/{row['Day']}", axis=1)
+    
+    # We'll show selected tick labels to avoid overcrowding
+    x_ticks = {}
+    for i, x_val in enumerate(df['x_value'].unique()):
+        if i % 5 == 0:  # Show every 5th label
+            row = df[df['x_value'] == x_val].iloc[0]
+            x_ticks[x_val] = f"{row['Month']}/{row['Day']}"
+    
+    # Create line charts for each column, two per row
+    for i in range(0, len(columns), 2):
+        row = pn.Row(sizing_mode='fixed', width=2500)
+        
+        # First column
+        if i < len(columns):
+            col1 = columns[i]
+            
+            # Skip if column doesn't exist in the dataframe
+            if col1 not in df.columns:
+                continue
+                
+            # Create historical range with min/max
+            historical_years = [y for y in years if y != current_year]
+            area1 = None
+            if historical_years:
+                # Group by x_value to get min and max for each day
+                historical_df = df[df['Year'].isin(historical_years)]
+                if not historical_df.empty:
+                    # Group by x_value to get min and max
+                    grouped = historical_df.groupby('x_value')[col1].agg(['min', 'max']).reset_index()
+                    grouped = grouped.sort_values('x_value')  # Ensure proper order
+                    
+                    # Create area for historical range
+                    area1 = hv.Area((grouped['x_value'], grouped['min'], grouped['max']), 
+                                   vdims=['y', 'y2']).opts(
+                        alpha=0.2, color='gray', line_alpha=0, fill_alpha=0.2,
+                    )
+            
+            # Create overlay of lines for each year
+            curves = []
+            for j, year in enumerate(years):
+                year_data = df[df['Year'] == year]
+                if not year_data.empty:
+                    # Highlight current year with thicker line
+                    line_width = 4 if year == current_year else 2
+                    # Make historical years more transparent
+                    line_alpha = 1.0 if year == current_year else 0.7
+                    
+                    curve = hv.Curve(
+                        (year_data['x_value'], year_data[col1]), 
+                        label=str(year)
+                    ).opts(
+                        color=colors[j % len(colors)],
+                        line_width=line_width,
+                        alpha=line_alpha
+                    )
+                    curves.append(curve)
+            
+            # Mark today's date with a vertical line
+            today_line = hv.VLine(today_x).opts(
+                color='black', line_width=1.5, line_dash='dashed'
+            )
+            
+            # Create overlay of all curves
+            if curves:  # Only proceed if we have curves to display
+                if area1 is not None:
+                    overlay1 = (area1 * hv.Overlay(curves) * today_line).opts(
+                        opts.Curve(
+                            width=1100, height=400, tools=['hover'],
+                            xrotation=45, xlabel='Date (Month/Day)', ylabel=col1,
+                            fontsize={'title': 16, 'labels': 14, 'xticks': 12, 'yticks': 12},
+                            xticks=list(x_ticks.items())
+                        ),
+                        opts.Overlay(
+                            title=col1, legend_position='right', show_grid=True,
+                            backend='bokeh'
+                        )
+                    )
+                else:
+                    overlay1 = (hv.Overlay(curves) * today_line).opts(
+                        opts.Curve(
+                            width=1100, height=400, tools=['hover'],
+                            xrotation=45, xlabel='Date (Month/Day)', ylabel=col1,
+                            fontsize={'title': 16, 'labels': 14, 'xticks': 12, 'yticks': 12},
+                            xticks=list(x_ticks.items())
+                        ),
+                        opts.Overlay(
+                            title=col1, legend_position='right', show_grid=True,
+                            backend='bokeh'
+                        )
+                    )
+                
+                # Create panel for the chart
+                chart1 = pn.pane.HoloViews(overlay1, sizing_mode='fixed', width=1200, height=470)
+                
+                # Add note about the time window
+                note1 = pn.pane.Markdown(
+                    f"<div style='text-align:center; font-size:12px; color:gray; margin-top:-10px;'>"
+                    f"Showing 30 days before and 15 days after current date ({today.month}/{today.day}). "
+                    f"Gray area shows historical min-max range.</div>"
+                )
+                
+                block1 = pn.Column(chart1, note1, width=1200, css_classes=['chart-container'])
+                row.append(block1)
+        
+        # Second column (if exists)
+        if i + 1 < len(columns):
+            col2 = columns[i + 1]
+            
+            # Skip if column doesn't exist in the dataframe
+            if col2 not in df.columns:
+                continue
+            
+            # Create historical range with min/max
+            historical_years = [y for y in years if y != current_year]
+            area2 = None
+            if historical_years:
+                # Group by day of year to get min and max for each day
+                historical_df = df[df['Year'].isin(historical_years)]
+                if not historical_df.empty:
+                    # Group by x_value to get min and max
+                    grouped = historical_df.groupby('x_value')[col2].agg(['min', 'max']).reset_index()
+                    grouped = grouped.sort_values('x_value')  # Ensure proper order
+                    
+                    # Create area for historical range
+                    area2 = hv.Area((grouped['x_value'], grouped['min'], grouped['max']), 
+                                   vdims=['y', 'y2']).opts(
+                        alpha=0.2, color='gray', line_alpha=0, fill_alpha=0.2,
+                    )
+            
+            # Create overlay of lines for each year
+            curves = []
+            for j, year in enumerate(years):
+                year_data = df[df['Year'] == year]
+                if not year_data.empty:
+                    # Highlight current year with thicker line
+                    line_width = 4 if year == current_year else 2
+                    # Make historical years more transparent
+                    line_alpha = 1.0 if year == current_year else 0.7
+                    
+                    curve = hv.Curve(
+                        (year_data['x_value'], year_data[col2]), 
+                        label=str(year)
+                    ).opts(
+                        color=colors[j % len(colors)],
+                        line_width=line_width,
+                        alpha=line_alpha
+                    )
+                    curves.append(curve)
+            
+            # Mark today's date with a vertical line
+            today_line = hv.VLine(today_x).opts(
+                color='black', line_width=1.5, line_dash='dashed'
+            )
+            
+            # Create overlay of all curves
+            if curves:  # Only proceed if we have curves to display
+                if area2 is not None:
+                    overlay2 = (area2 * hv.Overlay(curves) * today_line).opts(
+                        opts.Curve(
+                            width=1100, height=400, tools=['hover'],
+                            xrotation=45, xlabel='Date (Month/Day)', ylabel=col2,
+                            fontsize={'title': 16, 'labels': 14, 'xticks': 12, 'yticks': 12},
+                            xticks=list(x_ticks.items())
+                        ),
+                        opts.Overlay(
+                            title=col2, legend_position='right', show_grid=True,
+                            backend='bokeh'
+                        )
+                    )
+                else:
+                    overlay2 = (hv.Overlay(curves) * today_line).opts(
+                        opts.Curve(
+                            width=1100, height=400, tools=['hover'],
+                            xrotation=45, xlabel='Date (Month/Day)', ylabel=col2,
+                            fontsize={'title': 16, 'labels': 14, 'xticks': 12, 'yticks': 12},
+                            xticks=list(x_ticks.items())
+                        ),
+                        opts.Overlay(
+                            title=col2, legend_position='right', show_grid=True,
+                            backend='bokeh'
+                        )
+                    )
+                
+                # Create panel for the chart
+                chart2 = pn.pane.HoloViews(overlay2, sizing_mode='fixed', width=1200, height=470)
+                
+                # Add note about the time window
+                note2 = pn.pane.Markdown(
+                    f"<div style='text-align:center; font-size:12px; color:gray; margin-top:-10px;'>"
+                    f"Showing 30 days before and 15 days after current date ({today.month}/{today.day}). "
+                    f"Gray area shows historical min-max range.</div>"
+                )
+                
+                block2 = pn.Column(chart2, note2, width=1200, css_classes=['chart-container'])
+                row.append(block2)
+        
+        # Only add the row if it has content
+        if len(row) > 0:
+            grid_area.append(row)
+            grid_area.append(pn.Spacer(height=40))
+    
+    return pn.Column(
+        pn.Spacer(height=10),
+        grid_area,
+        width=2500,
+        css_classes=['content-container']
+    )
+
+def generate_price_tracker_tabs(data_dict, column_list):
+    tabs = []
+    for label, df in data_dict.items():
+        tabs.append((label.upper(), create_tab_content(df, column_list)))
+    tabs.append(("SPREADS", pn.Column(pn.Spacer(height=20), width=2500)))
+    return pn.Tabs(*tabs, tabs_location='above', width=2500)
+
+def generate_fundamentals_tabs(data_dict, column_list):
+    tabs = []
+    for label, df in data_dict.items():
+        tabs.append((label.upper(), create_fundamentals_content(df, column_list)))
+    return pn.Tabs(*tabs, tabs_location='above', width=2500)
+
+def generate_seasonal_tabs(data_dict, column_list):
+    tabs = []
+    for label, df in data_dict.items():
+        tabs.append((label.upper(), create_seasonal_charts(df, column_list)))
+    return pn.Tabs(*tabs, tabs_location='above', width=2500)
+
+def generate_main_dashboard(price_tracker_tabs, fundamentals_tabs, seasonal_tabs, timestamp):
+    header_html = """
+    <div style="font-size: 48px; font-family: Arial, sans-serif; margin: 20px 0 10px 0; text-align: left;">
+        <span style="color: #4285F4;">Y</span>
+        <span style="color: #DB4437;">A</span>
+        <span style="color: #F4B400;">N</span>
+        <span style="color: #0F9D58;">U</span>
+        <span style="color: #4285F4;">S</span>
+    </div>
+    """
+
+    last_updated_html = f"""
+    <div style="font-size: 16px; font-family: Arial, sans-serif; margin-bottom: 30px; text-align: left; color: gray;">
+        Last updated: {timestamp}
+    </div>
+    """
+
+    pn.config.raw_css.append("""
+    .chart-container {
+        border: 1px solid #f0f0f0;
+        padding: 15px;
+        background-color: white;
+        box-shadow: 0px 0px 5px rgba(0,0,0,0.1);
+        overflow: hidden;
+        border-radius: 5px;
+    }
+    """)
+
+    top_level_tabs = pn.Tabs(
+        ('Price Tracker', price_tracker_tabs),
+        ('Cash', pn.Column(pn.Spacer(height=20), width=2500)),
+        ('Seasonal', seasonal_tabs),
+        ('Fundamentals', fundamentals_tabs),
+        tabs_location='above',
+        width=2500
+    )
+
+    return pn.Column(
+        pn.pane.HTML(header_html),
+        pn.pane.HTML(last_updated_html),
+        top_level_tabs,
+        width=2500
+    )
+
+# Price tracker data
+peak_df = pd.read_csv("peak.csv")
+offpeak_df = pd.read_csv("offpeak.csv")
+nights_df = pd.read_csv("nights.csv")
+atc_df = pd.read_csv("atc.csv")
+
+all_columns = ['SPARK1', 'SPARK2', 'FP1', 'HR1', 'GASBASIS1', 'SPREAD1', 'SPREAD2']
+
+dataframes = {
+    'Peak': peak_df,
+    'Offpeak': offpeak_df,
+    'Nights': nights_df,
+    'ATC': atc_df
+}
+
+# Fundamentals data - using your existing dictionaries
+fundies_dataframes = {
+    'Peak 2X16': fundies_dataframes['Peak 2X16'],
+    'Nights': fundies_dataframes['Nights'],
+    'ATC': fundies_dataframes['ATC']
+}
+
+# Seasonal data - using your specified dictionary
+# The seasonal tab only has 7X16 and NIGHTS as you specified
+seasonal_dataframes = {
+    '7X16': seasonal_dataframes['7X16'],
+    'NIGHTS': seasonal_dataframes['7X8']  # Mapping 7X8 to NIGHTS as per your description
+}
+
+timestamp = datetime.now().strftime("%m/%d %H:%M")
+price_tracker_tabs = generate_price_tracker_tabs(dataframes, all_columns)
+fundamentals_tabs = generate_fundamentals_tabs(fundies_dataframes, fundies_columns)
+seasonal_tabs = generate_seasonal_tabs(seasonal_dataframes, fundies_columns) # Using same columns as fundamentals
+dashboard = generate_main_dashboard(price_tracker_tabs, fundamentals_tabs, seasonal_tabs, timestamp)
+dashboard.save("YANUS.html", embed=True)
+
+print("YANUS dashboard saved as 'YANUS.html'")
