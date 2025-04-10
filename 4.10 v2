@@ -1,0 +1,140 @@
+import pandas as pd
+import numpy as np
+import datetime as dt
+import matplotlib.pyplot as plt
+import matplotlib.dates as mdates
+from typing import Union, List
+
+def get_historical_gas_prices(contract: str, products: Union[str, List[str]], years_back: int = 4, months_back: int = 6):
+    """
+    Get historical gas prices for specified contract(s) and compare with previous years.
+    
+    Args:
+        contract: Contract month/year (e.g., 'May25')
+        products: Product or list of products (e.g., 'NG_HSC_GD' or ['NG_HSC_GD', 'NG_HH_GD'])
+        years_back: Number of years to look back (default: 4)
+        months_back: Number of months to look back from current date (default: 6)
+    
+    Returns:
+        DataFrame with aligned historical prices and plots the data
+    """
+    if isinstance(products, str):
+        products = [products]
+    
+    # Extract month and year from contract
+    month_str = contract[:3]
+    current_year = int(contract[3:])
+    
+    # Create dict to store all results
+    all_results = {}
+    
+    # Process current contract and historical contracts
+    for year_offset in range(years_back + 1):
+        year = current_year - year_offset
+        historical_contract = f"{month_str}{year}"
+        
+        # Calculate the reference date (today minus year_offset years)
+        reference_date = dt.date.today() - dt.timedelta(days=365 * year_offset)
+        
+        # Calculate start date (6 months before reference date)
+        start_date = reference_date - dt.timedelta(days=30 * months_back)
+        
+        # Get data for each product
+        for product in products:
+            # Create date range
+            date_range = pd.date_range(start=start_date, end=reference_date, freq='d')
+            date_range = [d.date() for d in date_range]
+            
+            north_peak_marks = []
+            valid_market_dates = []
+            
+            for d in date_range:
+                if d.weekday() < 5:  # Monday=0, Sunday=6
+                    try:
+                        with graph.context() as gc:
+                            eodfn = eodutils.tweakEOD(d)
+                            mko = hydra.db.read(product)  # Use the product parameter here
+                            north_peak_marks.append(mko.SingleFutureByContract(tenor.EnergyTenor(historical_contract)))
+                            valid_market_dates.append(d)
+                    except Exception:
+                        print(f"{d} is not a valid market date...skipping for {product}_{historical_contract}")
+            
+            # Create DataFrame
+            if valid_market_dates:
+                gas_df = pd.DataFrame(north_peak_marks, index=valid_market_dates, columns=[product])
+                gas_df = gas_df.round(2)
+                
+                # Convert datetime to MM-DD format for alignment
+                gas_df['mm_dd'] = gas_df.index.map(lambda x: x.strftime('%m-%d'))
+                
+                # Add year suffix for column name
+                column_name = f"{product}_{historical_contract}"
+                gas_df.rename(columns={product: column_name}, inplace=True)
+                
+                # Store in results dict, indexed by mm_dd for alignment
+                if 'mm_dd' not in all_results:
+                    all_results['mm_dd'] = gas_df['mm_dd']
+                
+                all_results[column_name] = gas_df[column_name].values
+    
+    # Combine all results into a single DataFrame
+    result_df = pd.DataFrame(all_results)
+    result_df.set_index('mm_dd', inplace=True)
+    
+    # Plot the data
+    plot_historical_prices(result_df, contract, years_back)
+    
+    return result_df
+
+def plot_historical_prices(df, current_contract, years_back):
+    """
+    Plot historical gas prices with the current contract highlighted.
+    
+    Args:
+        df: DataFrame containing the price data
+        current_contract: The current contract (to highlight)
+        years_back: Number of years to look back
+    """
+    plt.figure(figsize=(12, 8))
+    
+    # Get list of columns
+    columns = df.columns
+    
+    # Generate colors for each line
+    colors = plt.cm.tab10(np.linspace(0, 1, len(columns)))
+    
+    # Plot each series
+    for i, col in enumerate(columns):
+        if current_contract in col:
+            # Highlight the current contract with thicker line
+            plt.plot(df.index, df[col], linewidth=3, color=colors[i], label=col)
+        else:
+            plt.plot(df.index, df[col], linewidth=1.5, color=colors[i], label=col)
+    
+    # Format the plot
+    plt.title(f'Historical Gas Prices Comparison - {current_contract} vs Previous {years_back} Years', fontsize=14)
+    plt.xlabel('Date (Month-Day)', fontsize=12)
+    plt.ylabel('Price', fontsize=12)
+    plt.grid(True, alpha=0.3)
+    plt.legend(loc='best')
+    
+    # Rotate x-axis labels for better readability
+    plt.xticks(rotation=45)
+    
+    # Add every 15 days as tick marks
+    tick_positions = np.arange(0, len(df.index), 15)
+    if len(df.index) > 0:
+        plt.xticks(tick_positions, [df.index[i] if i < len(df.index) else '' for i in tick_positions])
+    
+    plt.tight_layout()
+    plt.show()
+
+# Example usage
+if __name__ == "__main__":
+    # Example 1: Single product
+    result = get_historical_gas_prices('May25', 'NG_HSC_GD')
+    
+    # Example 2: Multiple products
+    # result = get_historical_gas_prices('May25', ['NG_HSC_GD', 'NG_HH_GD'])
+    
+    print(result.head())
