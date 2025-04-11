@@ -1,0 +1,50 @@
+import pandas as pd
+import matplotlib.pyplot as plt
+import re
+
+def plot_futures_overlay(df, column_name):
+    match = re.search(r'([A-Za-z]+)(\d{2})', column_name)
+    if not match:
+        raise ValueError("Column name must contain MMMYY format (e.g., Jul28)")
+    
+    month_str, year_suffix = match.groups()
+    base_year = int("20" + year_suffix)
+
+    end_date = df.index.max()
+    start_date = end_date - pd.DateOffset(months=6)
+
+    fig, ax = plt.subplots(figsize=(12, 6))
+
+    # Plot the current contract
+    df_current = df.loc[start_date:end_date, column_name]
+    ax.plot(df_current.index, df_current.values, label=f'{month_str}{str(base_year)[2:]}', color='black', linewidth=3)
+
+    # Plot historical versions of the same contract
+    for offset in range(1, 5):
+        year = base_year - offset
+        col = column_name.replace(f"{month_str}{str(base_year)[2:]}", f"{month_str}{str(year)[2:]}")
+        if col not in df.columns:
+            continue
+        
+        # Define full historical lifecycle window (e.g., show from October of that year through July)
+        contract_start = pd.Timestamp(year=year - 1, month=10, day=1)
+        contract_end = pd.Timestamp(year=year, month=7, day=31)
+
+        historical_series = df.loc[contract_start:contract_end, col].copy()
+        if historical_series.empty:
+            continue
+
+        # Shift entire historical series forward by 'offset' years
+        shifted_series = historical_series.copy()
+        shifted_series.index = shifted_series.index + pd.DateOffset(years=offset)
+
+        ax.plot(shifted_series.index, shifted_series.values, label=f'{month_str}{str(year)[2:]}')
+
+    ax.axvline(end_date, linestyle='--', color='gray')
+    ax.set_xlabel("Date")
+    ax.set_ylabel("Price")
+    ax.legend()
+    ax.grid(True)
+    ax.set_title(column_name)
+    plt.tight_layout()
+    plt.show()
