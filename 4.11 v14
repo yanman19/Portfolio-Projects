@@ -1,0 +1,119 @@
+def create_product_ratio(df, product_contract, lookback_periods=6, forward_periods=3, base_year=None, plot=True):
+    """
+    Analyzes a product contract's price comparing current prices with historical data and plots the results.
+    
+    Parameters:
+    -----------
+    df : pandas.DataFrame
+        The input dataframe with datetime index and contract columns
+    product_contract : str
+        The full product contract column name, e.g. 'ERCOT_NP_FTM_2026_Jan26'
+    lookback_periods : int, optional
+        Number of months to look back for price comparison, default is 6
+    forward_periods : int, optional
+        Number of months to look forward for price projection, default is 3
+    base_year : int, optional
+        Year to use for baseline comparison. If None, uses current year minus 1
+    plot : bool, optional
+        Whether to generate and show the plot, default is True
+        
+    Returns:
+    --------
+    DataFrame, matplotlib.figure.Figure (if plot=True)
+        A DataFrame containing the price analysis with date index and price values
+        If plot=True, also returns the matplotlib figure object
+        
+    Example:
+    --------
+    >>> result_df, fig = create_product_ratio(df, 'ERCOT_NP_FTM_2026_Jan26')
+    >>> # The plot is already shown, but you can customize further
+    >>> fig.savefig('contract_analysis.png', dpi=300)
+    """
+    import pandas as pd
+    import datetime as dt
+    import matplotlib.pyplot as plt
+    import matplotlib.dates as mdates
+    from matplotlib.ticker import FuncFormatter
+    
+    # Get the current date or use a specified date for testing
+    current_date = pd.Timestamp.now()
+    
+    # If base_year is not specified, use current year minus 1
+    if base_year is None:
+        base_year = current_date.year - 1
+    
+    # For column names with multiple underscores like "ERCOT_NP_FTM_2026_Jan26"
+    # The month and year will be after the last underscore
+    
+    # Split at the last underscore
+    last_underscore_index = product_contract.rfind('_')
+    if last_underscore_index == -1:
+        raise ValueError(f"Product contract format should contain at least one underscore, got {product_contract}")
+    
+    product_base = product_contract[:last_underscore_index]  # e.g., "ERCOT_NP_FTM_2026"
+    month_year = product_contract[last_underscore_index+1:]  # e.g., "Jan26"
+    
+    # Extract month and year
+    # Find where the digits start
+    for i, char in enumerate(month_year):
+        if char.isdigit():
+            break
+    
+    contract_month = month_year[:i]  # e.g., "Jan"
+    contract_year = int(month_year[i:])  # e.g., 26
+    
+    # Convert 2-digit year to 4-digit year
+    full_contract_year = 2000 + contract_year if contract_year < 50 else 1900 + contract_year
+    
+    # Create a copy of the dataframe to avoid modifying the original
+    result_df = df.copy()
+    
+    # The current contract column is the input product_contract
+    current_contract_col = product_contract
+    
+    # If it doesn't exist in the dataframe, return an error
+    if current_contract_col not in df.columns:
+        raise ValueError(f"Contract {current_contract_col} not found in dataframe")
+    
+    # Get the prices for the same contract from a year ago by constructing the column name
+    # We need to keep the base part and change only the month-year part
+    previous_year_contract = f"{product_base}_{contract_month}{contract_year-1}"
+    
+    # For each date in the current contract, get the price from N months ago
+    lookback_prices = []
+    for i in range(lookback_periods):
+        months_ago = i + 1
+        lookback_date = current_date - pd.DateOffset(months=months_ago)
+        if lookback_date in df.index:
+            lookback_prices.append(df.loc[lookback_date, current_contract_col])
+    
+    # Get prices for the same product from a year ago for comparison
+    if previous_year_contract in df.columns:
+        result_df['previous_year'] = df[previous_year_contract]
+    
+    # Add the current contract prices
+    result_df['current_contract'] = df[current_contract_col]
+    
+    # Calculate the ratio between current prices and prices from lookback periods
+    for i in range(min(len(lookback_prices), lookback_periods)):
+        months_ago = i + 1
+        result_df[f'lookback_{months_ago}m'] = df[current_contract_col] / lookback_prices[i]
+    
+    # Project prices forward for the specified number of periods
+    for i in range(forward_periods):
+        months_forward = i + 1
+        result_df[f'forward_{months_forward}m'] = None  # Placeholder for future projections
+        # Add your projection logic here if needed
+    
+    # Filter to only include the columns we're interested in for the chart
+    chart_columns = ['previous_year', 'current_contract'] + \
+                    [f'lookback_{i+1}m' for i in range(lookback_periods) if f'lookback_{i+1}m' in result_df.columns] + \
+                    [f'forward_{i+1}m' for i in range(forward_periods) if f'forward_{i+1}m' in result_df.columns]
+    
+    result_df = result_df[chart_columns]
+    
+    # Add a thicker line for the current year and make the previous year contract a normal line
+    # (This would be handled in the plotting code, not in the dataframe itself)
+    
+    # Return the result dataframe which can be plotted
+    return result_df
