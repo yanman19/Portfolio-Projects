@@ -1,0 +1,113 @@
+I'll stick closer to the format in your image, maintaining the existing structure for getting the prices. Here's a revised version:
+
+```python
+def get_historical_comparison(product, contract, months_back=6):
+    """
+    Get historical price data for an energy contract, comparing current prices with
+    prices from previous years.
+    
+    Args:
+        product (str): The product code (e.g., 'ERCOT_NZ_FIN_PEAK')
+        contract (str): The contract month (e.g., 'Aug25')
+        months_back (int): How many months of historical data to retrieve
+        
+    Returns:
+        pandas.DataFrame: DataFrame with columns for current prices and historical prices
+    """
+    # Calculate date ranges
+    end_date = dt.date.today()
+    start_date = end_date - dt.timedelta(days=months_back*30)
+    date_range = pd.date_range(start=start_date, end=end_date, freq="B")
+    
+    # Get current data
+    north_peak_marks = []
+    valid_market_dates = []
+    
+    for d in date_range:
+        if d.weekday() < 5:  # Monday-Friday
+            try:
+                with graph.request() as gr:
+                    econfig = hydra.compose(f"{product}_ref")
+                    north_peak_marks.append(gr.SingleTenorByContract(tenor.EnergyTenor(contract)))
+                    valid_market_dates.append(d)
+            except Exception as e:
+                print(f"{d} is not a valid market date...skipping: {format(e)}")
+    
+    # Create current dataframe
+    current_df = pd.DataFrame(north_peak_marks, index=valid_market_dates, columns=["Price"])
+    current_df.index.name = "Date"
+    current_df = current_df.reset_index()
+    
+    # Extract contract year and month
+    contract_year = int(contract[-2:])
+    contract_month = contract[:-2]
+    
+    # Initialize the result dataframe with current data
+    result_df = current_df.copy()
+    result_df.rename(columns={"Price": f"Price_{contract}"}, inplace=True)
+    
+    # Get historical data for previous years
+    for year_back in range(1, 5):  # 1 to 4 years back
+        prev_year = contract_year - year_back
+        prev_contract = f"{contract_month}{prev_year}"
+        
+        # Calculate date range for previous year
+        prev_end_date = end_date.replace(year=end_date.year - year_back)
+        prev_start_date = prev_end_date - dt.timedelta(days=months_back*30)
+        prev_date_range = pd.date_range(start=prev_start_date, end=prev_end_date, freq="B")
+        
+        # Try to get data for the exact date range
+        prev_north_peak_marks = []
+        prev_valid_market_dates = []
+        
+        for d in prev_date_range:
+            if d.weekday() < 5:  # Monday-Friday
+                try:
+                    with graph.request() as gr:
+                        econfig = hydra.compose(f"{product}_ref")
+                        prev_north_peak_marks.append(gr.SingleTenorByContract(tenor.EnergyTenor(prev_contract)))
+                        prev_valid_market_dates.append(d)
+                except Exception:
+                    # Try dates around if exact match fails (+/- 3 days)
+                    found_data = False
+                    for day_offset in range(-3, 4):
+                        if day_offset == 0:
+                            continue
+                        try_date = d + dt.timedelta(days=day_offset)
+                        try:
+                            with graph.request() as gr:
+                                econfig = hydra.compose(f"{product}_ref")
+                                prev_north_peak_marks.append(gr.SingleTenorByContract(tenor.EnergyTenor(prev_contract)))
+                                prev_valid_market_dates.append(try_date)
+                            found_data = True
+                            break
+                        except Exception:
+                            continue
+        
+        if prev_north_peak_marks:
+            # Create previous year dataframe
+            prev_df = pd.DataFrame(prev_north_peak_marks, index=prev_valid_market_dates, columns=[f"Price_{prev_contract}"])
+            prev_df.index.name = "Date"
+            prev_df = prev_df.reset_index()
+            
+            # Align dates (shift previous year's dates to current year for comparison)
+            prev_df["Date_Shifted"] = prev_df["Date"].apply(
+                lambda x: x.replace(year=x.year + year_back)
+            )
+            
+            # Merge with result dataframe based on comparable dates
+            result_df = pd.merge(
+                result_df, 
+                prev_df[["Date_Shifted", f"Price_{prev_contract}"]],
+                left_on="Date",
+                right_on="Date_Shifted",
+                how="left"
+            )
+            
+            # Drop the temporary column
+            result_df.drop("Date_Shifted", axis=1, inplace=True)
+    
+    return result_df
+```
+
+I've adapted the code to follow the pattern shown in your image, using `graph.request()` and `hydra.compose()` in the same way your existing code does.​​​​​​​​​​​​​​​​
