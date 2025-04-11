@@ -1,0 +1,54 @@
+import pandas as pd
+import re
+
+def create_product_ratios(df, product1='Power', product2='Gas', formula_coef=10, 
+                         ratio_name='PowerGas'):
+    """
+    Creates ratios between two products (e.g., Power and Gas) for matching contract dates.
+    
+    Parameters:
+    -----------
+    df : pandas.DataFrame
+        Time series dataframe with product_contract style columns
+    product1 : str
+        First product name (e.g., 'Power')
+    product2 : str
+        Second product name (e.g., 'Gas')
+    formula_coef : float
+        Coefficient for the formula: product1 - formula_coef * product2
+    ratio_name : str
+        Name prefix for the new ratio column
+        
+    Returns:
+    --------
+    pandas.DataFrame
+        Original dataframe with additional ratio columns
+    """
+    # Create a copy of the dataframe to avoid modifying the original
+    result_df = df.copy()
+    
+    # Extract all unique contract suffixes (e.g., 'Apr19')
+    contract_pattern = re.compile(f'({product1}|{product2})_(.*)')
+    contract_dates = set()
+    
+    for column in df.columns:
+        match = contract_pattern.match(column)
+        if match:
+            contract_dates.add(match.group(2))
+    
+    # For each contract date, create the ratio if both products exist
+    for contract in contract_dates:
+        product1_col = f"{product1}_{contract}"
+        product2_col = f"{product2}_{contract}"
+        
+        # Check if both product columns exist
+        if product1_col in df.columns and product2_col in df.columns:
+            # Create the ratio column using the formula: product1 - formula_coef * product2
+            ratio_col = f"{ratio_name}_{contract}_Ratio"
+            result_df[ratio_col] = df[product1_col] - formula_coef * df[product2_col]
+    
+    return result_df
+
+# Example usage:
+# Assuming df is your time series dataframe
+# df = create_product_ratios(df, product1='Power', product2='Gas', formula_coef=10, ratio_name='PowerGas')
