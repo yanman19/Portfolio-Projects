@@ -1,0 +1,198 @@
+Here's the complete code ready to copy and paste:
+
+```python
+import pandas as pd
+import numpy as np
+import datetime as dt
+import matplotlib.pyplot as plt
+import matplotlib.dates as mdates
+from typing import Union, List
+
+def historical_prices_graph(contract: str, products: Union[str, List[str]], years_back: int = 4, months_back: int = 6, debug: bool = True):
+    """
+    Get historical energy prices for specified contract(s) and compare with previous years,
+    then visualize the results directly.
+    
+    Args:
+        contract: Contract month/year (e.g., 'May25')
+        products: Product or list of products (e.g., 'ERCOT_NZ_FIN_PK' or ['ERCOT_NZ_FIN_PK', 'ERCOT_SZ_FIN_PK'])
+        years_back: Number of years to look back (default: 4)
+        months_back: Number of months to look back from yesterday (default: 6)
+        debug: Whether to print debug information (default: True)
+    
+    Returns:
+        DataFrame with aligned historical prices and displays the plot
+    """
+    if isinstance(products, str):
+        products = [products]
+    
+    # Extract month and year from contract
+    month_str = contract[:3]
+    current_year = int(contract[3:])
+    
+    # Use yesterday's date as reference instead of today
+    yesterday = dt.date.today() - dt.timedelta(days=1)
+    
+    # Create dict to store all results
+    all_results = {}
+    
+    # Process current contract and historical contracts
+    for year_offset in range(years_back + 1):
+        year = current_year - year_offset
+        historical_contract = f"{month_str}{year}"
+        
+        # Calculate the reference date (yesterday minus year_offset years)
+        reference_date = yesterday - dt.timedelta(days=365 * year_offset)
+        
+        # Calculate start date (6 months before reference date)
+        start_date = reference_date - dt.timedelta(days=30 * months_back)
+        
+        # Get data for each product
+        for product in products:
+            # Create date range
+            date_range = pd.date_range(start=start_date, end=reference_date, freq='d')
+            date_range = [d.date() for d in date_range]
+            
+            north_peak_marks = []
+            valid_market_dates = []
+            
+            for d in date_range:
+                if d.weekday() < 5:  # Monday=0, Sunday=6
+                    try:
+                        with graph.context() as gc:
+                            eodfn = eodutils.tweakEOD(d)
+                            mko = hydra.db.read(product)  # Use the product parameter
+                            north_peak_marks.append(mko.SingleFutureByContract(tenor.EnergyTenor(historical_contract)))
+                            valid_market_dates.append(d)
+                    except Exception as e:
+                        if debug:
+                            print(f"{d} is not a valid market date...skipping for {product}_{historical_contract}. Error: {str(e)}")
+            
+            # Create DataFrame
+            if valid_market_dates:
+                gas_df = pd.DataFrame(north_peak_marks, index=valid_market_dates, columns=[product])
+                gas_df = gas_df.round(2)
+                
+                # Convert datetime to MM-DD format for alignment
+                gas_df['mm_dd'] = gas_df.index.map(lambda x: x.strftime('%m-%d'))
+                
+                # Add year suffix for column name
+                column_name = f"{product}_{historical_contract}"
+                gas_df.rename(columns={product: column_name}, inplace=True)
+                
+                # Store in results dict, indexed by mm_dd for alignment
+                if 'mm_dd' not in all_results:
+                    all_results['mm_dd'] = gas_df['mm_dd'].tolist()
+                
+                # Make sure the arrays are the same length
+                all_results[column_name] = gas_df[column_name].values
+                
+                # Debug print
+                if debug:
+                    print(f"Added {len(gas_df[column_name].values)} values for {column_name}")
+    
+    # Check if we have any results
+    if not all_results:
+        if debug:
+            print("No data was collected. Check if the dates and products are valid.")
+        return pd.DataFrame()
+        
+    # Check if we have mm_dd in results
+    if 'mm_dd' not in all_results:
+        if debug:
+            print("No valid market dates found for any product/contract combination.")
+        return pd.DataFrame()
+    
+    # Ensure all arrays are the same length
+    mm_dd_length = len(all_results['mm_dd'])
+    for key in list(all_results.keys()):
+        if key != 'mm_dd':
+            if len(all_results[key]) != mm_dd_length:
+                if debug:
+                    print(f"Warning: Length mismatch for {key}. Padding with NaN values.")
+                # Pad with NaN values if lengths don't match
+                all_results[key] = np.pad(
+                    all_results[key], 
+                    (0, mm_dd_length - len(all_results[key])), 
+                    mode='constant', 
+                    constant_values=np.nan
+                )
+    
+    # Combine all results into a single DataFrame
+    try:
+        result_df = pd.DataFrame(all_results)
+        result_df.set_index('mm_dd', inplace=True)
+        if debug:
+            print(f"Successfully created DataFrame with shape {result_df.shape}")
+    except Exception as e:
+        if debug:
+            print(f"Error creating DataFrame: {e}")
+            print(f"all_results keys: {list(all_results.keys())}")
+        return pd.DataFrame()
+    
+    # Plot the data directly in this function
+    if result_df.empty:
+        if debug:
+            print("No data to plot.")
+        return result_df
+        
+    plt.figure(figsize=(12, 8))
+    
+    # Get list of columns
+    columns = result_df.columns
+    
+    if len(columns) == 0:
+        if debug:
+            print("No columns to plot.")
+        return result_df
+    
+    # Generate colors for each line
+    colors = plt.cm.tab10(np.linspace(0, 1, len(columns)))
+    
+    # Plot each series
+    for i, col in enumerate(columns):
+        # Skip columns with all NaN values
+        if result_df[col].isna().all():
+            if debug:
+                print(f"Skipping column {col} - all values are NaN")
+            continue
+            
+        if contract in col:
+            # Highlight the current contract with thicker line
+            plt.plot(result_df.index, result_df[col], linewidth=3, color=colors[i], label=col)
+        else:
+            plt.plot(result_df.index, result_df[col], linewidth=1.5, color=colors[i], label=col)
+    
+    # Format the plot
+    plt.title(f'Historical Price Comparison - {contract} vs Previous {years_back} Years', fontsize=14)
+    plt.xlabel('Date (Month-Day)', fontsize=12)
+    plt.ylabel('Price', fontsize=12)
+    plt.grid(True, alpha=0.3)
+    plt.legend(loc='best')
+    
+    # Rotate x-axis labels for better readability
+    plt.xticks(rotation=45)
+    
+    # Add every 15 days as tick marks
+    tick_positions = np.arange(0, len(result_df.index), 15)
+    if len(result_df.index) > 0:
+        plt.xticks(tick_positions, [result_df.index[i] if i < len(result_df.index) else '' for i in tick_positions])
+    
+    plt.tight_layout()
+    plt.show()
+    
+    return result_df
+
+# Example usage
+if __name__ == "__main__":
+    # Single product example
+    result = historical_prices_graph('May25', 'ERCOT_NZ_FIN_PK', debug=True)
+    
+    # Multiple products example (commented out)
+    # result = historical_prices_graph('May25', ['ERCOT_NZ_FIN_PK', 'ERCOT_SZ_FIN_PK'])
+    
+    # Disable debug messages
+    # result = historical_prices_graph('May25', 'ERCOT_NZ_FIN_PK', debug=False)
+```
+
+This code is ready to use. Just copy and paste it into your Python environment. The function handles the KeyError issue and includes all the improvements I mentioned. Call the function with your desired contract and product(s), and it will display the historical price comparison graph.​​​​​​​​​​​​​​​​
