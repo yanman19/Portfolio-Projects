@@ -1,0 +1,52 @@
+import pandas as pd
+import matplotlib.pyplot as plt
+import re
+
+def plot_futures_overlay(df, column_name):
+    match = re.search(r'([A-Za-z]+)(\d{2})', column_name)
+    if not match:
+        raise ValueError("Column name must contain MMMYY format (e.g., Jul28)")
+
+    month_str, year_suffix = match.groups()
+    base_year = int("20" + year_suffix)
+
+    today = df.index.max()
+    start_date = today - pd.DateOffset(months=6)
+
+    fig, ax = plt.subplots(figsize=(12, 6))
+
+    # Plot current contract
+    df_current = df.loc[start_date:today, column_name].copy()
+    df_current.index = df_current.index.strftime('%m-%d')
+    df_current = df_current.groupby(df_current.index).last()  # prevent MM-DD duplicates
+    ax.plot(df_current.index, df_current.values, label=f'{month_str}{str(base_year)[2:]}', color='black', linewidth=3)
+
+    # Plot previous contracts (Jul27, Jul26, etc.)
+    for offset in range(1, 5):
+        past_year = base_year - offset
+        past_col = column_name.replace(f"{month_str}{str(base_year)[2:]}", f"{month_str}{str(past_year)[2:]}")
+        if past_col not in df.columns:
+            continue
+
+        past_today = today - pd.DateOffset(years=offset)
+        past_start = past_today - pd.DateOffset(months=6)
+
+        series = df.loc[past_start:past_today, past_col].copy()
+        if series.empty:
+            continue
+
+        series.index = series.index.strftime('%m-%d')
+        series = series.groupby(series.index).last()
+
+        ax.plot(series.index, series.values, label=f'{month_str}{str(past_year)[2:]}')
+
+    # Dashed vertical line at today's MM-DD
+    ax.axvline(today.strftime('%m-%d'), linestyle='--', color='gray')
+
+    ax.set_xlabel("MM-DD")
+    ax.set_ylabel("Price")
+    ax.legend()
+    ax.grid(True)
+    ax.set_title(column_name)
+    plt.tight_layout()
+    plt.show()
