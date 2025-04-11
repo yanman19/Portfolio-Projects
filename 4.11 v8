@@ -1,0 +1,116 @@
+Here's the simplified version that completely avoids date parsing issues:
+
+```python
+import pandas as pd
+
+def create_spreads_no_date_parsing(df, product_pairs):
+    """
+    Create product spreads without any date parsing - uses the existing index directly
+    
+    Parameters:
+    -----------
+    df : pandas DataFrame
+        The input dataframe with date index, product and contract columns, and price values
+    product_pairs : list of tuples
+        List of (product1, product2, new_name) tuples
+        
+    Returns:
+    --------
+    pandas DataFrame
+        DataFrame with all spreads added
+    """
+    # Initialize an empty list for new rows
+    new_rows = []
+    
+    # Process each product pair
+    for product1, product2, new_name in product_pairs:
+        # Filter dataframes for each product
+        df1 = df[df['product'] == product1]
+        df2 = df[df['product'] == product2]
+        
+        # Get unique contracts for both products
+        contracts1 = set(df1['contract'].unique())
+        contracts2 = set(df2['contract'].unique())
+        
+        # Process common contracts
+        common_contracts = contracts1.intersection(contracts2)
+        
+        for contract in common_contracts:
+            # Get data for this contract
+            df1_contract = df1[df1['contract'] == contract]
+            df2_contract = df2[df2['contract'] == contract]
+            
+            # Create dictionaries for faster lookup
+            prices1 = dict(zip(df1_contract.index, df1_contract['price']))
+            prices2 = dict(zip(df2_contract.index, df2_contract['price']))
+            
+            # Find common dates (indexes)
+            common_dates = set(prices1.keys()).intersection(set(prices2.keys()))
+            
+            # Calculate spreads
+            for date in common_dates:
+                spread = prices1[date] - prices2[date]
+                new_rows.append({
+                    'index': date,  # Use the original index
+                    'product': new_name,
+                    'contract': contract,
+                    'price': spread
+                })
+    
+    # Create dataframe from all new rows
+    if new_rows:
+        new_rows_df = pd.DataFrame(new_rows)
+        new_rows_df.set_index('index', inplace=True)
+        # Combine with original dataframe
+        result = pd.concat([df, new_rows_df])
+        return result
+    else:
+        return df
+
+# Example usage:
+# product_pairs = [
+#     ('ProductA', 'ProductB', 'A_minus_B'),
+#     ('ProductC', 'ProductD', 'C_minus_D')
+# ]
+# result_df = create_spreads_no_date_parsing(df, product_pairs)
+```
+
+This simplified version:
+
+1. Completely avoids date parsing by working directly with the existing index
+2. Processes each product pair and finds common contracts
+3. Creates dictionaries for fast lookups of prices by date
+4. Calculates the spread only for dates that exist in both products for the same contract
+5. Creates a new dataframe with the spread values and combines it with the original dataframe
+
+If your dataset is extremely large and you're running into memory issues, you can add a simple chunking mechanism:
+
+```python
+def create_spreads_chunked(df, product_pairs, chunk_size=100000):
+    """
+    Create spreads by processing the dataframe in chunks to save memory
+    """
+    result = df.copy()
+    
+    # Split the dataframe into chunks by index
+    unique_indices = sorted(df.index.unique())
+    index_chunks = [unique_indices[i:i + chunk_size] for i in range(0, len(unique_indices), chunk_size)]
+    
+    for indices in index_chunks:
+        # Process each chunk
+        chunk = df[df.index.isin(indices)]
+        chunk_result = create_spreads_no_date_parsing(chunk, product_pairs)
+        
+        # Get only the new rows (spreads) from this chunk
+        new_rows = chunk_result[~chunk_result.index.isin(chunk.index) | 
+                               ~chunk_result['product'].isin(chunk['product']) |
+                               ~chunk_result['contract'].isin(chunk['contract'])]
+        
+        # Add to result
+        if not new_rows.empty:
+            result = pd.concat([result, new_rows])
+    
+    return result
+```
+
+Use the chunked version if your dataset doesn't fit in memory. Otherwise, the non-chunked version should be more efficient.​​​​​​​​​​​​​​​​
