@@ -1,0 +1,128 @@
+I'll help you create a new product that represents the difference between two product prices for each contract. Let me write the code for you.
+
+```python
+import pandas as pd
+
+# Assuming your dataframe is named 'df' and has the structure:
+# - Date as index
+# - 'product' column with product names
+# - 'contract' column with contract names like 'Aug25', 'Jan34', etc.
+# - 'price' column with the price values
+
+# First, let's create a function to compute the difference
+def create_product_spreads(df, product1, product2, new_product_name=None):
+    """
+    Create a new product that represents the difference between two product prices
+    for each contract and date.
+    
+    Parameters:
+    -----------
+    df : pandas DataFrame
+        The input dataframe with date index, product, contract, and price columns
+    product1 : str
+        First product name
+    product2 : str
+        Second product name
+    new_product_name : str, optional
+        Name for the new product. If None, will use '{product1}_{product2}_spread'
+        
+    Returns:
+    --------
+    pandas DataFrame
+        Original dataframe with new product rows added
+    """
+    if new_product_name is None:
+        new_product_name = f"{product1}_{product2}_spread"
+    
+    # Create a copy of the dataframe to avoid modifying the original
+    result_df = df.copy()
+    
+    # Pivot the data to get prices for each product-contract combination by date
+    pivot_df = df.pivot_table(index=df.index, columns=['product', 'contract'], values='price')
+    
+    # Get unique contracts
+    contracts = df['contract'].unique()
+    
+    # For each contract, calculate the spread
+    new_rows = []
+    for contract in contracts:
+        try:
+            # Check if both products exist for this contract
+            if (product1, contract) in pivot_df.columns and (product2, contract) in pivot_df.columns:
+                # Calculate the spread for each date
+                for date in pivot_df.index:
+                    price1 = pivot_df.loc[date, (product1, contract)]
+                    price2 = pivot_df.loc[date, (product2, contract)]
+                    
+                    # Only add if both prices exist
+                    if not pd.isna(price1) and not pd.isna(price2):
+                        spread = price1 - price2
+                        new_rows.append({
+                            'product': new_product_name,
+                            'contract': contract,
+                            'price': spread
+                        })
+        except Exception as e:
+            print(f"Error processing contract {contract}: {e}")
+    
+    # Create a dataframe with the new rows
+    new_df = pd.DataFrame(new_rows, index=pd.MultiIndex.from_tuples(
+        [(date, new_product_name, contract) for date, _, contract in 
+         [(date, new_product_name, contract) for date in pivot_df.index for contract in [row['contract'] for row in new_rows]]],
+        names=[df.index.name, 'product', 'contract']))
+    
+    # Set the index to match the original dataframe
+    new_df.reset_index(inplace=True)
+    new_df.set_index(df.index.name, inplace=True)
+    
+    # Concatenate the original dataframe with the new rows
+    result_df = pd.concat([result_df, new_df])
+    
+    return result_df
+
+# Example usage:
+# Assuming 'df' is your dataframe
+# For example, to create a spread between 'ProductA' and 'ProductB'
+# df_with_spreads = create_product_spreads(df, 'ProductA', 'ProductB', 'ProductA_minus_ProductB')
+
+# To create spreads for multiple product pairs:
+def create_multiple_spreads(df, product_pairs):
+    """
+    Create multiple spreads from a list of product pairs
+    
+    Parameters:
+    -----------
+    df : pandas DataFrame
+        The input dataframe
+    product_pairs : list of tuples
+        List of (product1, product2, new_name) tuples
+        
+    Returns:
+    --------
+    pandas DataFrame
+        DataFrame with all new spreads added
+    """
+    result = df.copy()
+    for product1, product2, new_name in product_pairs:
+        result = create_product_spreads(result, product1, product2, new_name)
+    return result
+
+# Example usage:
+# product_pairs = [
+#     ('ProductA', 'ProductB', 'A_minus_B'),
+#     ('ProductC', 'ProductD', 'C_minus_D')
+# ]
+# final_df = create_multiple_spreads(df, product_pairs)
+```
+
+This code provides a flexible solution for creating price spreads between products. Here's how to use it:
+
+1. The `create_product_spreads` function calculates the difference between two products for each contract and date.
+2. The `create_multiple_spreads` function allows you to create multiple spreads in one go.
+
+To use this code, you would:
+1. Replace 'ProductA' and 'ProductB' with your actual product names
+2. If you have multiple spreads to create, define them in the product_pairs list
+3. Make sure your dataframe has the expected structure with date index, product, contract, and price columns
+
+Would you like me to explain any specific part of this code or adapt it further to your exact data structure?​​​​​​​​​​​​​​​​
