@@ -1,0 +1,57 @@
+import pandas as pd
+import matplotlib.pyplot as plt
+import re
+
+def plot_contract_with_vintage_overlay(df, contract_col):
+    today = df.index.max() - pd.Timedelta(days=1)
+    six_months_ago = today - pd.DateOffset(months=6)
+
+    match = re.search(r'([A-Z][a-z]{2})(\d{2})$', contract_col)
+    if not match:
+        raise ValueError("Contract column must end in 'MonYY' format, e.g., 'Apr29'")
+    
+    month_str, year_suffix = match.groups()
+    base_year = int('20' + year_suffix)
+    
+    all_cols = {0: contract_col}
+    for offset in range(1, 4):
+        prior_year = base_year - offset
+        suffix = str(prior_year)[-2:]
+        vintage_col = contract_col.replace(f"{month_str}{year_suffix}", f"{month_str}{suffix}")
+        if vintage_col in df.columns:
+            all_cols[offset] = vintage_col
+
+    df_filtered = df[list(all_cols.values())].copy()
+    df_filtered = df_filtered.loc[six_months_ago:today]
+    df_filtered = df_filtered[~df_filtered.index.duplicated(keep='first')]
+
+    plot_df = pd.DataFrame(index=df_filtered.index)
+
+    for offset, col in all_cols.items():
+        if offset == 0:
+            plot_df[str(base_year)] = df_filtered[col]
+        else:
+            vintage_start = six_months_ago - pd.DateOffset(years=offset)
+            vintage_end = today - pd.DateOffset(years=offset)
+            vintage_data = df[[col]].loc[vintage_start:vintage_end].copy()
+            vintage_data = vintage_data[~vintage_data.index.duplicated(keep='first')]
+            shifted_data = vintage_data.copy()
+            shifted_data.index = shifted_data.index + pd.DateOffset(years=offset)
+            shifted_data = shifted_data.loc[~shifted_data.index.duplicated(keep='first')]
+            plot_df = plot_df.combine_first(shifted_data.rename(columns={col: str(base_year - offset)}))
+
+    plot_df.dropna(how='all', inplace=True)
+
+    plt.figure(figsize=(12, 6))
+    for label in sorted(plot_df.columns, reverse=True):
+        plt.plot(plot_df.index.strftime('%m_%d'), plot_df[label], label=label)
+
+    today_str = today.strftime('%m_%d')
+    plt.axvline(x=today_str, color='black', linestyle='--', linewidth=1, label='Today')
+    plt.xlabel('Date (MM_DD)')
+    plt.ylabel('Price')
+    plt.title(f'{contract_col} and Historical Vintages')
+    plt.legend()
+    plt.xticks(rotation=45)
+    plt.tight_layout()
+    plt.show()
