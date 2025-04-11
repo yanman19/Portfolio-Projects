@@ -1,0 +1,47 @@
+import pandas as pd
+import matplotlib.pyplot as plt
+import re
+
+def plot_contract_with_vintage_overlay(df, contract_col):
+    today = df.index.max() - pd.Timedelta(days=1)
+    six_months_ago = today - pd.DateOffset(months=6)
+    six_months_fwd = today + pd.DateOffset(months=6)
+
+    match = re.search(r'([A-Z][a-z]{2})(\d{2})$', contract_col)
+    if not match:
+        raise ValueError("Contract column must end in 'MonYY' format, e.g., 'Apr29'")
+    
+    month_str, year_suffix = match.groups()
+    base_year = int('20' + year_suffix)
+
+    plt.figure(figsize=(14, 6))
+
+    # Plot original contract (last 6 months)
+    if contract_col in df.columns:
+        current_data = df[[contract_col]].loc[six_months_ago:today]
+        plt.plot(current_data.index.strftime('%m_%d'), current_data[contract_col], label=str(base_year))
+
+    # Historical vintages: 1, 2, and 3 years ago
+    for offset in [1, 2, 3]:
+        vintage_year = base_year - offset
+        vintage_suffix = str(vintage_year)[-2:]
+        vintage_col = contract_col.replace(f"{month_str}{year_suffix}", f"{month_str}{vintage_suffix}")
+        if vintage_col not in df.columns:
+            continue
+
+        hist_start = six_months_ago - pd.DateOffset(years=offset)
+        hist_end = six_months_fwd - pd.DateOffset(years=offset)
+        vintage_data = df[[vintage_col]].loc[hist_start:hist_end].copy()
+        vintage_data.index += pd.DateOffset(years=offset)
+        plt.plot(vintage_data.index.strftime('%m_%d'), vintage_data[vintage_col], label=str(vintage_year))
+
+    # Vertical dashed line at "today"
+    plt.axvline(today.strftime('%m_%d'), color='gray', linestyle='--', label='Today')
+
+    plt.xlabel('Date (MM_DD)')
+    plt.ylabel('Price')
+    plt.title(f'{contract_col} and Prior Vintages')
+    plt.legend()
+    plt.xticks(rotation=45)
+    plt.tight_layout()
+    plt.show()
