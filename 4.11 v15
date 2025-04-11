@@ -1,0 +1,41 @@
+import pandas as pd
+import matplotlib.pyplot as plt
+import re
+from datetime import timedelta
+
+def plot_futures_overlay(df, column_name):
+    match = re.search(r'([A-Za-z]+)(\d{2})', column_name)
+    if not match:
+        raise ValueError("Column name must contain MMMYY format (e.g., May25)")
+    
+    month_str, year_suffix = match.groups()
+    year_int = int("20" + year_suffix)
+    prev_year_int = year_int - 1
+    prev_col = column_name.replace(f"{month_str}{year_suffix}", f"{month_str}{str(prev_year_int)[2:]}")
+
+    if column_name not in df.columns or prev_col not in df.columns:
+        raise ValueError(f"Columns '{column_name}' or '{prev_col}' not found in DataFrame")
+    
+    end_date = df.index.max()
+    start_date = end_date - pd.DateOffset(months=6)
+    
+    prev_end_date = end_date - pd.DateOffset(years=1)
+    prev_start_date = prev_end_date - pd.DateOffset(months=6)
+
+    fig, ax = plt.subplots(figsize=(12, 6))
+    
+    df_this = df.loc[start_date:end_date, column_name]
+    df_last = df.loc[prev_start_date:prev_end_date, prev_col]
+
+    df_last.index = df_last.index + pd.DateOffset(years=1)
+
+    ax.plot(df_last.index, df_last.values, label=f'{month_str}{str(prev_year_int)[2:]}', linestyle='--')
+    ax.plot(df_this.index, df_this.values, label=f'{month_str}{year_suffix}', linewidth=2.5)
+    
+    ax.set_title(f"Overlay: {month_str}{year_suffix} vs {month_str}{str(prev_year_int)[2:]}")
+    ax.set_xlabel("Date")
+    ax.set_ylabel("Price")
+    ax.legend()
+    ax.grid(True)
+    plt.tight_layout()
+    plt.show()
