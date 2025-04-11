@@ -1,0 +1,53 @@
+import pandas as pd
+import matplotlib.pyplot as plt
+import re
+
+def plot_futures_overlay(df, column_name):
+    match = re.search(r'([A-Za-z]+)(\d{2})', column_name)
+    if not match:
+        raise ValueError("Column name must contain MMMYY format (e.g., Jul28)")
+    
+    month_str, year_suffix = match.groups()
+    base_year = int("20" + year_suffix)
+
+    end_date = df.index.max()
+    start_date = end_date - pd.DateOffset(months=6)
+
+    fig, ax = plt.subplots(figsize=(12, 6))
+
+    # Function to convert datetime to MM-DD for x-axis alignment
+    def mmdd_index(series):
+        return series.index.strftime('%m-%d')
+
+    # Plot current contract in thick black
+    df_current = df.loc[start_date:end_date, column_name]
+    ax.plot(mmdd_index(df_current), df_current.values, label=f'{month_str}{str(base_year)[2:]}', color='black', linewidth=3)
+
+    # Historical contracts from 1 to 4 years ago
+    for offset in range(1, 5):
+        year = base_year - offset
+        col = column_name.replace(f"{month_str}{str(base_year)[2:]}", f"{month_str}{str(year)[2:]}")
+        if col not in df.columns:
+            continue
+
+        contract_start = end_date - pd.DateOffset(years=offset, months=6)
+        contract_end = end_date - pd.DateOffset(years=offset)
+
+        historical_series = df.loc[contract_start:contract_end, col].copy()
+        if historical_series.empty:
+            continue
+
+        # Plot with MM-DD index to overlay properly
+        ax.plot(mmdd_index(historical_series), historical_series.values, label=f'{month_str}{str(year)[2:]}')
+
+    # Vertical dashed line at "today"
+    today_mmdd = end_date.strftime('%m-%d')
+    ax.axvline(today_mmdd, linestyle='--', color='gray')
+
+    ax.set_xlabel("MM-DD")
+    ax.set_ylabel("Price")
+    ax.legend()
+    ax.grid(True)
+    ax.set_title(column_name)
+    plt.tight_layout()
+    plt.show()
