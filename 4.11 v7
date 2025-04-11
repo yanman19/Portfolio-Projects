@@ -1,0 +1,159 @@
+Here's the memory-efficient version of the code optimized for extremely large datasets:
+
+```python
+import pandas as pd
+
+def create_spreads_memory_efficient(df, product_pairs, chunk_size='M'):
+    """
+    Create product spreads for extremely large datasets by processing in time chunks
+    
+    Parameters:
+    -----------
+    df : pandas DataFrame
+        The input dataframe with date index, product, contract, and price columns
+    product_pairs : list of tuples
+        List of (product1, product2, new_name) tuples
+    chunk_size : str, default 'M'
+        Pandas frequency string for time chunking (e.g. 'M' for month, 'W' for week)
+        
+    Returns:
+    --------
+    pandas DataFrame
+        DataFrame with all spreads added
+    """
+    # Initialize an empty list to collect all new spread rows
+    all_new_rows = []
+    
+    # Process in chunks by date
+    for chunk_start, chunk_end in get_date_chunks(df.index, freq=chunk_size):
+        # Get data for this chunk
+        chunk = df[(df.index >= chunk_start) & (df.index <= chunk_end)].copy()
+        
+        if chunk.empty:
+            continue
+            
+        # Process all spreads for this chunk
+        chunk_new_rows = []
+        
+        # Get unique products and contracts in this chunk
+        products = set()
+        for p1, p2, _ in product_pairs:
+            products.add(p1)
+            products.add(p2)
+        
+        # Create filtered dataframes for each product
+        product_data = {}
+        for product in products:
+            product_df = chunk[chunk['product'] == product]
+            if not product_df.empty:
+                product_data[product] = {
+                    contract: group['price'].to_dict() 
+                    for contract, group in product_df.groupby('contract')
+                }
+        
+        # Calculate spreads for each product pair
+        for product1, product2, new_name in product_pairs:
+            if product1 not in product_data or product2 not in product_data:
+                continue
+                
+            # Find common contracts
+            contracts = set(product_data[product1].keys()) & set(product_data[product2].keys())
+            
+            for contract in contracts:
+                # Get price dictionaries for each product-contract
+                prices1 = product_data[product1][contract]
+                prices2 = product_data[product2][contract]
+                
+                # Find common dates
+                common_dates = set(prices1.keys()) & set(prices2.keys())
+                
+                # Calculate spreads
+                for date in common_dates:
+                    spread = prices1[date] - prices2[date]
+                    chunk_new_rows.append({
+                        'date': date,
+                        'product': new_name,
+                        'contract': contract,
+                        'price': spread
+                    })
+        
+        # Add this chunk's new rows to the collection
+        all_new_rows.extend(chunk_new_rows)
+        
+        # Clear memory
+        del chunk
+        del product_data
+        
+    # Create dataframe from all new rows
+    if all_new_rows:
+        new_rows_df = pd.DataFrame(all_new_rows)
+        new_rows_df.set_index('date', inplace=True)
+        # Combine with original dataframe
+        result = pd.concat([df, new_rows_df])
+        return result
+    else:
+        return df
+
+def get_date_chunks(date_index, freq='M'):
+    """
+    Generate start and end dates for chunks based on frequency
+    
+    Parameters:
+    -----------
+    date_index : DatetimeIndex
+        The index containing dates
+    freq : str
+        Pandas frequency string
+        
+    Returns:
+    --------
+    list of tuples
+        List of (start_date, end_date) tuples
+    """
+    if len(date_index) == 0:
+        return []
+        
+    # Make sure the index is sorted
+    sorted_dates = sorted(date_index.unique())
+    
+    # Get the first and last date
+    start_date = sorted_dates[0]
+    end_date = sorted_dates[-1]
+    
+    # Create period ranges
+    periods = pd.period_range(start=start_date, end=end_date, freq=freq)
+    
+    # Generate chunks
+    chunks = []
+    for period in periods:
+        chunk_start = period.start_time
+        chunk_end = period.end_time
+        chunks.append((chunk_start, chunk_end))
+    
+    return chunks
+
+# Example usage:
+# product_pairs = [
+#     ('ProductA', 'ProductB', 'A_minus_B'),
+#     ('ProductC', 'ProductD', 'C_minus_D')
+# ]
+# 
+# # For processing in monthly chunks (default)
+# result_df = create_spreads_memory_efficient(df, product_pairs)
+# 
+# # For processing in weekly chunks
+# # result_df = create_spreads_memory_efficient(df, product_pairs, chunk_size='W')
+```
+
+This implementation:
+
+1. Processes data in time chunks (default is monthly, but you can adjust with `chunk_size`)
+2. Uses dictionaries for faster lookups instead of dataframe operations
+3. Only keeps necessary data in memory for each chunk
+4. Collects all new rows and adds them to the original dataframe only once at the end
+5. Explicitly clears memory after processing each chunk
+
+For extremely large datasets, you might also want to consider:
+
+1. Using a smaller chunk size (like 'W' for weekly) if monthly chunks are still too large
+2. Writing intermediate results to disk if even the collection of all new rows becomes too large​​​​​​​​​​​​​​​​
