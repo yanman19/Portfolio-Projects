@@ -1,0 +1,50 @@
+import pandas as pd
+import matplotlib.pyplot as plt
+import re
+
+def plot_futures_overlay(df, column_name):
+    match = re.search(r'([A-Za-z]+)(\d{2})', column_name)
+    if not match:
+        raise ValueError("Column name must contain MMMYY format (e.g., May25)")
+    
+    month_str, year_suffix = match.groups()
+    base_year = int("20" + year_suffix)
+
+    end_date = df.index.max()
+    start_date = end_date - pd.DateOffset(months=6)
+
+    fig, ax = plt.subplots(figsize=(12, 6))
+
+    # Plot current year contract
+    df_current = df.loc[start_date:end_date, column_name]
+    ax.plot(df_current.index, df_current.values, label=f'{month_str}{str(base_year)[2:]}', color='black', linewidth=3)
+
+    # Plot previous 4 years
+    for offset in range(1, 5):
+        year = base_year - offset
+        col = column_name.replace(f"{month_str}{str(base_year)[2:]}", f"{month_str}{str(year)[2:]}")
+        if col not in df.columns:
+            continue
+        past_end = end_date - pd.DateOffset(years=offset)
+        past_start = past_end - pd.DateOffset(months=6)
+        past_series = df.loc[past_start:past_end, col].copy()
+        past_series.index = past_series.index + pd.DateOffset(years=offset)
+        
+        # Extend 3 months forward if last value exists
+        if not past_series.empty:
+            last_val = past_series.iloc[-1]
+            last_date = past_series.index[-1]
+            extension_dates = pd.date_range(start=last_date + pd.Timedelta(days=1), periods=90, freq='D')
+            extension_series = pd.Series(last_val, index=extension_dates)
+            past_series = pd.concat([past_series, extension_series])
+
+        ax.plot(past_series.index, past_series.values, label=f'{month_str}{str(year)[2:]}')
+
+    ax.axvline(end_date, linestyle='--', color='gray')
+    ax.set_xlabel("Date")
+    ax.set_ylabel("Price")
+    ax.legend()
+    ax.grid(True)
+    ax.set_title(column_name)
+    plt.tight_layout()
+    plt.show()
