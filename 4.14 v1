@@ -1,0 +1,61 @@
+from bokeh.plotting import figure
+from bokeh.models import ColumnDataSource
+
+autocomplete = pn.widgets.AutocompleteInput(
+    name="Select Column",
+    options=all_columns,
+    placeholder="Type column name...",
+    case_sensitive=False,
+    min_characters=1,
+    width=300
+)
+
+scatter_plot_pane = pn.pane.Bokeh(height=400, width=800)
+
+def scatter_plot_function(column_name):
+    if column_name not in all_columns:
+        return figure(title="Invalid column")
+    x = np.arange(100)
+    y = np.random.randn(100) + np.random.randn(100)  # Placeholder logic
+    p = figure(title=f"Scatter Plot: {column_name}", height=400, width=800)
+    p.circle(x, y, size=8, color="navy", alpha=0.6)
+    return p
+
+def update_scatter_plot(event):
+    selected = autocomplete.value
+    plot = scatter_plot_function(selected)
+    scatter_plot_pane.object = plot
+
+autocomplete.param.watch(update_scatter_plot, 'value')
+
+scatter_tab = pn.Column(
+    pn.Spacer(height=20),
+    pn.Row(autocomplete),
+    pn.Spacer(height=10),
+    scatter_plot_pane,
+    width=2500
+)
+
+path_tab = pn.Column(pn.Spacer(height=20), width=2500)
+
+charts_tab = pn.Tabs(
+    ('Path', path_tab),
+    ('Scatter', scatter_tab),
+    tabs_location='above',
+    width=2500
+)
+
+
+#Below is the additional code you need to add right before dashboard = generate_main_dashboard(...):
+
+#Now, update this block in generate_main_dashboard:
+
+top_level_tabs = pn.Tabs(
+    ('Price Tracker', price_tracker_tabs),
+    ('Cash', pn.Column(pn.Spacer(height=20), width=2500)),
+    ('Seasonal', pn.Column(pn.Spacer(height=20), width=2500)),
+    ('Fundamentals', pn.Column(pn.Spacer(height=20), width=2500)),
+    ('Charts', charts_tab),
+    tabs_location='above',
+    width=2500
+)
