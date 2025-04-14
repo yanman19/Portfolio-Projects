@@ -1,0 +1,14 @@
+def make_path_chart(selected_value, df, output_dir='charts'):
+    import os
+    import matplotlib.pyplot as plt
+
+    os.makedirs(output_dir, exist_ok=True)
+    plt.figure(figsize=(10, 4))
+    plt.plot(df['MARKETDATE'], df[selected_value])
+    plt.title(f"{selected_value}")
+    plt.xlabel("Date")
+    plt.ylabel("Value")
+    
+    filepath = os.path.join(output_dir, f"{selected_value}.png")
+    plt.savefig(filepath, bbox_inches='tight')
+    plt.close()
