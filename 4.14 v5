@@ -1,0 +1,48 @@
+def create_charts_tab(df, column_list):
+    text_input = pn.widgets.AutocompleteInput(
+        name='Enter Variable:',
+        options=column_list,
+        case_sensitive=False,
+        placeholder='Start typing...',
+        width=300,
+        margin=(0, 0, 20, 0)
+    )
+
+    submit_button = pn.widgets.Button(name='Submit', button_type='primary', width=100)
+
+    output_pane = pn.Column(width=1200, sizing_mode='fixed')
+
+    def on_submit(event):
+        selected_col = text_input.value
+        if selected_col in column_list and selected_col in df.columns:
+            chart = make_path_chart(selected_col, df)
+            output_pane.clear()
+            output_pane.append(chart)
+
+    submit_button.on_click(on_submit)
+
+    chart_block = pn.Column(
+        pn.pane.Markdown("<div style='text-align:center; font-size:22px; font-weight:600; margin-bottom:10px;'>Path Chart</div>", width=1200),
+        pn.Row(text_input, submit_button, margin=(0, 0, 20, 0)),
+        output_pane,
+        width=1200,
+        css_classes=['table-container']
+    )
+
+    row_layout = pn.Row(chart_block, width=2500, sizing_mode='fixed')
+
+    path_tab = pn.Column(
+        pn.Spacer(height=10),
+        row_layout,
+        pn.Spacer(height=30),
+        width=2500
+    )
+
+    scatter_tab = pn.Column(pn.Spacer(height=20), width=2500)
+
+    return pn.Tabs(
+        ('Path', path_tab),
+        ('Scatter', scatter_tab),
+        tabs_location='above',
+        width=2500
+    )
