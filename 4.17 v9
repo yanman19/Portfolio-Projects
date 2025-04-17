@@ -1,0 +1,83 @@
+Here's the complete updated code you can copy and paste:
+
+```python
+def plot_contract_with_vintage_overlay(df, contract_col):
+    today = df.index.max()
+    six_months_ago = today - pd.DateOffset(months=6)
+    
+    # Updated regex to handle both traditional month formats and new suffix types
+    match = re.search(r"(Summer|Winter|Cal|Q4|[A-Z][a-z]{2})(_?)(\d{2})", contract_col)
+    if not match:
+        raise ValueError("Contract column must end in 'MmmYY' format, e.g., 'Jul23', or one of 'Summer_YY', 'Winter_YY', 'Cal_YY', 'Q4_YY'")
+    
+    suffix_type, underscore, year_suffix = match.groups()
+    
+    # Map special suffixes to months for plotting
+    month_mapping = {
+        "Summer": "Jul",
+        "Winter": "Jan",
+        "Cal": "Jan",
+        "Q4": "Oct"
+    }
+    
+    month_str = month_mapping.get(suffix_type, suffix_type)
+    base_year = int('20' + year_suffix)
+    
+    all_cols = {0: contract_col}
+    for offset in range(1, 4):
+        prior_year = base_year - offset
+        suffix = str(prior_year)[-2:]
+        vintage_col = contract_col.replace(f"{suffix_type}{underscore}{year_suffix}", f"{suffix_type}{underscore}{suffix}")
+        if vintage_col in df.columns:
+            all_cols[offset] = vintage_col
+    
+    plot_df = pd.DataFrame()
+    
+    if contract_col in df.columns:
+        main_data = df[[contract_col]].copy()
+        main_data = main_data.loc[main_data.index.duplicated(keep='first')]
+        main_data = main_data.loc[(main_data.index >= six_months_ago) & (main_data.index <= today)]
+        main_data = main_data.interpolate(method='time').ffill(method='ffill').bfill(method='bfill')
+        plot_df[(base_year)] = main_data[contract_col]
+    
+    for offset, col in all_cols.items():
+        if offset == 0:
+            continue
+        
+        vintage_start = six_months_ago - pd.DateOffset(years=offset)
+        vintage_end = today - pd.DateOffset(months=3) - pd.DateOffset(years=offset)
+        vintage_data = df[[col]].loc[vintage_start:vintage_end].copy()
+        vintage_data = vintage_data.loc[vintage_data.index.duplicated(keep='first')]
+        vintage_data.index = vintage_data.index + pd.DateOffset(years=offset)
+        vintage_data = vintage_data.interpolate(method='time').ffill(method='ffill').bfill(method='bfill')
+        plot_df[(base_year - offset)] = vintage_data[col]
+    
+    # Mask out future values strictly for current year to avoid flat line beyond today
+    if str(base_year) in plot_df.columns:
+        plot_df.loc[plot_df.index > today, str(base_year)] = None
+    
+    plot_df = plot_df.interpolate(method='time').ffill(method='ffill').bfill(method='bfill')
+    
+    plt.figure(figsize=(14, 6))
+    
+    if str(base_year) in plot_df.columns:
+        plt.plot(plot_df.index.strftime('%b %d'), plot_df[str(base_year)], color='black', linewidth=2.5, label=str(base_year))
+    
+    for label in sorted(plot_df.columns, reverse=True):
+        if label != str(base_year):
+            plt.plot(plot_df.index.strftime('%b %d'), plot_df[label], label=label, linewidth=1)
+    
+    today_str = today.strftime('%b %d')
+    plt.axvline(x=today_str, color='black', linestyle='--', linewidth=1, label="Today")
+    
+    plt.xlabel('Date (MM/DD)')
+    plt.ylabel('Price')
+    plt.title(f"{contract_col}")
+    plt.legend()
+    plt.xticks(rotation=45)
+    plt.xticks(plt.xticks()[0][::int(len(plt.xticks()[0]) // 10)])
+    plt.tight_layout()
+    plt.show()
+```
+
+This updated version will handle both traditional month formats (like "Jul23") and the new suffix formats (like "Summer_23", "Winter_23", "Cal_23", and "Q4_23"), mapping them to appropriate months for plotting as you requested.​​​​​​​​​​​​​​​​
