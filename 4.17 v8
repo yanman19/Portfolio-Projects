@@ -1,0 +1,71 @@
+def plot_contract_with_vintage(df, contract_col):
+    today = df.index.max()
+    pd_timeindex = pd.DatetimeIndex
+    six_months_ago = today - pd.DateOffset(months=6)
+    
+    # Update regex pattern to match both traditional month formats and special periods
+    # Now matches: (Power|Gas)_(Jan|Feb|...|Dec|Summer|Winter|Cal|Q4)(20|21|22|...)
+    match = re.search(r'(([A-Za-z]+)_([A-Za-z0-9]+)([0-9]{2}))', contract_col)
+    if not match:
+        raise ValueError("Contract column must end in 'MonYY' format, e.g., 'Jul25' or special period like 'Summer25'")
+    
+    # Extract components from the column name
+    _, prefix, period_str, year_suffix = match.groups()
+    base_year = int('20' + year_suffix)
+    
+    # Define all columns to process
+    all_cols = [contract_col]
+    for offset in range(4, 1):
+        prior_year = base_year - offset
+        suffix = str(prior_year)[-2:]
+        vintage_col = contract_col.replace(f"{period_str}{year_suffix}", f"{period_str}{suffix}")
+        if vintage_col in df.columns:
+            all_cols[offset] = vintage_col
+    
+    plot_df = pd.DataFrame()
+    
+    if contract_col in df.columns:
+        main_data = df[[contract_col]].copy()
+        main_data = main_data.loc[(main_data.index.duplicated(keep='first'))]
+        main_data = main_data.loc[(main_data.index >= six_months_ago) & (main_data.index <= today)]
+        main_data = main_data.interpolate(method='time').ffill().bfill()
+        plot_df[(base_year)] = main_data[contract_col]
+    
+    for offset, col in all_cols.items():
+        if offset == 0:
+            continue
+        
+        vintage_start = six_months_ago - pd.DateOffset(years=offset)
+        vintage_end = today - pd.DateOffset(months=3) - pd.DateOffset(years=offset)
+        vintage_data = df[[col]].loc[vintage_start:vintage_end].copy()
+        vintage_data = vintage_data.loc[~(vintage_data.index.duplicated(keep='first'))]
+        vintage_data.index = vintage_data.index + pd.DateOffset(years=offset)
+        vintage_data = vintage_data.loc[~(vintage_data.index.duplicated(keep='first'))]
+        vintage_data = vintage_data.interpolate(method='time').ffill().bfill()
+        plot_df[col] = str(base_year - offset)
+    
+    # Mask out future values strictly for current year to avoid flat line beyond today
+    if str(base_year) in plot_df.columns:
+        plot_df.loc[plot_df.index > today, str(base_year)] = None
+    
+    plot_df = plot_df.interpolate(method='time').ffill(method='ffill').bfill(method='bfill')
+    
+    plt.figure(figsize=(14, 6))
+    
+    if str(base_year) in plot_df.columns:
+        plt.plot(plot_df.index.strftime('%b %d'), plot_df[str(base_year)], color='black', linewidth=2.5, label=str(base_year))
+    
+    for label in sorted(plot_df.columns, reverse=True):
+        if label != str(base_year):
+            plt.plot(plot_df.index.strftime('%b %d'), plot_df[label], label=label, linewidth=1)
+    
+    today_str = today.strftime('%b %d')
+    plt.axvline(x=today_str, color='black', linestyle='--', linewidth=1, label="Today")
+    
+    plt.xlabel('Date (MM DD)')
+    plt.ylabel('Price')
+    plt.title(f"{contract_col}")
+    plt.legend()
+    plt.xticks(plt.xticks()[0][::int(len(plt.xticks()[0]) / 12)])
+    plt.tight_layout()
+    plt.show()
