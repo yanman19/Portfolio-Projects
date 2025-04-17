@@ -1,0 +1,68 @@
+def plot_contract_with_vintage_overlay(df, contract_col):
+    today = df.index.max() + pd.Timedelta(days=1)
+    six_months_ago = today - pd.DateOffset(months=6)
+
+    match = re.search(r'([A-Za-z]+)(\d{2})', contract_col)
+    if not match:
+        raise ValueError("Contract column must end in 'MonYY' format or include tags like Winter, Summer, etc.")
+
+    month_str = match.group(1)
+    year_suffix = match.group(2)
+    base_year = int('20' + year_suffix)
+
+    ref_month_map = {
+        'Winter': 1,
+        'Summer': 7,
+        'Q4': 10,
+        'Cal': 1
+    }
+
+    if month_str in ref_month_map:
+        month = ref_month_map[month_str]
+    else:
+        month = datetime.strptime(month_str[:3], '%b').month
+
+    all_cols = {}
+    for offset in range(0, 4):
+        prior_year = base_year - offset
+        suffix = str(prior_year)[-2:]
+        suffix_col = contract_col.replace(month_str + year_suffix, f'{month_str}{suffix}')
+        if suffix_col in df.columns:
+            all_cols[prior_year] = suffix_col
+
+    plot_df = pd.DataFrame()
+
+    def clean_and_shift(colname, shift_years):
+        data = df[[colname]].copy()
+        data = data[~data.index.duplicated(keep='first')]
+        data.index = pd.to_datetime(data.index) + pd.DateOffset(years=shift_years)
+        data = data.loc[(data.index >= six_months_ago) & (data.index <= today)]
+        return data.interpolate(method='time').fillna(method='ffill').fillna(method='bfill')
+
+    if contract_col in df.columns:
+        plot_df[base_year] = clean_and_shift(contract_col, 0)[contract_col]
+
+    for year, col in all_cols.items():
+        if col != contract_col:
+            shifted = clean_and_shift(col, base_year - year)
+            plot_df[year] = shifted[col]
+
+    plt.figure(figsize=(14, 6))
+
+    if base_year in plot_df.columns:
+        plt.plot(plot_df.index.strftime('%m-%d'), plot_df[base_year], color='black', linewidth=2.5, label=str(base_year))
+
+    for label in sorted(plot_df.columns, reverse=True):
+        if label != base_year:
+            plt.plot(plot_df.index.strftime('%m-%d'), plot_df[label], label=label, linewidth=1)
+
+    today_str = today.strftime('%m-%d')
+    plt.axvline(x=today_str, color='black', linestyle='--', linewidth=1, label='Today')
+
+    plt.xlabel('Date (MM-DD)')
+    plt.ylabel('Price')
+    plt.title(f"{contract_col}")
+    plt.xticks(rotation=45)
+    plt.tight_layout()
+    plt.legend()
+    plt.show()
