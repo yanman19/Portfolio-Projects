@@ -1,0 +1,81 @@
+Looking at the seasonal tab code, I see how it's saving HTML tables and then rendering them. Let's fix your chart function by adapting a similar approach:
+
+```python
+import matplotlib.pyplot as plt
+import base64
+from io import BytesIO
+
+def create_charts_tab(df, column_list):
+    chart_rows = pn.Column(sizing_mode='fixed', width=2500)
+
+    for i in range(0, len(column_list), 2):
+        row = pn.Row(sizing_mode='fixed', width=2500)
+
+        # First chart in the row
+        col1 = column_list[i]
+        fig1 = plot_contract_with_vintage_overlay1(df, col1)
+        
+        # Save figure to a base64 string
+        buffer = BytesIO()
+        fig1.savefig(buffer, format='png', bbox_inches='tight', dpi=100)
+        buffer.seek(0)
+        img_str = base64.b64encode(buffer.read()).decode('utf-8')
+        plt.close(fig1)  # Close the figure to free memory
+        
+        # Create HTML image element
+        html_img1 = f'<img src="data:image/png;base64,{img_str}" style="width:1200px;">'
+        
+        block1 = pn.Column(
+            pn.pane.Markdown(f"<div style='text-align:center; font-size:20px; font-weight:600; margin-bottom:10px'>{col1}</div>"),
+            pn.pane.HTML(html_img1, width=1200),
+            width=1200,
+            css_classes=['table-container']
+        )
+        row.append(block1)
+
+        # Second chart in the row (if available)
+        if i + 1 < len(column_list):
+            col2 = column_list[i + 1]
+            fig2 = plot_contract_with_vintage_overlay1(df, col2)
+            
+            buffer = BytesIO()
+            fig2.savefig(buffer, format='png', bbox_inches='tight', dpi=100)
+            buffer.seek(0)
+            img_str = base64.b64encode(buffer.read()).decode('utf-8')
+            plt.close(fig2)
+            
+            html_img2 = f'<img src="data:image/png;base64,{img_str}" style="width:1200px;">'
+            
+            block2 = pn.Column(
+                pn.pane.Markdown(f"<div style='text-align:center; font-size:20px; font-weight:600; margin-bottom:10px'>{col2}</div>"),
+                pn.pane.HTML(html_img2, width=1200),
+                width=1200,
+                css_classes=['table-container']
+            )
+            row.append(block2)
+
+        chart_rows.append(row)
+        chart_rows.append(pn.Spacer(height=40))
+
+    return pn.Column(chart_rows, width=2500)
+```
+
+You'll also need to modify the `plot_contract_with_vintage_overlay1` function to return the figure instead of showing it:
+
+```python
+def plot_contract_with_vintage_overlay1(df, col):
+    # Your existing plotting code here
+    
+    # Replace plt.show() with:
+    fig = plt.gcf()  # Get current figure
+    return fig  # Return it
+```
+
+This approach:
+1. Creates the figure with your plotting function
+2. Saves it to a BytesIO buffer
+3. Converts to base64 encoding
+4. Creates an HTML image tag with the base64 data
+5. Uses Panel's HTML pane to render the image
+
+This mimics how the seasonal tab works, where the HTML tables are rendered and displayed using the HTML pane.​​​​​​​​​​​​​​​​
