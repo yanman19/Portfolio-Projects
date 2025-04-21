@@ -1,0 +1,116 @@
+Here's a simple solution to display 8 PNG chart files in a Panel layout with 2 charts per row:
+
+```python
+import panel as pn
+import base64
+from io import BytesIO
+
+def create_charts_tab(chart_pngs, chart_titles):
+    """
+    Display PNG charts in a Panel layout with 2 charts per row.
+    
+    Parameters:
+    - chart_pngs: List of PNG binary data for each chart
+    - chart_titles: List of titles corresponding to each chart
+    
+    Returns:
+    - Panel layout containing the charts
+    """
+    chart_rows = pn.Column(sizing_mode='fixed', width=2500)
+    
+    # Process charts in pairs
+    for i in range(0, len(chart_pngs), 2):
+        row = pn.Row(sizing_mode='fixed', width=2500)
+        
+        # First chart
+        png_data1 = chart_pngs[i]
+        title1 = chart_titles[i] if i < len(chart_titles) else f"Chart {i+1}"
+        
+        # Convert binary PNG to base64
+        img_str1 = base64.b64encode(png_data1).decode('utf-8')
+        html_img1 = f'<img src="data:image/png;base64,{img_str1}" style="width:100%;">'
+        
+        block1 = pn.Column(
+            pn.pane.Markdown(f"<div style='text-align:center; font-size:20px; font-weight:600; margin-bottom:10px'>{title1}</div>"),
+            pn.pane.HTML(html_img1, width=1200),
+            width=1200,
+            css_classes=['table-container']
+        )
+        row.append(block1)
+        
+        # Second chart (if available)
+        if i + 1 < len(chart_pngs):
+            png_data2 = chart_pngs[i+1]
+            title2 = chart_titles[i+1] if i+1 < len(chart_titles) else f"Chart {i+2}"
+            
+            img_str2 = base64.b64encode(png_data2).decode('utf-8')
+            html_img2 = f'<img src="data:image/png;base64,{img_str2}" style="width:100%;">'
+            
+            block2 = pn.Column(
+                pn.pane.Markdown(f"<div style='text-align:center; font-size:20px; font-weight:600; margin-bottom:10px'>{title2}</div>"),
+                pn.pane.HTML(html_img2, width=1200),
+                width=1200,
+                css_classes=['table-container']
+            )
+            row.append(block2)
+        
+        chart_rows.append(row)
+        chart_rows.append(pn.Spacer(height=40))
+    
+    return pn.Column(chart_rows, width=2500)
+
+# Example usage:
+# Assuming you have your PNG files as binary data in a list:
+# chart_pngs = [png_data1, png_data2, png_data3, png_data4, png_data5, png_data6, png_data7, png_data8]
+# chart_titles = ["Chart 1", "Chart 2", "Chart 3", "Chart 4", "Chart 5", "Chart 6", "Chart 7", "Chart 8"]
+# charts_tab = create_charts_tab(chart_pngs, chart_titles)
+```
+
+If you have the charts as files on disk rather than as binary data, you can load them like this:
+
+```python
+# Load chart PNGs from files
+chart_pngs = []
+for i in range(1, 9):  # Assuming files are named chart1.png through chart8.png
+    with open(f"chart{i}.png", "rb") as f:
+        chart_pngs.append(f.read())
+
+chart_titles = ["Chart 1", "Chart 2", "Chart 3", "Chart 4", "Chart 5", "Chart 6", "Chart 7", "Chart 8"]
+charts_tab = create_charts_tab(chart_pngs, chart_titles)
+```
+
+Alternatively, if you're generating the charts in your code with matplotlib and want to save them to variables:
+
+```python
+import matplotlib.pyplot as plt
+from io import BytesIO
+
+# Generate and save charts to a list
+chart_pngs = []
+chart_titles = []
+
+for i in range(8):
+    # Create a matplotlib figure
+    fig = plt.figure(figsize=(10, 6))
+    plt.plot([0, 1, 2], [i, i+1, i*2])
+    plt.title(f"Chart {i+1}")
+    
+    # Save to BytesIO
+    buf = BytesIO()
+    fig.savefig(buf, format='png', bbox_inches='tight')
+    plt.close(fig)
+    
+    # Get binary data
+    buf.seek(0)
+    chart_pngs.append(buf.getvalue())
+    chart_titles.append(f"Chart {i+1}")
+
+# Create the tab
+charts_tab = create_charts_tab(chart_pngs, chart_titles)
+```
+
+This solution:
+1. Takes a list of PNG binary data and corresponding titles
+2. Arranges them in a Panel layout with 2 charts per row
+3. Displays them with proper titles and formatting
+4. Works with both pre-generated PNG files and dynamically generated matplotlib figures​​​​​​​​​​​​​​​​
