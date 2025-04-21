@@ -1,0 +1,82 @@
+Let's debug this issue thoroughly. If the charts appear in the Jupyter kernel output but not in your panel, it suggests the charts are being generated but not properly integrated into the Panel layout.
+
+Let's modify the code with a different approach that's more aligned with Panel's preferred way of handling Matplotlib figures:
+
+```python
+import matplotlib.pyplot as plt
+import panel as pn
+from matplotlib.figure import Figure
+
+def create_charts_tab(df, column_list):
+    chart_rows = pn.Column(sizing_mode='fixed', width=2500)
+
+    for i in range(0, len(column_list), 2):
+        row = pn.Row(sizing_mode='fixed', width=2500)
+
+        # First chart in the row
+        col1 = column_list[i]
+        # Create a new figure explicitly
+        fig1 = Figure(figsize=(12, 8))
+        # Pass the figure to your plotting function
+        plot_contract_with_vintage_overlay1(df, col1, fig=fig1)
+        
+        # Create a Panel matplotlib pane directly from the figure
+        mpl_pane1 = pn.pane.Matplotlib(fig1, dpi=144, tight=True, width=1200)
+        
+        block1 = pn.Column(
+            pn.pane.Markdown(f"<div style='text-align:center; font-size:20px; font-weight:600; margin-bottom:10px'>{col1}</div>"),
+            mpl_pane1,
+            width=1200,
+            css_classes=['table-container']
+        )
+        row.append(block1)
+
+        # Second chart in the row (if available)
+        if i + 1 < len(column_list):
+            col2 = column_list[i + 1]
+            fig2 = Figure(figsize=(12, 8))
+            plot_contract_with_vintage_overlay1(df, col2, fig=fig2)
+            
+            mpl_pane2 = pn.pane.Matplotlib(fig2, dpi=144, tight=True, width=1200)
+            
+            block2 = pn.Column(
+                pn.pane.Markdown(f"<div style='text-align:center; font-size:20px; font-weight:600; margin-bottom:10px'>{col2}</div>"),
+                mpl_pane2,
+                width=1200,
+                css_classes=['table-container']
+            )
+            row.append(block2)
+
+        chart_rows.append(row)
+        chart_rows.append(pn.Spacer(height=40))
+
+    return pn.Column(chart_rows, width=2500)
+```
+
+And you'll need to modify your plotting function to accept a figure parameter:
+
+```python
+def plot_contract_with_vintage_overlay1(df, col, fig=None):
+    if fig is None:
+        fig = plt.figure(figsize=(12, 8))
+    
+    # Instead of using plt directly, get the axes from the figure
+    ax = fig.add_subplot(111)
+    
+    # Your plotting code, but using ax instead of plt
+    # For example: 
+    # ax.plot(df['MARKETDATE'], df[col])
+    # ax.set_title(col)
+    # etc.
+    
+    # No plt.show()
+    return fig
+```
+
+This approach has several advantages:
+1. It creates a dedicated figure for each plot
+2. It explicitly passes the figure to your plotting function
+3. It uses Panel's Matplotlib pane which is designed for this purpose
+4. It avoids any potential issues with figures being shown and closed
+
+If your `plot_contract_with_vintage_overlay1` function is already complex, you might need to refactor it more carefully to work with an explicit axes object rather than using the global pyplot interface.​​​​​​​​​​​​​​​​
