@@ -1,0 +1,11 @@
+charts_tab = create_charts_tab(peak_df, all_columns)  # or any df you want to use
+
+top_level_tabs = pn.Tabs(
+    ('Price Tracker', price_tracker_tabs),
+    ('Cash', pn.Column(pn.Spacer(height=20), width=2500)),
+    ('Seasonal', pn.Column(pn.Spacer(height=20), width=2500)),
+    ('Fundamentals', pn.Column(pn.Spacer(height=20), width=2500)),
+    ('Charts', charts_tab),
+    tabs_location='above',
+    width=2500
+)
