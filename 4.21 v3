@@ -1,0 +1,59 @@
+I'll simplify the code by removing the BytesIO usage and directly saving/loading the figures:
+
+```python
+import matplotlib.pyplot as plt
+import panel as pn
+
+def create_charts_tab(df, column_list):
+    chart_rows = pn.Column(sizing_mode='fixed', width=2500)
+
+    for i in range(0, len(column_list), 2):
+        row = pn.Row(sizing_mode='fixed', width=2500)
+        
+        # First chart in the row
+        col1 = column_list[i]
+        fig1 = plot_contract_with_vintage_overlay1(df, col1)
+        plt.close(fig1)  # Close the figure to prevent display
+        
+        block1 = pn.Column(
+            pn.pane.Markdown(f"<div style='text-align:center; font-size:20px; font-weight:600; margin-bottom:10px'>{col1}</div>"),
+            pn.pane.Matplotlib(fig1, width=1200),
+            width=1200,
+            css_classes=['table-container']
+        )
+        row.append(block1)
+
+        # Second chart in the row (if available)
+        if i + 1 < len(column_list):
+            col2 = column_list[i + 1]
+            fig2 = plot_contract_with_vintage_overlay1(df, col2)
+            plt.close(fig2)  # Close the figure to prevent display
+            
+            block2 = pn.Column(
+                pn.pane.Markdown(f"<div style='text-align:center; font-size:20px; font-weight:600; margin-bottom:10px'>{col2}</div>"),
+                pn.pane.Matplotlib(fig2, width=1200),
+                width=1200,
+                css_classes=['table-container']
+            )
+            row.append(block2)
+
+        chart_rows.append(row)
+        chart_rows.append(pn.Spacer(height=40))
+
+    return pn.Column(chart_rows, width=2500)
+```
+
+Also, you'll need to modify the `plot_contract_with_vintage_overlay1` function to return the figure instead of showing it:
+
+```python
+def plot_contract_with_vintage_overlay1(df, col):
+    # Your existing plotting code here
+    
+    # Replace plt.show() with:
+    return plt.gcf()  # Get current figure and return it
+```
+
+This simplified version:
+1. Uses Panel's built-in Matplotlib pane instead of converting to PNG
+2. Directly passes the figure objects to Panel
+3. Removes the need for BytesIO, base64 encoding, and temporary file handling​​​​​​​​​​​​​​​​
