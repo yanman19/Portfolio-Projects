@@ -1,0 +1,45 @@
+import matplotlib.pyplot as plt
+import io
+import base64
+
+def create_charts_tab(df, column_list):
+    chart_rows = pn.Column(sizing_mode='fixed', width=2500)
+
+    for i in range(0, len(column_list), 2):
+        row = pn.Row(sizing_mode='fixed', width=2500)
+
+        col1 = column_list[i]
+        fig1 = plot_contract_with_vintage_overlay1(df, col1)
+        buf1 = io.BytesIO()
+        fig1.savefig(buf1, format='png', bbox_inches='tight')
+        plt.close(fig1)
+        img1 = pn.pane.PNG(buf1.getvalue(), width=1200)
+
+        block1 = pn.Column(
+            pn.pane.Markdown(f"<div style='text-align:center; font-size:20px; font-weight:600; margin-bottom:10px'>{col1}</div>"),
+            img1,
+            width=1200,
+            css_classes=['table-container']
+        )
+        row.append(block1)
+
+        if i + 1 < len(column_list):
+            col2 = column_list[i + 1]
+            fig2 = plot_contract_with_vintage_overlay1(df, col2)
+            buf2 = io.BytesIO()
+            fig2.savefig(buf2, format='png', bbox_inches='tight')
+            plt.close(fig2)
+            img2 = pn.pane.PNG(buf2.getvalue(), width=1200)
+
+            block2 = pn.Column(
+                pn.pane.Markdown(f"<div style='text-align:center; font-size:20px; font-weight:600; margin-bottom:10px'>{col2}</div>"),
+                img2,
+                width=1200,
+                css_classes=['table-container']
+            )
+            row.append(block2)
+
+        chart_rows.append(row)
+        chart_rows.append(pn.Spacer(height=40))
+
+    return pn.Column(chart_rows, width=2500)
