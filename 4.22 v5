@@ -1,0 +1,106 @@
+import pandas as pd
+import numpy as np
+import panel as pn
+from bokeh.models.widgets.tables import DataTable, TableColumn
+from bokeh.models import ColumnDataSource
+
+pn.extension('tabulator')
+
+def create_cash_pivot_tables(df, column_list):
+    df = df.copy()
+    df['MARKETDATE'] = pd.to_datetime(df['MARKETDATE'])
+    df['HE'] = df['HE'].astype(int)
+
+    today = pd.Timestamp.today().normalize()
+    start_date = today - pd.Timedelta(days=10)
+    end_date = today + pd.Timedelta(days=5)
+
+    panels = []
+
+    for col in column_list:
+        sub_df = df[['HE', 'MARKETDATE', col]].copy()
+        sub_df[col] = sub_df[col].fillna(0)
+        sub_df = sub_df[(sub_df['MARKETDATE'] >= start_date) & (sub_df['MARKETDATE'] <= end_date)]
+
+        pivot = sub_df.pivot_table(index='HE', columns='MARKETDATE', values=col, aggfunc='mean')
+
+        peak_hours = list(range(8, 24))
+        all_hours = list(range(1, 25))
+        offpeak_hours = [h for h in all_hours if h not in peak_hours]
+
+        pivot.loc['Peak'] = pivot.loc[peak_hours].mean()
+        pivot.loc['Offpeak'] = pivot.loc[offpeak_hours].mean()
+        
+        # Format the dates to MM/YY with extra padding for visibility
+        pivot.columns = pivot.columns.strftime('%m/%y')
+        
+        # Convert to styled DataFrame for rendering
+        styled_pivot = pivot.style.background_gradient(axis=0, cmap='RdYlGn').format("{:,.0f}")
+        
+        # Use Panel's DataFrame pane with render method
+        pivot_pane = pn.pane.DataFrame(
+            styled_pivot, 
+            width=1100,  # Slightly smaller pivot table
+            height=600,  # Taller to allow for better spacing
+            sizing_mode='stretch_width',
+            index_names=True,
+            show_index=True,
+            fit_columns=True,
+            row_height=35,  # Increased row height for better spacing
+            text_align='center'
+        )
+        
+        # Create a container for each pivot table
+        container = pn.Column(
+            pn.pane.Markdown(f"## {col}", align='center'),
+            pivot_pane,
+            width=1300,  # Wider container
+            height=700,   # Taller container
+            margin=(20, 10),  # Add margin for separation
+            background='#f8f9fa',
+            css_classes=['pivot-container']
+        )
+        
+        panels.append(container)
+
+    # Create a responsive layout with better spacing
+    layout = pn.Column(sizing_mode='stretch_width', margin=(10, 20))
+    
+    # Add custom CSS for better styling
+    css = """
+    <style>
+    .pivot-container {
+        border-radius: 8px;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        padding: 15px;
+        margin-bottom: 30px;
+    }
+    .bk-data-table {
+        font-size: 14px;
+    }
+    .bk-data-table th {
+        padding-bottom: 10px !important;
+        font-weight: bold;
+        font-size: 15px;
+    }
+    </style>
+    """
+    layout.append(pn.pane.HTML(css))
+    
+    # Add pairs of panels in rows
+    for i in range(0, len(panels), 2):
+        row_panels = panels[i:i+2]
+        layout.append(pn.Row(*row_panels, sizing_mode='stretch_width', height=750))
+
+    return layout
+
+def get_cash_tab(df, column_list):
+    detailed_tab = create_cash_pivot_tables(df, column_list)
+    return pn.Tabs(
+        ('Summary', pn.pane.Markdown('# Cash Summary\nDetailed pivot tables are available in the Detailed tab.')),
+        ('Detailed', detailed_tab)
+    )
+
+# Example usage:
+# cash_tab = get_cash_tab(cash_df, ['ERCOT_Load', 'ERCOT_Pop_Temp_TOTAL'])
+# tabs.append(('Cash', cash_tab))
