@@ -1,0 +1,53 @@
+import pandas as pd
+import numpy as np
+import panel as pn
+
+pn.extension('tabulator')
+
+def create_cash_pivot_tables(df, column_list):
+    df = df.copy()
+    df['MARKETDATE'] = pd.to_datetime(df['MARKETDATE'])
+    df['HE'] = df['HE'].astype(int)
+
+    today = pd.Timestamp.today().normalize()
+    start_date = today - pd.Timedelta(days=10)
+    end_date = today + pd.Timedelta(days=5)
+
+    panels = []
+
+    for col in column_list:
+        sub_df = df[['HE', 'MARKETDATE', col]].copy()
+        sub_df[col] = sub_df[col].fillna(0)
+        sub_df = sub_df[(sub_df['MARKETDATE'] >= start_date) & (sub_df['MARKETDATE'] <= end_date)]
+
+        pivot = sub_df.pivot_table(index='HE', columns='MARKETDATE', values=col, aggfunc='mean')
+
+        peak_hours = list(range(8, 24))
+        all_hours = list(range(1, 25))
+        offpeak_hours = [h for h in all_hours if h not in peak_hours]
+
+        pivot.loc['Peak'] = pivot.loc[peak_hours].mean()
+        pivot.loc['Offpeak'] = pivot.loc[offpeak_hours].mean()
+
+        styled = pivot.style.background_gradient(axis=0, cmap='RdYlGn').format("{:,.0f}")
+        if today in pivot.columns:
+            styled = styled.set_properties(**{'border': '2px solid black'}, subset=[today])
+
+        panels.append(pn.pane.DataFrame(styled, width=550))
+
+    layout = pn.Column()
+    for i in range(0, len(panels), 2):
+        layout.append(pn.Row(*panels[i:i+2]))
+
+    return layout
+
+def get_cash_tab(df, column_list):
+    detailed_tab = create_cash_pivot_tables(df, column_list)
+    return pn.Tabs(
+        ('Summary', pn.pane.Markdown('')),
+        ('Detailed', detailed_tab)
+    )
+
+# Usage in dashboard
+# cash_tab = get_cash_tab(cash_df, ['ERCOT_Load', 'ERCOT_Pop_Temp_TOTAL'])
+# tabs.append(('Cash', cash_tab))
