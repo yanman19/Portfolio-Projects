@@ -1,0 +1,54 @@
+def create_cash_summary(df, lists_of_items, titles):
+    today = pd.to_datetime(datetime.datetime.today().date())
+    date_range = [today - pd.Timedelta(days=i) for i in reversed(range(11))]  # 10 days ago to today
+
+    tables = []
+    df.index = pd.to_datetime(df.index)
+
+    # Only keep the past 11 days
+    df = df[df.index.isin(date_range)]
+
+    for item_list, title in zip(lists_of_items, titles):
+        subset = df[item_list].copy()
+        subset = subset.reindex(date_range)
+        subset = subset.transpose()
+
+        avg_10 = df[item_list].rolling(window=10, min_periods=1).mean().iloc[-1]
+        avg_5 = df[item_list].rolling(window=5, min_periods=1).mean().iloc[-1]
+
+        subset['10D_AVG'] = avg_10.values
+        subset['5D_AVG'] = avg_5.values
+
+        subset = subset.round(2)
+        subset = subset.fillna('-')
+
+        tab = pn.widgets.Tabulator(
+            subset,
+            width=1600,
+            height=300,
+            theme='simple',
+            layout='fit_columns',
+            show_index=True,
+            selectable=False,
+            pagination=None,
+            sizing_mode="stretch_width",
+            editable=False,  # <- Fully read-only
+            configuration={
+                'movableColumns': False,
+                'resizableColumns': False,
+                'autoColumns': False,
+                'selectable': False,
+                'selectableRows': False
+            }
+        )
+
+        tables.append(
+            pn.Column(
+                pn.pane.Markdown(f"### {title}", style={'font-size': '20px'}),
+                tab,
+                pn.Spacer(height=50),
+                sizing_mode="stretch_width"
+            )
+        )
+
+    return pn.Column(*tables, sizing_mode="stretch_width")
