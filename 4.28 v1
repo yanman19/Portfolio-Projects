@@ -1,0 +1,38 @@
+import datetime
+
+def create_cash_summary(df, lists_of_items, titles):
+    today = pd.to_datetime(datetime.datetime.today().date())
+    date_range = [today - pd.Timedelta(days=i) for i in reversed(range(11))]  # 10 days ago to today
+
+    tables = []
+    for item_list, title in zip(lists_of_items, titles):
+        subset = df[df['COLUMN'].isin(item_list)].copy()
+        pivot = subset.pivot(index='COLUMN', columns='DATE', values='VALUE')
+        pivot = pivot.reindex(columns=date_range, fill_value=np.nan)
+        pivot = pivot.fillna('-')
+        
+        avg_10 = subset.groupby('COLUMN')['VALUE'].rolling(window=10, min_periods=1).mean().groupby('COLUMN').last()
+        avg_5 = subset.groupby('COLUMN')['VALUE'].rolling(window=5, min_periods=1).mean().groupby('COLUMN').last()
+        
+        pivot['10D_AVG'] = avg_10
+        pivot['5D_AVG'] = avg_5
+
+        tab = pn.widgets.Tabulator(pivot, width=1600, height=300)
+        
+        tables.append(pn.Column(pn.pane.Markdown(f"### {title}"), tab, sizing_mode="stretch_width"))
+        
+    return pn.Column(*tables, sizing_mode="stretch_width")
+
+def cash_tab(df, lists_of_items, titles, value_columns):
+    summary = create_cash_summary(df, lists_of_items, titles)
+    detailed = create_pivot_tables(df, value_columns)
+    return pn.Tabs(
+        ('Summary', summary),
+        ('Detailed', detailed)
+    )
+
+dashboard = pn.Tabs(
+    ('Seasonals', seasonal_tab(df_seasonals, seasonal_value_columns)),
+    ('Fundamentals', fundamental_tab(df_fundamentals, fundamental_value_columns, region_options)),
+    ('Cash', cash_tab(df_cash, lists_of_items, titles, cash_value_columns))
+)
