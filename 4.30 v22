@@ -1,0 +1,211 @@
+Here's the complete function with the modified percentile calculation logic:
+
+```python
+def plot_monthly_grid(months, plant_df, aggregate=False):
+    """
+    Create a grid of monthly load growth plots comparing year over year changes.
+    Uses combined temperature ranges from both years for percentile calculations.
+    """
+    plant_df['MARKETDATE'] = pd.to_datetime(plant_df['MARKETDATE'])
+    plant_df['Year'] = plant_df['MARKETDATE'].dt.year 
+    plant_df['Month'] = plant_df['MARKETDATE'].dt.month
+    plant_df['Day'] = plant_df['MARKETDATE'].dt.day
+
+    months_names = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+    percentiles = [0.3, 0.5, 0.7]  # Define percentile points
+    
+    # Define the find_closest function outside the loop
+    def find_closest(df, target):
+        return df.iloc[(df['ERCOT_Pop_Temp'] - target).abs().argsort()[:1]]
+    
+    if aggregate:
+        # Aggregate data - get latest year and previous year
+        current = plant_df[plant_df['Year'] == plant_df['Year'].max()]
+        previous = plant_df[plant_df['Year'] == plant_df['Year'].max() - 1]
+        
+        # Aggregate data by month
+        current_daily = current.groupby(['Month'])['ERCOT_Pop_Temp', 'RTLoad'].mean()
+        previous_daily = previous.groupby(['Month'])['ERCOT_Pop_Temp', 'RTLoad'].mean()
+        
+        # Create a scatter plot of all months aggregated together
+        fig, ax = plt.subplots(figsize=(14, 8))
+        
+        # Fit polynomial model on current data
+        poly_model_current = make_pipeline(PolynomialFeatures(degree=2), LinearRegression())
+        poly_model_current.fit(current_daily[['ERCOT_Pop_Temp']], current_daily['RTLoad'])
+        current_daily['Fitted_Predict'] = poly_model_current.predict(current_daily[['ERCOT_Pop_Temp']])
+        
+        # Fit polynomial model on previous data
+        poly_model_previous = make_pipeline(PolynomialFeatures(degree=2), LinearRegression())
+        poly_model_previous.fit(previous_daily[['ERCOT_Pop_Temp']], previous_daily['RTLoad'])
+        previous_daily['Fitted_Predict'] = poly_model_previous.predict(previous_daily[['ERCOT_Pop_Temp']])
+        
+        # Find the overlapping temperature range between both periods
+        current_min_temp = current_daily['ERCOT_Pop_Temp'].min()
+        current_max_temp = current_daily['ERCOT_Pop_Temp'].max()
+        previous_min_temp = previous_daily['ERCOT_Pop_Temp'].min()
+        previous_max_temp = previous_daily['ERCOT_Pop_Temp'].max()
+        
+        # Get the overlapping range
+        overlap_min_temp = max(current_min_temp, previous_min_temp)
+        overlap_max_temp = min(current_max_temp, previous_max_temp)
+        
+        # Filter both datasets to only include temperatures in the overlapping range
+        current_filtered = current_daily[(current_daily['ERCOT_Pop_Temp'] >= overlap_min_temp) & 
+                                       (current_daily['ERCOT_Pop_Temp'] <= overlap_max_temp)]
+        previous_filtered = previous_daily[(previous_daily['ERCOT_Pop_Temp'] >= overlap_min_temp) & 
+                                        (previous_daily['ERCOT_Pop_Temp'] <= overlap_max_temp)]
+        
+        # Combine the temperatures from both periods to calculate percentiles
+        combined_temps = np.concatenate([
+            current_filtered['ERCOT_Pop_Temp'].values, 
+            previous_filtered['ERCOT_Pop_Temp'].values
+        ])
+        
+        # Find temperature percentiles from the combined data
+        diffs = []
+        for p in percentiles:
+            temp_point = np.percentile(combined_temps, p*100)
+            
+            # Find closest points in each dataset
+            current_closest = find_closest(current_daily, temp_point)
+            previous_closest = find_closest(previous_daily, temp_point)
+            
+            if not current_closest.empty and not previous_closest.empty:
+                diff = (current_closest['Fitted_Predict'].values[0] - previous_closest['Fitted_Predict'].values[0])
+                diffs.append(diff)
+        
+        # Average the diffs and calculate percentage growth
+        avg_diff = np.mean(diffs)
+        avg_previous_load_pred = previous_daily['Fitted_Predict'].mean()
+        pct_load_growth = avg_diff / avg_previous_load_pred * 100
+        
+        # Add load growth to legend
+        growth_label = f"Load Growth: {int(pct_load_growth + 0.5)}%" if int(avg_diff) >= 0 else f"Load Growth: {int(pct_load_growth - 0.5)}%"
+        ax.legend([growth_label], fontsize=12)
+        
+        # Add titles and labels
+        month_start = months_names[months[0] - 1]
+        month_end = months_names[months[-1] - 1]
+        
+        ax.set_title(f"Daily Temp vs RTLoad ({month_start} to {month_end})", fontsize=14)
+        ax.set_xlabel("Temp")
+        ax.set_ylabel("MW")
+        
+        ax.scatter(current_daily['ERCOT_Pop_Temp'], current_daily['RTLoad'], color='red', s=8, marker='o', label="Red model")
+        ax.scatter(previous_daily['ERCOT_Pop_Temp'], previous_daily['RTLoad'], color='orange', s=8, marker='o', label="Past model")
+        
+        # Plot fitted models
+        current_percentiles = current_daily['ERCOT_Pop_Temp'].quantile(percentiles)
+        previous_percentiles = previous_daily['ERCOT_Pop_Temp'].quantile(percentiles)
+        
+        ax.plot(current_daily['ERCOT_Pop_Temp'], current_daily['Fitted_Predict'], color='red', ls='-')
+        ax.plot(previous_daily['ERCOT_Pop_Temp'], previous_daily['Fitted_Predict'], color='orange', ls='-')
+        
+        plt.tight_layout()
+        
+        return fig
+    else:
+        # Monthly analysis - one plot per month
+        result = {}
+        
+        for month in months:
+            # Since this is for individual months, we take the first element
+            month_name = months_names[month-1]
+            
+            current_month = plant_df[(plant_df['Year'] == plant_df['Year'].max()) & (plant_df['Month'] == month)]
+            previous_month = plant_df[(plant_df['Year'] == plant_df['Year'].max() - 1) & (plant_df['Month'] == month)]
+            
+            # Aggregate by day
+            current_daily = current_month.groupby(['Day'])['ERCOT_Pop_Temp', 'RTLoad'].mean()
+            previous_daily = previous_month.groupby(['Day'])['ERCOT_Pop_Temp', 'RTLoad'].mean()
+            
+            # Fit polynomial model on current data
+            poly_model_current = make_pipeline(PolynomialFeatures(degree=2), LinearRegression())
+            poly_model_current.fit(current_daily[['ERCOT_Pop_Temp']], current_daily['RTLoad'])
+            current_daily['Fitted_Predict'] = poly_model_current.predict(current_daily[['ERCOT_Pop_Temp']])
+            
+            # Fit polynomial model on previous data
+            poly_model_previous = make_pipeline(PolynomialFeatures(degree=2), LinearRegression())
+            poly_model_previous.fit(previous_daily[['ERCOT_Pop_Temp']], previous_daily['RTLoad'])
+            previous_daily['Fitted_Predict'] = poly_model_previous.predict(previous_daily[['ERCOT_Pop_Temp']])
+            
+            # Find the overlapping temperature range between both periods
+            current_min_temp = current_daily['ERCOT_Pop_Temp'].min()
+            current_max_temp = current_daily['ERCOT_Pop_Temp'].max()
+            previous_min_temp = previous_daily['ERCOT_Pop_Temp'].min()
+            previous_max_temp = previous_daily['ERCOT_Pop_Temp'].max()
+            
+            # Get the overlapping range
+            overlap_min_temp = max(current_min_temp, previous_min_temp)
+            overlap_max_temp = min(current_max_temp, previous_max_temp)
+            
+            # Filter both datasets to only include temperatures in the overlapping range
+            current_filtered = current_daily[(current_daily['ERCOT_Pop_Temp'] >= overlap_min_temp) & 
+                                          (current_daily['ERCOT_Pop_Temp'] <= overlap_max_temp)]
+            previous_filtered = previous_daily[(previous_daily['ERCOT_Pop_Temp'] >= overlap_min_temp) & 
+                                           (previous_daily['ERCOT_Pop_Temp'] <= overlap_max_temp)]
+            
+            # Skip if not enough data points in the overlap
+            if len(current_filtered) < 5 or len(previous_filtered) < 5:
+                continue
+                
+            # Combine the temperatures from both periods to calculate percentiles
+            combined_temps = np.concatenate([
+                current_filtered['ERCOT_Pop_Temp'].values, 
+                previous_filtered['ERCOT_Pop_Temp'].values
+            ])
+            
+            # Calculate temperature points and find closest matches
+            diffs = []
+            for p in percentiles:
+                temp_point = np.percentile(combined_temps, p*100)
+                
+                # Find closest points in each dataset
+                current_closest = find_closest(current_daily, temp_point)
+                previous_closest = find_closest(previous_daily, temp_point)
+                
+                if not current_closest.empty and not previous_closest.empty:
+                    diff = (current_closest['Fitted_Predict'].values[0] - previous_closest['Fitted_Predict'].values[0])
+                    diffs.append(diff)
+            
+            # Average the diffs and calculate percentage growth
+            avg_diff = np.mean(diffs)
+            avg_previous_load_pred = previous_daily['Fitted_Predict'].mean()
+            pct_load_growth = avg_diff / avg_previous_load_pred * 100
+            
+            # Create figure
+            fig, ax = plt.subplots(figsize=(14, 8))
+            
+            # Add load growth to legend
+            growth_label = f"Load Growth: {int(pct_load_growth + 0.5)}%" if int(avg_diff) >= 0 else f"Load Growth: {int(pct_load_growth - 0.5)}%"
+            
+            # Plot data points
+            ax.scatter(current_daily['ERCOT_Pop_Temp'], current_daily['RTLoad'], color='red', s=8, marker='o', label="Current Year")
+            ax.scatter(previous_daily['ERCOT_Pop_Temp'], previous_daily['RTLoad'], color='orange', s=8, marker='o', label="Previous Year")
+            
+            # Plot fitted curves
+            ax.plot(current_daily['ERCOT_Pop_Temp'], current_daily['Fitted_Predict'], color='red', ls='-')
+            ax.plot(previous_daily['ERCOT_Pop_Temp'], previous_daily['Fitted_Predict'], color='orange', ls='-')
+            
+            ax.legend([growth_label], fontsize=12)
+            ax.set_title(f"{month_name} Temp vs RTLoad", fontsize=14)
+            ax.set_xlabel("Temp")
+            ax.set_ylabel("MW")
+            
+            plt.tight_layout()
+            
+            result[month] = fig
+            
+        return result
+```
+
+This updated function includes the improved calculation method for temperature percentiles:
+
+1. It finds the overlapping temperature range between current and previous periods
+2. It filters both datasets to only include temperatures within this overlap
+3. It combines the filtered temperature data from both periods
+4. It calculates percentiles from this combined dataset
+5. It finds the closest matching points in each dataset for these temperature points
+
+This approach ensures that load growth calculations are based on comparable weather conditions that both periods experienced, giving you a more accurate weather-normalized result.​​​​​​​​​​​​​​​​
