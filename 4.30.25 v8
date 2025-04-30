@@ -1,0 +1,244 @@
+Looking at the new screenshot, I can see that the changes need further refinement. Let me update the code to fix the remaining issues:
+
+1. Make all columns exactly the same width
+2. Ensure names align with consistent indentation 
+3. Fix the percentile calculation since they're all showing 0.0%
+
+Here's the updated code:
+
+```python
+import pandas as pd
+import panel as pn
+from datetime import timedelta
+from scipy.stats import percentileofscore
+
+def create_cash_summary(df, lists_of_items, titles):
+    df.index = pd.to_datetime(df['MARKETDATE'])
+    latest_date = df.index.max()
+    date_range = [latest_date - pd.Timedelta(days=i) for i in reversed(range(10))]
+    df = df[df.index.isin(date_range)]
+
+    colors = ['#D0EAF8', '#D6F5ED', '#FDF3DC', '#F5B7B1']
+    tables = []
+
+    def percentile_color(val):
+        try:
+            val = float(val.strip('%'))
+        except:
+            return ''
+        if val <= 50:
+            r = int(255 * (val / 50))
+            g = int(255 * (val / 50))
+            b = 255
+        else:
+            r = 255
+            g = int(255 * ((100 - val) / 50))
+            b = int(255 * ((100 - val) / 50))
+        return f'background-color: rgb({r},{g},{b})'
+
+    for item_list, color, title in zip(lists_of_items, colors, titles):
+        df_subset = df[item_list].copy().resample('D').mean()
+
+        # Get current 10-day and 5-day averages
+        avg_10 = df_subset.tail(10).mean().round(2)
+        avg_5 = df_subset.tail(5).mean().round(2)
+
+        today = df_subset.index.max()
+        
+        # Get historical data for all available years
+        all_data = pd.read_sql("SELECT * FROM your_table", your_connection)  # Replace with your actual data source
+        all_data.index = pd.to_datetime(all_data['MARKETDATE'])
+        
+        # Extract month and day from the current window
+        month_day_ranges = []
+        for i in range(10):
+            date = today - pd.Timedelta(days=i)
+            month_day_ranges.append((date.month, date.day))
+            
+        # Get historical data for the same month-day combinations
+        historical_data = {}
+        
+        for year in all_data.index.year.unique():
+            if year == today.year:
+                continue
+                
+            year_data = []
+            for month, day in month_day_ranges:
+                try:
+                    # Handle leap years and month endings
+                    try:
+                        date = pd.Timestamp(year=year, month=month, day=day)
+                    except:
+                        # If the specific day doesn't exist (e.g., Feb 29 in non-leap years)
+                        if month == 2 and day >= 28:
+                            date = pd.Timestamp(year=year, month=2, day=28)
+                        else:
+                            # Use the last day of the month
+                            date = pd.Timestamp(year=year, month=month, day=1) + pd.offsets.MonthEnd(1)
+                            
+                    # Get data for this date if available
+                    if date in all_data.index:
+                        daily_data = all_data.loc[date, item_list].to_dict()
+                        year_data.append(daily_data)
+                except:
+                    continue
+                    
+            if len(year_data) > 0:
+                # Calculate averages for this year's window
+                year_df = pd.DataFrame(year_data)
+                historical_data[year] = {
+                    '10day': year_df.mean().to_dict(),
+                    '5day': year_df.tail(5).mean().to_dict() if len(year_df) >= 5 else None
+                }
+        
+        # Calculate percentiles
+        pct_10 = {}
+        pct_5 = {}
+        
+        for item in item_list:
+            # Collect historical values for this item
+            hist_values_10 = [historical_data[year]['10day'][item] 
+                            for year in historical_data 
+                            if item in historical_data[year]['10day']]
+            
+            hist_values_5 = [historical_data[year]['5day'][item] 
+                           for year in historical_data 
+                           if historical_data[year]['5day'] is not None and item in historical_data[year]['5day']]
+            
+            # Calculate percentiles
+            if hist_values_10 and len(hist_values_10) > 0:
+                pct_10[item] = percentileofscore(hist_values_10, avg_10[item])
+            else:
+                pct_10[item] = 50.0  # Default to 50% if no historical data
+                
+            if hist_values_5 and len(hist_values_5) > 0:
+                pct_5[item] = percentileofscore(hist_values_5, avg_5[item])
+            else:
+                pct_5[item] = 50.0  # Default to 50% if no historical data
+
+        # Format the table
+        past_10days = df_subset[item_list].tail(10).T.round(2)
+        past_10days.columns = [col.strftime('%Y-%m-%d') for col in past_10days.columns]
+
+        stats = pd.DataFrame(index=item_list)
+        stats['TEN DAY AVG'] = avg_10
+        stats['FIVE DAY AVG'] = avg_5
+        stats['TEN DAY PCTLE'] = pd.Series(pct_10).map(lambda x: f"{x:.1f}%")
+        stats['FIVE DAY PCTLE'] = pd.Series(pct_5).map(lambda x: f"{x:.1f}%")
+
+        full_table = pd.concat([past_10days, stats], axis=1)
+
+        # Fixed styling with exact column widths and aligned names
+        exact_width = "80px"  # Set all columns to exactly this width
+        name_width = "200px"  # Width for the name column
+        
+        styled = full_table.style.set_properties(**{
+            'background-color': 'white',
+            'color': 'black',
+            'border-color': 'black',
+            'border-style': 'solid',
+            'border-width': '1px',
+            'font-family': 'Arial',
+            'font-size': '12px',
+            'text-align': 'center',
+            'width': exact_width,
+            'overflow': 'hidden',
+            'text-overflow': 'ellipsis',
+            'white-space': 'nowrap',
+            'padding': '2px 5px'
+        }).set_table_styles([
+            # Style for all headers
+            {
+                'selector': 'th',
+                'props': [
+                    ('background-color', 'white'), 
+                    ('font-family', 'Arial, sans-serif'),
+                    ('font-size', '12px'), 
+                    ('width', exact_width),
+                    ('text-align', 'center'),
+                    ('overflow', 'hidden'),
+                    ('text-overflow', 'ellipsis'),
+                    ('white-space', 'nowrap'),
+                    ('padding', '2px 5px')
+                ]
+            },
+            # Style for index column header
+            {
+                'selector': 'th.index_name',
+                'props': [
+                    ('display', 'none')  # Hide the index header
+                ]
+            },
+            # Style for first column (names)
+            {
+                'selector': 'td:first-child',
+                'props': [
+                    ('width', name_width), 
+                    ('max-width', name_width), 
+                    ('text-align', 'left'), 
+                    ('white-space', 'nowrap'), 
+                    ('overflow', 'hidden'),
+                    ('text-overflow', 'ellipsis'),
+                    ('padding-left', '10px')  # Consistent left padding for indentation
+                ]
+            },
+            # Style for index header
+            {
+                'selector': 'th.row_heading',
+                'props': [
+                    ('width', name_width), 
+                    ('max-width', name_width), 
+                    ('text-align', 'left'), 
+                    ('white-space', 'nowrap'), 
+                    ('overflow', 'hidden'),
+                    ('text-overflow', 'ellipsis'),
+                    ('padding-left', '10px')  # Match the indentation of the data cells
+                ]
+            },
+            # Show full text on hover
+            {
+                'selector': 'tr:hover td',
+                'props': [('white-space', 'normal')]
+            }
+        ]).set_table_attributes('style="table-layout: fixed; width: auto;"')  # Force fixed-width columns
+
+        # Apply percentile coloring
+        styled = styled.applymap(percentile_color, subset=['TEN DAY PCTLE', 'FIVE DAY PCTLE'])
+
+        # Apply row coloring
+        def highlight_row(row):
+            return ['background-color: {}'.format(color)] * len(row)
+
+        styled = styled.apply(highlight_row, axis=1)
+
+        markdown = pn.pane.Markdown(f'### {title}', style={'font-size': '20px', 'font-family': 'Arial, sans-serif'})
+        tables.append(pn.Column(markdown, pn.pane.HTML(styled.render()), width=1800))
+        tables.append(pn.Spacer(height=10))
+
+    return pn.Column(*tables)
+```
+
+Important changes in this version:
+
+1. **Fixed column widths**:
+   - Set an exact width (`80px`) for all data columns using `table-layout: fixed`
+   - Set consistent width (`200px`) for the name column
+   - Used CSS properties to ensure uniform column widths
+
+2. **Consistent name alignment**:
+   - Added consistent left padding (`padding-left: 10px`) for name cells
+   - Ensured all names align with the same indentation
+   - Maintained text overflow handling for long names
+
+3. **Fixed percentile calculation**:
+   - Completely rewrote the historical data comparison logic
+   - Added a placeholder to read historical data from your database (you'll need to replace the SQL query with your actual data source)
+   - Set a default percentile of 50% when no historical data is available, instead of 0%
+   - Improved handling of month/day combinations, including handling of leap years
+
+Note that you'll need to replace the following line with your actual data source:
+```python
+all_data = pd.read_sql("SELECT * FROM your_table", your_connection)  # Replace with your actual data source
+```
+
+This should give you a table with uniform column widths, properly aligned names, and more accurate percentile calculations based on historical data for the same calendar dates.​​​​​​​​​​​​​​​​
