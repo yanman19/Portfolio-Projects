@@ -1,0 +1,153 @@
+I'll modify the code to specifically compare ERCOT_Pop_Temp and RTLoad, creating a model that analyzes their relationship between previous and current year. Here's the updated code:
+
+```python
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+from sklearn.linear_model import LinearRegression
+import matplotlib.dates as mdates
+
+def create_load_growth_analysis(df, market_date_col='MARKETDATE'):
+    """
+    Calculate daily load growth comparing ERCOT_Pop_Temp and RTLoad.
+    Models the relationship between these variables for previous vs current year.
+    
+    Parameters:
+    df (DataFrame): The input dataframe containing load data
+    market_date_col (str): The column name containing the market dates
+    
+    Returns:
+    tuple: (load_growth_df, fig) - A dataframe with daily load growth and a matplotlib figure
+    """
+    # Make a copy to avoid modifying the original
+    df_copy = df.copy()
+    
+    # Convert market date to datetime
+    df_copy[market_date_col] = pd.to_datetime(df_copy[market_date_col])
+    
+    # Set the date as index
+    df_copy.set_index(market_date_col, inplace=True)
+    df_copy.sort_index(inplace=True)
+    
+    # If there are duplicate dates, take the mean
+    df_copy = df_copy.groupby(level=0).mean()
+    
+    # Create year and month columns
+    df_copy['year'] = df_copy.index.year
+    df_copy['month'] = df_copy.index.month
+    df_copy['day'] = df_copy.index.day
+    
+    # Only keep ERCOT_Pop_Temp and RTLoad columns for analysis
+    analysis_df = df_copy[['ERCOT_Pop_Temp', 'RTLoad', 'year', 'month', 'day']].copy()
+    
+    # Create a date range from the earliest date to the latest date
+    latest_date = analysis_df.index.max()
+    earliest_date = analysis_df.index.min()
+    date_range = pd.date_range(start=earliest_date, end=latest_date, freq='D')
+    
+    # Create a daily dataframe with the full date range
+    daily_df = pd.DataFrame(index=date_range)
+    
+    # Fill in the daily values
+    daily_df['ERCOT_Pop_Temp'] = analysis_df['ERCOT_Pop_Temp'].reindex(daily_df.index).ffill()
+    daily_df['RTLoad'] = analysis_df['RTLoad'].reindex(daily_df.index).ffill()
+    daily_df['year'] = daily_df.index.year
+    daily_df['month'] = daily_df.index.month
+    daily_df['day'] = daily_df.index.day
+    
+    # Calculate the load growth for a 60-day window (approximately 2 months)
+    daily_df['RTLoad_60d_ago'] = daily_df['RTLoad'].shift(60)
+    daily_df['Load_Growth_Pct'] = ((daily_df['RTLoad'] - daily_df['RTLoad_60d_ago']) / 
+                                  daily_df['RTLoad_60d_ago']) * 100
+    
+    # Create features for the model
+    # For each date, identify the same day from previous year
+    daily_df['ERCOT_Pop_Temp_PrevYear'] = np.nan
+    daily_df['RTLoad_PrevYear'] = np.nan
+    
+    # Get data from previous year
+    for idx, row in daily_df.iterrows():
+        try:
+            # Try to get same month/day from previous year
+            prev_year_date = idx.replace(year=idx.year-1)
+            if prev_year_date in daily_df.index:
+                daily_df.at[idx, 'ERCOT_Pop_Temp_PrevYear'] = daily_df.loc[prev_year_date, 'ERCOT_Pop_Temp']
+                daily_df.at[idx, 'RTLoad_PrevYear'] = daily_df.loc[prev_year_date, 'RTLoad']
+        except ValueError:
+            # Handle Feb 29 in leap years
+            pass
+    
+    # Create model features
+    daily_df['Temp_YoY_Change'] = daily_df['ERCOT_Pop_Temp'] - daily_df['ERCOT_Pop_Temp_PrevYear']
+    daily_df['Load_YoY_Change_Pct'] = ((daily_df['RTLoad'] - daily_df['RTLoad_PrevYear']) / 
+                                      daily_df['RTLoad_PrevYear']) * 100
+    
+    # Drop rows with missing data
+    model_df = daily_df.dropna()
+    
+    # Create result dataframe with relevant columns
+    result_df = model_df[['RTLoad', 'ERCOT_Pop_Temp', 'RTLoad_60d_ago', 
+                          'Load_Growth_Pct', 'Temp_YoY_Change', 'Load_YoY_Change_Pct']].copy()
+    
+    # Create a line plot
+    fig, ax1 = plt.subplots(figsize=(12, 8))
+    
+    # Plot load growth percentage
+    color = '#0080A0'  # Light blue
+    ax1.set_xlabel('Date')
+    ax1.set_ylabel('Load Growth (%)', color=color)
+    ax1.plot(result_df.index, result_df['Load_Growth_Pct'], color=color, 
+             label='2-Month Rolling Load Growth (%)')
+    ax1.tick_params(axis='y', labelcolor=color)
+    ax1.grid(True, alpha=0.3)
+    
+    # Format x-axis to show dates properly
+    ax1.xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m-%d'))
+    ax1.xaxis.set_major_locator(mdates.MonthLocator(interval=1))
+    plt.xticks(rotation=45)
+    
+    # Create a second y-axis for temperature-related data
+    ax2 = ax1.twinx()
+    color = '#00B43E'  # Green
+    ax2.set_ylabel('Temperature Effect', color=color)
+    ax2.scatter(result_df.index, result_df['Temp_YoY_Change'], color=color, alpha=0.3, 
+               label='YoY Temp Change')
+    ax2.tick_params(axis='y', labelcolor=color)
+    
+    # Add ERCOT_Pop_Temp to RTLoad relationship
+    # Find points for model training
+    X = result_df['ERCOT_Pop_Temp'].values.reshape(-1, 1)
+    y = result_df['RTLoad'].values
+    model = LinearRegression().fit(X, y)
+    result_df['Expected_Load'] = model.predict(X)
+    
+    # Add correlation information to the title
+    correlation = np.corrcoef(result_df['ERCOT_Pop_Temp'], result_df['RTLoad'])[0, 1]
+    coef = model.coef_[0]
+    
+    # Add title with relationship info
+    plt.title(f'Daily Load Growth (2-Month Window) vs ERCOT_Pop_Temp\n' +
+              f'Temp-Load Correlation: {correlation:.2f}, Temp Coefficient: {coef:.2f}')
+    
+    # Combine legends from both axes
+    lines1, labels1 = ax1.get_legend_handles_labels()
+    lines2, labels2 = ax2.get_legend_handles_labels()
+    ax1.legend(lines1 + lines2, labels1 + labels2, loc='best')
+    
+    plt.tight_layout()
+    
+    return result_df, fig
+```
+
+This updated function:
+
+1. Focuses specifically on ERCOT_Pop_Temp and RTLoad as requested
+2. Calculates the daily load growth percentage using a 60-day (2-month) rolling window
+3. Adds year-over-year comparison by finding the matching day from the previous year
+4. Creates a model of the relationship between temperature and load
+5. Generates a dual-axis plot showing:
+   - The load growth percentage over time (primary y-axis)
+   - The year-over-year temperature change (secondary y-axis)
+   - Information about the correlation between temperature and load
+
+The function returns both the result dataframe with all calculated metrics and the figure showing the relationship. The plot has time on the x-axis and load growth percentage on the y-axis as requested.​​​​​​​​​​​​​​​​
