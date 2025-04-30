@@ -1,0 +1,301 @@
+```python
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+from sklearn.preprocessing import PolynomialFeatures
+from sklearn.linear_model import LinearRegression
+import matplotlib.dates as mdates
+
+def create_load_growth_analysis(df, market_date_col='MARKETDATE', polynomial_degree=2):
+    """
+    Calculate daily load growth by comparing year-over-year load at temperature percentiles.
+    Returns both percentage growth and absolute MW change.
+    
+    For each day:
+    1. Get 2-month window ending on that day for current and previous year
+    2. Create polynomial models relating temperature to load for both windows
+    3. Find the 30th, 50th, 70th percentiles of temperature in current window
+    4. Calculate load growth percentage and absolute change at each temperature percentile
+    5. Average these to get a stamped value for that day
+    """
+    # Make a copy and convert date column
+    df_copy = df.copy()
+    df_copy[market_date_col] = pd.to_datetime(df_copy[market_date_col])
+    
+    # Set the date as index
+    df_copy.set_index(market_date_col, inplace=True)
+    df_copy.sort_index(inplace=True)
+    
+    # Handle duplicates
+    df_copy = df_copy.groupby(level=0).mean()
+    
+    # Keep only necessary columns
+    analysis_df = df_copy[['ERCOT_Pop_Temp', 'RTLoad']].copy()
+    
+    # Create full date range
+    date_range = pd.date_range(start=analysis_df.index.min(), end=analysis_df.index.max(), freq='D')
+    
+    # Create a daily dataframe
+    daily_df = pd.DataFrame(index=date_range)
+    daily_df['ERCOT_Pop_Temp'] = analysis_df['ERCOT_Pop_Temp'].reindex(daily_df.index).ffill()
+    daily_df['RTLoad'] = analysis_df['RTLoad'].reindex(daily_df.index).ffill()
+    
+    # Create result dataframe
+    result_df = pd.DataFrame(index=daily_df.index)
+    
+    # Need at least 1 year + 2 months of data
+    start_date = daily_df.index.min() + pd.DateOffset(years=1) + pd.DateOffset(months=2)
+    
+    # Calculate for each day
+    for current_date in daily_df.loc[start_date:].index:
+        # Calculate window start (2 months back)
+        window_start = current_date - pd.DateOffset(months=2)
+        
+        # Get current year window
+        current_window = daily_df.loc[window_start:current_date].copy()
+        if len(current_window) < 30:  # Need enough data points
+            continue
+            
+        # Get same window from previous year
+        prev_year_start = window_start - pd.DateOffset(years=1)
+        prev_year_end = current_date - pd.DateOffset(years=1)
+        prev_window = daily_df.loc[prev_year_start:prev_year_end].copy()
+        if len(prev_window) < 30:  # Need enough data points
+            continue
+        
+        # Find temperature percentiles of current window
+        temp_p30 = current_window['ERCOT_Pop_Temp'].quantile(0.3)
+        temp_p50 = current_window['ERCOT_Pop_Temp'].quantile(0.5)
+        temp_p70 = current_window['ERCOT_Pop_Temp'].quantile(0.7)
+        
+        # Create polynomial features transformers - IMPORTANT: Create and fit once
+        poly = PolynomialFeatures(degree=polynomial_degree)
+        
+        # Create current year model
+        X_curr = current_window['ERCOT_Pop_Temp'].values.reshape(-1, 1)
+        X_curr_poly = poly.fit_transform(X_curr)  # Fit and transform
+        y_curr = current_window['RTLoad'].values
+        curr_model = LinearRegression().fit(X_curr_poly, y_curr)
+        
+        # Create previous year model with the same transformer
+        X_prev = prev_window['ERCOT_Pop_Temp'].values.reshape(-1, 1)
+        X_prev_poly = poly.transform(X_prev)  # Just transform (already fit)
+        y_prev = prev_window['RTLoad'].values
+        prev_model = LinearRegression().fit(X_prev_poly, y_prev)
+        
+        # Prepare temperature points for prediction (reshape)
+        temp_points = np.array([temp_p30, temp_p50, temp_p70]).reshape(-1, 1)
+        temp_points_poly = poly.transform(temp_points)  # Use the same transformer
+        
+        # Predict loads
+        curr_loads = curr_model.predict(temp_points_poly)
+        prev_loads = prev_model.predict(temp_points_poly)
+        
+        # Calculate growth percentages
+        growth_pcts = ((curr_loads - prev_loads) / prev_loads) * 100
+        
+        # Calculate absolute changes (MW)
+        absolute_changes = curr_loads - prev_loads
+        
+        # Store individual percentile results - percentages
+        result_df.loc[current_date, 'Growth_P30'] = growth_pcts[0]
+        result_df.loc[current_date, 'Growth_P50'] = growth_pcts[1]
+        result_df.loc[current_date, 'Growth_P70'] = growth_pcts[2]
+        
+        # Store individual percentile results - absolute changes (MW)
+        result_df.loc[current_date, 'Change_P30_MW'] = absolute_changes[0]
+        result_df.loc[current_date, 'Change_P50_MW'] = absolute_changes[1]
+        result_df.loc[current_date, 'Change_P70_MW'] = absolute_changes[2]
+        
+        # Average the three percentiles for the stamped values
+        result_df.loc[current_date, 'Load_Growth_Pct'] = np.mean(growth_pcts)
+        result_df.loc[current_date, 'Load_Change_MW'] = np.mean(absolute_changes)
+        
+        # Store temperature values for reference
+        result_df.loc[current_date, 'Temp_P30'] = temp_p30
+        result_df.loc[current_date, 'Temp_P50'] = temp_p50
+        result_df.loc[current_date, 'Temp_P70'] = temp_p70
+    
+    # Drop rows with missing data
+    result_df = result_df.dropna(subset=['Load_Growth_Pct'])
+    
+    # Create visualizations (2 plots: percentage and absolute)
+    fig1, ax1 = plt.subplots(figsize=(14, 7))
+    fig2, ax2 = plt.subplots(figsize=(14, 7))
+    
+    # Define colors
+    colors = ['#0080A0', '#00B43E', '#FFBC3F', '#FE8701']
+    
+    # Plot 1: Percentage growth
+    # Plot the main stamped load growth line
+    ax1.plot(result_df.index, result_df['Load_Growth_Pct'], 
+            label='Load Growth (Avg of 30/50/70 percentiles)', 
+            color=colors[0],
+            linewidth=2.5)
+    
+    # Plot individual percentile lines with lower opacity
+    ax1.plot(result_df.index, result_df['Growth_P30'], 
+            label='Growth at 30th percentile', 
+            color=colors[1],
+            alpha=0.5,
+            linewidth=1)
+    
+    ax1.plot(result_df.index, result_df['Growth_P50'], 
+            label='Growth at 50th percentile', 
+            color=colors[2],
+            alpha=0.5,
+            linewidth=1)
+    
+    ax1.plot(result_df.index, result_df['Growth_P70'], 
+            label='Growth at 70th percentile', 
+            color=colors[3],
+            alpha=0.5,
+            linewidth=1)
+    
+    # Add horizontal line at zero
+    ax1.axhline(y=0, color='gray', linestyle='--', alpha=0.7)
+    
+    # Format plot
+    ax1.set_title('Weather-Normalized YoY Load Growth (2-Month Rolling Window)', fontsize=14)
+    ax1.set_xlabel('Date', fontsize=12)
+    ax1.set_ylabel('Load Growth (%)', fontsize=12)
+    ax1.legend(loc='best')
+    ax1.grid(True, alpha=0.3)
+    
+    # Plot 2: Absolute change in MW
+    # Plot the main stamped load change line
+    ax2.plot(result_df.index, result_df['Load_Change_MW'], 
+            label='Load Change (Avg of 30/50/70 percentiles)', 
+            color=colors[0],
+            linewidth=2.5)
+    
+    # Plot individual percentile lines with lower opacity
+    ax2.plot(result_df.index, result_df['Change_P30_MW'], 
+            label='Change at 30th percentile', 
+            color=colors[1],
+            alpha=0.5,
+            linewidth=1)
+    
+    ax2.plot(result_df.index, result_df['Change_P50_MW'], 
+            label='Change at 50th percentile', 
+            color=colors[2],
+            alpha=0.5,
+            linewidth=1)
+    
+    ax2.plot(result_df.index, result_df['Change_P70_MW'], 
+            label='Change at 70th percentile', 
+            color=colors[3],
+            alpha=0.5,
+            linewidth=1)
+    
+    # Add horizontal line at zero
+    ax2.axhline(y=0, color='gray', linestyle='--', alpha=0.7)
+    
+    # Format plot
+    ax2.set_title('Weather-Normalized YoY Load Change (2-Month Rolling Window)', fontsize=14)
+    ax2.set_xlabel('Date', fontsize=12)
+    ax2.set_ylabel('Load Change (MW)', fontsize=12)
+    ax2.legend(loc='best')
+    ax2.grid(True, alpha=0.3)
+    
+    # Format x-axis for dates on both plots to MM-DD-YY
+    date_format = mdates.DateFormatter('%m-%d-%y')
+    for ax in [ax1, ax2]:
+        ax.xaxis.set_major_formatter(date_format)
+        ax.xaxis.set_major_locator(mdates.MonthLocator(interval=2))
+        plt.setp(ax.get_xticklabels(), rotation=45)
+    
+    # Add seasonal shading to both plots
+    years = np.unique(result_df.index.year)
+    
+    # We need to add the seasonal shading after the plots are drawn to get the correct y-limits
+    for ax in [ax1, ax2]:
+        # Summer shading (July-August) in light orange
+        for year in years:
+            summer_start = pd.Timestamp(f"{year}-07-01")
+            summer_end = pd.Timestamp(f"{year}-08-31")
+            
+            if (summer_start <= result_df.index.max() and 
+                summer_end >= result_df.index.min()):
+                
+                # Adjust to ensure within data range
+                actual_start = max(summer_start, result_df.index.min())
+                actual_end = min(summer_end, result_df.index.max())
+                
+                # Add rectangle
+                ax.axvspan(actual_start, actual_end, 
+                          facecolor='#FEE8C8',  # Light orange
+                          alpha=0.3,
+                          zorder=0)
+        
+        # Winter shading (January-February) in light blue
+        for year in years:
+            winter_start = pd.Timestamp(f"{year}-01-01")
+            winter_end = pd.Timestamp(f"{year}-02-28")
+            
+            # Adjust for leap years
+            if year % 4 == 0 and (year % 100 != 0 or year % 400 == 0):
+                winter_end = pd.Timestamp(f"{year}-02-29")
+                
+            if (winter_start <= result_df.index.max() and 
+                winter_end >= result_df.index.min()):
+                
+                # Adjust to ensure within data range
+                actual_start = max(winter_start, result_df.index.min())
+                actual_end = min(winter_end, result_df.index.max())
+                
+                # Add rectangle
+                ax.axvspan(actual_start, actual_end, 
+                          facecolor='#E6F2FF',  # Light blue
+                          alpha=0.3,
+                          zorder=0)
+    
+    # Add annotations for min and max points on both plots
+    max_pct_idx = result_df['Load_Growth_Pct'].idxmax()
+    min_pct_idx = result_df['Load_Growth_Pct'].idxmin()
+    
+    ax1.annotate(f'Max: {result_df.loc[max_pct_idx, "Load_Growth_Pct"]:.2f}%',
+                xy=(max_pct_idx, result_df.loc[max_pct_idx, 'Load_Growth_Pct']),
+                xytext=(10, 15),
+                textcoords='offset points',
+                arrowprops=dict(arrowstyle='->', color='black'))
+    
+    ax1.annotate(f'Min: {result_df.loc[min_pct_idx, "Load_Growth_Pct"]:.2f}%',
+                xy=(min_pct_idx, result_df.loc[min_pct_idx, 'Load_Growth_Pct']),
+                xytext=(10, -15),
+                textcoords='offset points',
+                arrowprops=dict(arrowstyle='->', color='black'))
+    
+    max_mw_idx = result_df['Load_Change_MW'].idxmax()
+    min_mw_idx = result_df['Load_Change_MW'].idxmin()
+    
+    ax2.annotate(f'Max: {result_df.loc[max_mw_idx, "Load_Change_MW"]:.0f} MW',
+                xy=(max_mw_idx, result_df.loc[max_mw_idx, 'Load_Change_MW']),
+                xytext=(10, 15),
+                textcoords='offset points',
+                arrowprops=dict(arrowstyle='->', color='black'))
+    
+    ax2.annotate(f'Min: {result_df.loc[min_mw_idx, "Load_Change_MW"]:.0f} MW',
+                xy=(min_mw_idx, result_df.loc[min_mw_idx, 'Load_Change_MW']),
+                xytext=(10, -15),
+                textcoords='offset points',
+                arrowprops=dict(arrowstyle='->', color='black'))
+    
+    # Adjust the layout
+    fig1.tight_layout()
+    fig2.tight_layout()
+    
+    # Return both result dataframe and figures
+    return result_df, (fig1, fig2)
+```
+
+This updated code incorporates all your requested changes:
+
+1. Added absolute change calculations (in MW) alongside the percentage calculations
+2. Created a second graph to visualize the absolute changes
+3. Changed the date format on both graphs to MM-DD-YY
+4. Added seasonal shading:
+   - Light orange for summer months (July-August)
+   - Light blue for winter months (January-February)
+
+The function now returns both the result dataframe with all calculated metrics and a tuple containing both figures (percentage growth and absolute change). The seasonal shading helps visually identify patterns during summer and winter periods across multiple years.​​​​​​​​​​​​​​​​
