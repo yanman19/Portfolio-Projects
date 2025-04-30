@@ -1,0 +1,116 @@
+import pandas as pd
+import panel as pn
+from datetime import timedelta
+from scipy.stats import percentileofscore
+
+def create_cash_summary(df, lists_of_items, titles):
+    df.index = pd.to_datetime(df['MARKETDATE'])
+    latest_date = df.index.max()
+    date_range = [latest_date - pd.Timedelta(days=i) for i in reversed(range(10))]
+    df = df[df.index.isin(date_range)]
+
+    colors = ['#D0EAF8', '#D6F5ED', '#FDF3DC', '#F5B7B1']
+    tables = []
+
+    def percentile_color(val):
+        try:
+            val = float(val.strip('%'))
+        except:
+            return ''
+        # Interpolate between blue (0), white (50), red (100)
+        if val <= 50:
+            r = int(255 * (val / 50))
+            g = int(255 * (val / 50))
+            b = 255
+        else:
+            r = 255
+            g = int(255 * ((100 - val) / 50))
+            b = int(255 * ((100 - val) / 50))
+        return f'background-color: rgb({r},{g},{b})'
+
+    for item_list, color, title in zip(lists_of_items, colors, titles):
+        df_subset = df[item_list].copy()
+        df_subset = df_subset.resample('D').mean()
+
+        avg_10 = df_subset.rolling(window=10, min_periods=10).mean().iloc[-1]
+        avg_5 = df_subset.rolling(window=5, min_periods=5).mean().iloc[-1]
+
+        today = df_subset.index.max()
+        historical_values_10 = []
+        historical_values_5 = []
+
+        for past_year in range(1, 6):
+            try:
+                past_date = today - pd.DateOffset(years=past_year)
+                range_10 = df_subset.loc[(df_subset.index >= past_date - timedelta(days=9)) & (df_subset.index <= past_date)]
+                range_5 = df_subset.loc[(df_subset.index >= past_date - timedelta(days=4)) & (df_subset.index <= past_date)]
+
+                if len(range_10) == 10:
+                    historical_values_10.append(range_10.mean())
+                if len(range_5) == 5:
+                    historical_values_5.append(range_5.mean())
+            except:
+                continue
+
+        hist_10_df = pd.DataFrame(historical_values_10).T
+        hist_5_df = pd.DataFrame(historical_values_5).T
+
+        pct_10 = pd.Series(index=item_list)
+        pct_5 = pd.Series(index=item_list)
+        for item in item_list:
+            try:
+                pct_10[item] = percentileofscore(hist_10_df.loc[item].dropna(), avg_10[item])
+            except:
+                pct_10[item] = 0
+            try:
+                pct_5[item] = percentileofscore(hist_5_df.loc[item].dropna(), avg_5[item])
+            except:
+                pct_5[item] = 0
+
+        past_10days = df_subset[item_list].tail(10).T
+        past_10days.columns = [col.strftime('%Y-%m-%d') for col in past_10days.columns]
+
+        stats = pd.DataFrame(index=item_list)
+        stats['TEN DAY AVG'] = avg_10
+        stats['FIVE DAY AVG'] = avg_5
+        stats['TEN DAY PCTLE'] = pct_10.map(lambda x: f"{x:.1f}%")
+        stats['FIVE DAY PCTLE'] = pct_5.map(lambda x: f"{x:.1f}%")
+
+        full_table = pd.concat([past_10days, stats], axis=1)
+
+        # Style core
+        styled = full_table.style.set_properties(**{
+            'background-color': 'white',
+            'color': 'black',
+            'border-color': 'black',
+            'border-style': 'solid',
+            'border-width': '1px',
+            'font-family': 'Arial',
+            'font-size': '12px',
+            'min-width': '80px',
+            'max-width': '100px'
+        }).set_table_styles([
+            {
+                'selector': 'th',
+                'props': [('background-color', 'white'), ('font-family', 'Arial, sans-serif'),
+                          ('font-size', '12px'), ('min-width', '80px'), ('max-width', '100px')]
+            },
+            {
+                'selector': 'th.col0',
+                'props': [('min-width', '240px'), ('max-width', '240px'), ('text-align', 'left')]
+            }
+        ]).set_table_attributes('style="width:100%;"')
+
+        # Color percentile columns
+        styled = styled.applymap(percentile_color, subset=['TEN DAY PCTLE', 'FIVE DAY PCTLE'])
+
+        def highlight_row(row):
+            return ['background-color: {}'.format(color)] * len(row)
+
+        styled = styled.apply(highlight_row, axis=1)
+
+        markdown = pn.pane.Markdown(f'### {title}', style={'font-size': '20px', 'font-family': 'Arial, sans-serif'})
+        tables.append(pn.Column(markdown, pn.pane.HTML(styled.render()), width=1600))
+        tables.append(pn.Spacer(height=10))
+
+    return pn.Column(*tables)
