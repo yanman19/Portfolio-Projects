@@ -1,0 +1,185 @@
+I understand now - you want to calculate load growth in a more sophisticated way that accounts for the relationship between weather and load. Here's the updated code that:
+
+1. Analyzes a 60-day rolling window for each day
+2. Finds the 30th, 50th, and 70th percentiles of ERCOT_Pop_Temp in that window
+3. Calculates load growth at those specific weather points
+4. Averages them to get a single "stamped" growth percentage for each day
+
+```python
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+from sklearn.linear_model import LinearRegression
+import matplotlib.dates as mdates
+
+def create_load_growth_analysis(df, market_date_col='MARKETDATE'):
+    """
+    Calculate daily load growth comparing ERCOT_Pop_Temp and RTLoad using percentile analysis.
+    
+    For each day:
+    1. Take a 60-day window (current day to 2 months back)
+    2. Find the 30th, 50th, and 70th percentiles of ERCOT_Pop_Temp in that window
+    3. Calculate load growth at those weather percentiles
+    4. Average the three growth percentages to get a single value for that day
+    
+    Parameters:
+    df (DataFrame): The input dataframe containing load data
+    market_date_col (str): The column name containing the market dates
+    
+    Returns:
+    tuple: (load_growth_df, fig) - A dataframe with daily load growth and a matplotlib figure
+    """
+    # Make a copy to avoid modifying the original
+    df_copy = df.copy()
+    
+    # Convert market date to datetime
+    df_copy[market_date_col] = pd.to_datetime(df_copy[market_date_col])
+    
+    # Set the date as index
+    df_copy.set_index(market_date_col, inplace=True)
+    df_copy.sort_index(inplace=True)
+    
+    # If there are duplicate dates, take the mean
+    df_copy = df_copy.groupby(level=0).mean()
+    
+    # Only keep ERCOT_Pop_Temp and RTLoad columns for analysis
+    analysis_df = df_copy[['ERCOT_Pop_Temp', 'RTLoad']].copy()
+    
+    # Create a date range from the earliest date to the latest date
+    latest_date = analysis_df.index.max()
+    earliest_date = analysis_df.index.min()
+    date_range = pd.date_range(start=earliest_date, end=latest_date, freq='D')
+    
+    # Create a daily dataframe with the full date range
+    daily_df = pd.DataFrame(index=date_range)
+    
+    # Fill in the daily values
+    daily_df['ERCOT_Pop_Temp'] = analysis_df['ERCOT_Pop_Temp'].reindex(daily_df.index).ffill()
+    daily_df['RTLoad'] = analysis_df['RTLoad'].reindex(daily_df.index).ffill()
+    
+    # Prepare result dataframe
+    result_df = pd.DataFrame(index=daily_df.index)
+    
+    # Need at least 60 days of data to start analysis
+    start_date = daily_df.index.min() + pd.Timedelta(days=60)
+    
+    # We'll iterate through each day and calculate the stamped load growth
+    for current_date in daily_df.loc[start_date:].index:
+        # Get the window: current day to 60 days back
+        current_window = daily_df.loc[current_date - pd.Timedelta(days=59):current_date]
+        
+        # Get the window from 60 days ago (120-60 days back from current date)
+        prev_window = daily_df.loc[current_date - pd.Timedelta(days=119):current_date - pd.Timedelta(days=60)]
+        
+        # Check if we have enough data in both windows
+        if len(current_window) < 30 or len(prev_window) < 30:
+            result_df.loc[current_date, 'Load_Growth_Pct'] = np.nan
+            continue
+            
+        # Calculate weather percentiles for the current window
+        p30 = current_window['ERCOT_Pop_Temp'].quantile(0.3)
+        p50 = current_window['ERCOT_Pop_Temp'].quantile(0.5)
+        p70 = current_window['ERCOT_Pop_Temp'].quantile(0.7)
+        
+        # Find load at these temperature points using linear regression
+        # For current window
+        X_curr = current_window['ERCOT_Pop_Temp'].values.reshape(-1, 1)
+        y_curr = current_window['RTLoad'].values
+        curr_model = LinearRegression().fit(X_curr, y_curr)
+        
+        # For previous window
+        X_prev = prev_window['ERCOT_Pop_Temp'].values.reshape(-1, 1)
+        y_prev = prev_window['RTLoad'].values
+        prev_model = LinearRegression().fit(X_prev, y_prev)
+        
+        # Predict loads at the percentile points
+        curr_loads = {
+            'p30': curr_model.predict([[p30]])[0],
+            'p50': curr_model.predict([[p50]])[0],
+            'p70': curr_model.predict([[p70]])[0]
+        }
+        
+        prev_loads = {
+            'p30': prev_model.predict([[p30]])[0],
+            'p50': prev_model.predict([[p50]])[0],
+            'p70': prev_model.predict([[p70]])[0]
+        }
+        
+        # Calculate growth percentages at each weather percentile
+        growth_p30 = ((curr_loads['p30'] - prev_loads['p30']) / prev_loads['p30']) * 100
+        growth_p50 = ((curr_loads['p50'] - prev_loads['p50']) / prev_loads['p50']) * 100
+        growth_p70 = ((curr_loads['p70'] - prev_loads['p70']) / prev_loads['p70']) * 100
+        
+        # Average the three growth percentages
+        avg_growth = (growth_p30 + growth_p50 + growth_p70) / 3
+        
+        # Store the stamped growth percentage for this day
+        result_df.loc[current_date, 'Load_Growth_Pct'] = avg_growth
+        
+        # Store individual percentile data for reference
+        result_df.loc[current_date, 'Growth_P30'] = growth_p30
+        result_df.loc[current_date, 'Growth_P50'] = growth_p50
+        result_df.loc[current_date, 'Growth_P70'] = growth_p70
+        result_df.loc[current_date, 'Temp_P30'] = p30
+        result_df.loc[current_date, 'Temp_P50'] = p50
+        result_df.loc[current_date, 'Temp_P70'] = p70
+    
+    # Create a line plot of the stamped load growth percentages
+    fig, ax = plt.subplots(figsize=(12, 6))
+    
+    # Define colors similar to original code
+    color = '#0080A0'  # Light blue
+    
+    # Plot the main average growth line
+    ax.plot(result_df.index, result_df['Load_Growth_Pct'], 
+            label='Avg Growth (30/50/70 percentiles)', 
+            color=color,
+            linewidth=2)
+    
+    # Plot the individual percentile lines with lower opacity
+    ax.plot(result_df.index, result_df['Growth_P30'], 
+            label='Growth at 30th percentile', 
+            color='#00B43E',  # Green
+            alpha=0.5,
+            linewidth=1)
+    
+    ax.plot(result_df.index, result_df['Growth_P50'], 
+            label='Growth at 50th percentile', 
+            color='#FFBC3F',  # Yellow
+            alpha=0.5,
+            linewidth=1)
+    
+    ax.plot(result_df.index, result_df['Growth_P70'], 
+            label='Growth at 70th percentile', 
+            color='#FE8701',  # Red
+            alpha=0.5,
+            linewidth=1)
+    
+    # Format plot
+    ax.set_title('Daily Load Growth (%) - Weather-Normalized Two Month Rolling Window')
+    ax.set_xlabel('Date')
+    ax.set_ylabel('Load Growth (%)')
+    ax.legend()
+    ax.grid(True, alpha=0.3)
+    
+    # Format x-axis to show dates properly
+    ax.xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m-%d'))
+    ax.xaxis.set_major_locator(mdates.MonthLocator(interval=1))
+    plt.xticks(rotation=45)
+    
+    plt.tight_layout()
+    
+    return result_df, fig
+```
+
+This function:
+
+1. Creates a daily time series
+2. For each day, analyzes two windows: the current 60-day window and the previous 60-day window
+3. Finds the 30th, 50th, and 70th percentiles of ERCOT_Pop_Temp in the current window
+4. Uses linear regression to create weather-load models for both windows
+5. Calculates load growth percentages at each weather percentile by comparing what the load would be at that temperature in each window
+6. Averages these three growth percentages to get a single "stamped" value for each day
+7. Creates a line graph showing the stamped growth percentage over time, along with the individual percentile contributions
+
+The resulting time series will show how load is growing over time after accounting for weather effects, which should provide a more meaningful analysis than raw load growth.​​​​​​​​​​​​​​​​
