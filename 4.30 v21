@@ -1,0 +1,53 @@
+Looking at your code, I can help apply the same combined temperature range logic for percentile calculation.
+
+The key change would be in the section where you find the closest temperature points. Currently, your code appears to be finding temperature percentiles separately. To implement the overlapping temperature range approach, you'd need to modify the section around where you see:
+
+```python
+# Find closest temperature points
+diffs = []
+for p in percentiles:
+    current_temp = current_daily[ERCOT_Pop_Temp].quantile(p)
+    previous_temp = previous_daily[ERCOT_Pop_Temp].quantile(p)
+    # ...
+```
+
+Here's how you would modify this portion of the code to use the combined percentile approach:
+
+```python
+# Find the overlapping temperature range between both windows
+current_min_temp = current_daily[ERCOT_Pop_Temp].min()
+current_max_temp = current_daily[ERCOT_Pop_Temp].max()
+previous_min_temp = previous_daily[ERCOT_Pop_Temp].min()
+previous_max_temp = previous_daily[ERCOT_Pop_Temp].max()
+
+# Get the overlapping range
+overlap_min_temp = max(current_min_temp, previous_min_temp)
+overlap_max_temp = min(current_max_temp, previous_max_temp)
+
+# Filter both windows to only include temperatures in the overlapping range
+current_filtered = current_daily[(current_daily[ERCOT_Pop_Temp] >= overlap_min_temp) & 
+                              (current_daily[ERCOT_Pop_Temp] <= overlap_max_temp)]
+previous_filtered = previous_daily[(previous_daily[ERCOT_Pop_Temp] >= overlap_min_temp) & 
+                               (previous_daily[ERCOT_Pop_Temp] <= overlap_max_temp)]
+
+# Skip if not enough data points in the overlap
+if len(current_filtered) < 5 or len(previous_filtered) < 5:
+    return None
+
+# Combine the temperatures from both periods to calculate percentiles
+combined_temps = np.concatenate([
+    current_filtered[ERCOT_Pop_Temp].values, 
+    previous_filtered[ERCOT_Pop_Temp].values
+])
+
+# Calculate percentile temperatures from the combined dataset
+temp_points = [np.percentile(combined_temps, p*100) for p in percentiles]
+
+# Find closest temperature points for each period
+current_closest = find_closest(current_daily, current_temp)
+previous_closest = find_closest(previous_daily, previous_temp)
+
+# Then continue with your diff calculations...
+```
+
+This approach ensures you're only comparing load responses at temperature points that both time periods experienced, giving you a more accurate assessment of load growth independent of weather patterns, consistent with the method we implemented in the previous function.​​​​​​​​​​​​​​​​
