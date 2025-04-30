@@ -1,0 +1,158 @@
+Here's the full adjusted code for the `plot_monthly_data` function with the combined temperature percentile logic:
+
+```python
+def plot_monthly_data(months, pivot_df, aggregate=False):
+    # Convert MARKETDATE to datetime and create MONTH and YEAR columns
+    pivot_df['MARKETDATE'] = pd.to_datetime(pivot_df['MARKETDATE'])
+    pivot_df['MONTH'] = pivot_df['MARKETDATE'].dt.month
+    pivot_df['YEAR'] = pivot_df['MARKETDATE'].dt.year
+    
+    months_names = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+    percentiles = [0.3, 0.5, 0.7]  # Define percentiles outside the conditional blocks
+    
+    # Define the find_closest function outside the conditional blocks
+    def find_closest(df, target):
+        return df.iloc[(df['ERCOT_Pop_Temp'] - target).abs().argsort()[0:1]]
+    
+    if aggregate:
+        # Filter data for the specified months
+        current = pivot_df[(pivot_df['YEAR'] == 2025) & (pivot_df['MONTH'].isin(months))]
+        previous = pivot_df[(pivot_df['YEAR'] == 2024) & (pivot_df['MONTH'].isin(months))]
+        
+        # Aggregate data by day
+        current_daily = current[['MARKETDATE', 'ERCOT_Pop_Temp', 'RTLoad']].groupby(['MARKETDATE']).mean().dropna()
+        previous_daily = previous[['MARKETDATE', 'ERCOT_Pop_Temp', 'RTLoad']].groupby(['MARKETDATE']).mean().dropna()
+        
+        # Create a scatter plot for all months aggregated together
+        sns.set(style="darkgrid")
+        fig, ax = plt.subplots(figsize=(14, 8))
+        
+        sns.scatterplot(data=current_daily, x='ERCOT_Pop_Temp', y='RTLoad', s=50, color='b', marker='o', label='2025', ax=ax)
+        sns.scatterplot(data=previous_daily, x='ERCOT_Pop_Temp', y='RTLoad', s=50, color='g', marker='o', label='2024', ax=ax)
+        
+        # Fit Polynomial Model on current data
+        poly_model_current = make_pipeline(PolynomialFeatures(degree=2), LinearRegression())
+        poly_model_current.fit(current_daily[['ERCOT_Pop_Temp']], current_daily['RTLoad'])
+        current_daily['RTLoad_Predict'] = poly_model_current.predict(current_daily[['ERCOT_Pop_Temp']])
+        
+        # Fit Polynomial Model on previous data
+        poly_model_previous = make_pipeline(PolynomialFeatures(degree=2), LinearRegression())
+        poly_model_previous.fit(previous_daily[['ERCOT_Pop_Temp']], previous_daily['RTLoad'])
+        previous_daily['RTLoad_Predict'] = poly_model_previous.predict(previous_daily[['ERCOT_Pop_Temp']])
+        
+        sns.scatterplot(data=current_daily, x='ERCOT_Pop_Temp', y='RTLoad_Predict', color='red', s=75, marker='o', label='YTD model', ax=ax)
+        sns.scatterplot(data=previous_daily, x='ERCOT_Pop_Temp', y='RTLoad_Predict', color='orange', s=75, marker='o', label='2024 model', ax=ax)
+        
+        # Find the overlapping temperature range between both periods
+        current_min_temp = current_daily['ERCOT_Pop_Temp'].min()
+        current_max_temp = current_daily['ERCOT_Pop_Temp'].max()
+        previous_min_temp = previous_daily['ERCOT_Pop_Temp'].min()
+        previous_max_temp = previous_daily['ERCOT_Pop_Temp'].max()
+        
+        # Get the overlapping range
+        overlap_min_temp = max(current_min_temp, previous_min_temp)
+        overlap_max_temp = min(current_max_temp, previous_max_temp)
+        
+        # Filter both datasets to only include temperatures in the overlapping range
+        current_filtered = current_daily[(current_daily['ERCOT_Pop_Temp'] >= overlap_min_temp) & 
+                                      (current_daily['ERCOT_Pop_Temp'] <= overlap_max_temp)]
+        previous_filtered = previous_daily[(previous_daily['ERCOT_Pop_Temp'] >= overlap_min_temp) & 
+                                        (previous_daily['ERCOT_Pop_Temp'] <= overlap_max_temp)]
+        
+        # Combine the temperatures from both periods to calculate percentiles
+        combined_temps = np.concatenate([
+            current_filtered['ERCOT_Pop_Temp'].values, 
+            previous_filtered['ERCOT_Pop_Temp'].values
+        ])
+        
+        # Find temperature points at the specified percentiles
+        diffs = []
+        for p in percentiles:
+            # Get temperature at this percentile from combined data
+            temp_point = np.percentile(combined_temps, p*100)
+            
+            # Find closest points in each dataset
+            current_closest = find_closest(current_daily, temp_point)
+            previous_closest = find_closest(previous_daily, temp_point)
+            
+            if not current_closest.empty and not previous_closest.empty:
+                diff = current_closest['RTLoad_Predict'].values[0] - previous_closest['RTLoad_Predict'].values[0]
+                diffs.append(diff)
+        
+        # Average the differences and calculate percentage growth
+        avg_diff = sum(diffs) / len(diffs)
+        avg_previous_load_pred = previous_daily['RTLoad_Predict'].mean()
+        pct_load_growth = avg_diff / avg_previous_load_pred
+        
+        # Add load growth to legend
+        growth_label = f"Load Growth: {int(pct_load_growth * 100)}%" if int(avg_diff) >= 0 else f"Load Growth: {int(pct_load_growth * 100)}%"
+        ax.legend([growth_label], fontsize=12)
+        
+        # Add titles and labels
+        month_start = months_names[months[0] - 1]
+        month_end = months_names[months[-1] - 1]
+        
+        ax.set_title(f"Daily ATC Temp vs RTLoad, () 2025 vs () 2024".format(month_start, month_end, month_start, month_end), fontsize=14)
+        ax.set_xlabel("Temp", fontsize=12)
+        ax.set_ylabel("Load", fontsize=12)
+        plt.xticks()
+        plt.tight_layout()
+        ax.grid(True)
+        
+        return fig
+    else:
+        # Handle individual month analysis (code would go here)
+        # Since this part isn't visible in the screenshot, I'm keeping it as a placeholder
+        # The same logic for combined percentiles would be applied here
+        pass
+```
+
+The key changes I've made:
+
+1. Removed the separate percentile calculations:
+   ```python
+   # Removed:
+   current_percentiles = current_daily['ERCOT_Pop_Temp'].quantile(percentiles)
+   previous_percentiles = previous_daily['ERCOT_Pop_Temp'].quantile(percentiles)
+   ```
+
+2. Added code to find the overlapping temperature range:
+   ```python
+   # Find the overlapping temperature range between both periods
+   current_min_temp = current_daily['ERCOT_Pop_Temp'].min()
+   current_max_temp = current_daily['ERCOT_Pop_Temp'].max()
+   previous_min_temp = previous_daily['ERCOT_Pop_Temp'].min()
+   previous_max_temp = previous_daily['ERCOT_Pop_Temp'].max()
+   
+   # Get the overlapping range
+   overlap_min_temp = max(current_min_temp, previous_min_temp)
+   overlap_max_temp = min(current_max_temp, previous_max_temp)
+   ```
+
+3. Added filtering for the overlapping range and combined the temperatures:
+   ```python
+   # Filter both datasets to only include temperatures in the overlapping range
+   current_filtered = current_daily[(current_daily['ERCOT_Pop_Temp'] >= overlap_min_temp) & 
+                                  (current_daily['ERCOT_Pop_Temp'] <= overlap_max_temp)]
+   previous_filtered = previous_daily[(previous_daily['ERCOT_Pop_Temp'] >= overlap_min_temp) & 
+                                    (previous_daily['ERCOT_Pop_Temp'] <= overlap_max_temp)]
+   
+   # Combine the temperatures from both periods to calculate percentiles
+   combined_temps = np.concatenate([
+       current_filtered['ERCOT_Pop_Temp'].values, 
+       previous_filtered['ERCOT_Pop_Temp'].values
+   ])
+   ```
+
+4. Modified the temperature point calculation to use the combined data:
+   ```python
+   for p in percentiles:
+       # Get temperature at this percentile from combined data
+       temp_point = np.percentile(combined_temps, p*100)
+       
+       # Find closest points in each dataset
+       current_closest = find_closest(current_daily, temp_point)
+       previous_closest = find_closest(previous_daily, temp_point)
+   ```
+
+This approach ensures we're comparing load values at temperature points that both years experienced, giving a more accurate assessment of the true load growth.​​​​​​​​​​​​​​​​
