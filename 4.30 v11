@@ -1,0 +1,258 @@
+You're right - we need to make sure the percentile gradient colors aren't overridden by the section background colors. Here's the updated code with a fix for that issue:
+
+```python
+import pandas as pd
+import panel as pn
+from datetime import timedelta
+from scipy.stats import percentileofscore
+
+def create_cash_summary(df, lists_of_items, titles):
+    # Convert MARKETDATE to datetime and set as index
+    df.index = pd.to_datetime(df['MARKETDATE'])
+    
+    # Get the latest date in the data
+    latest_date = df.index.max()
+    
+    # Create a range of the last 10 days
+    date_range = [latest_date - pd.Timedelta(days=i) for i in reversed(range(10))]
+    
+    # Get current data for display
+    current_df = df[df.index.isin(date_range)]
+    
+    # Define colors for different sections
+    colors = ['#D0EAF8', '#D6F5ED', '#FDF3DC', '#F5B7B1']
+    tables = []
+
+    def percentile_color(val):
+        try:
+            val = float(val.strip('%'))
+        except:
+            return ''
+            
+        # Updated color gradient: blue at 0%, white at 50%, red at 100%
+        if val <= 50:
+            # Blue (0,0,255) to White (255,255,255)
+            r = int(255 * (val / 50))
+            g = int(255 * (val / 50))
+            b = 255
+        else:
+            # White (255,255,255) to Red (255,0,0)
+            r = 255
+            g = int(255 * (1 - (val - 50) / 50))
+            b = int(255 * (1 - (val - 50) / 50))
+        
+        return f'background-color: rgb({r},{g},{b}) !important'  # Added !important to override
+
+    for item_list, color, title in zip(lists_of_items, colors, titles):
+        # Process data for each section
+        
+        # Use only the columns we need
+        section_df = df[item_list].copy()
+        
+        # Get current window data
+        current_window = current_df[item_list].copy()
+        
+        # Calculate current averages
+        avg_10 = current_window.mean().round(2) 
+        avg_5 = current_window.tail(5).mean().round(2)
+        
+        # Extract the month-day combinations from the current window
+        month_days = [(d.month, d.day) for d in current_window.index]
+        
+        # Get the current year
+        current_year = latest_date.year
+        
+        # Collect historical data for the same month-day combinations across years
+        historical_10day_values = {}
+        historical_5day_values = {}
+        
+        # Get unique years in the dataset
+        years = sorted(df.index.year.unique())
+        
+        for item in item_list:
+            historical_10day_values[item] = []
+            historical_5day_values[item] = []
+            
+            for year in years:
+                # Skip current year
+                if year == current_year:
+                    continue
+                
+                # Get data for same calendar dates in previous years
+                year_data = []
+                
+                for month, day in month_days:
+                    # Create the date for this year
+                    try:
+                        hist_date = pd.Timestamp(year=year, month=month, day=day)
+                        
+                        # Check if we have data for this date
+                        if hist_date in section_df.index:
+                            if item in section_df.loc[hist_date]:
+                                value = section_df.loc[hist_date, item]
+                                if pd.notna(value):
+                                    year_data.append(value)
+                    except:
+                        # Handle invalid dates (like Feb 29 in non-leap years)
+                        continue
+                
+                # If we found enough data points for this year
+                if len(year_data) >= 5:
+                    # Calculate 10-day average
+                    if len(year_data) >= 10:
+                        ten_day_avg = sum(year_data) / len(year_data)
+                        historical_10day_values[item].append(ten_day_avg)
+                    
+                    # Calculate 5-day average (last 5 days)
+                    five_day_avg = sum(year_data[-5:]) / 5
+                    historical_5day_values[item].append(five_day_avg)
+        
+        # Calculate percentiles
+        pct_10 = {}
+        pct_5 = {}
+        
+        for item in item_list:
+            # Use current values and historical data to calculate percentiles
+            if historical_10day_values[item]:
+                pct_10[item] = percentileofscore(historical_10day_values[item], avg_10[item])
+            else:
+                pct_10[item] = 50.0  # Default if no historical data
+                
+            if historical_5day_values[item]:
+                pct_5[item] = percentileofscore(historical_5day_values[item], avg_5[item])
+            else:
+                pct_5[item] = 50.0  # Default if no historical data
+        
+        # Create the display table
+        past_10days = current_window[item_list].T.round(2)
+        past_10days.columns = [col.strftime('%Y-%m-%d') for col in past_10days.columns]
+        
+        # Create stats DataFrame
+        stats = pd.DataFrame(index=item_list)
+        stats['TEN DAY AVG'] = avg_10
+        stats['FIVE DAY AVG'] = avg_5
+        
+        # Round percentiles to whole numbers (no decimal places)
+        stats['TEN DAY PCTLE'] = pd.Series(pct_10).map(lambda x: f"{int(round(x))}%")
+        stats['FIVE DAY PCTLE'] = pd.Series(pct_5).map(lambda x: f"{int(round(x))}%")
+        
+        # Combine tables
+        full_table = pd.concat([past_10days, stats], axis=1)
+        
+        # Style the table
+        exact_width = "80px"  # Set all columns to exactly this width
+        name_width = "300px"  # Increased width for name column
+        
+        styled = full_table.style.set_properties(**{
+            'background-color': 'white',
+            'color': 'black',
+            'border-color': 'black',
+            'border-style': 'solid',
+            'border-width': '1px',
+            'font-family': 'Arial',
+            'font-size': '12px',
+            'text-align': 'center',
+            'width': exact_width,
+            'overflow': 'hidden',
+            'text-overflow': 'ellipsis',
+            'white-space': 'nowrap',
+            'padding': '2px 5px'
+        }).set_table_styles([
+            # Force fixed table layout
+            {
+                'selector': '',
+                'props': [
+                    ('table-layout', 'fixed'),
+                    ('width', 'auto')
+                ]
+            },
+            # Style for all headers
+            {
+                'selector': 'th',
+                'props': [
+                    ('background-color', 'white'), 
+                    ('font-family', 'Arial, sans-serif'),
+                    ('font-size', '12px'), 
+                    ('width', exact_width),
+                    ('text-align', 'center'),
+                    ('overflow', 'hidden'),
+                    ('text-overflow', 'ellipsis'),
+                    ('white-space', 'nowrap'),
+                    ('padding', '2px 5px')
+                ]
+            },
+            # Style for index column header
+            {
+                'selector': 'th.index_name',
+                'props': [
+                    ('display', 'none')  # Hide the index header
+                ]
+            },
+            # Style for first column (names)
+            {
+                'selector': 'td:first-child',
+                'props': [
+                    ('width', name_width), 
+                    ('max-width', name_width), 
+                    ('text-align', 'left'), 
+                    ('white-space', 'nowrap'), 
+                    ('overflow', 'hidden'),
+                    ('text-overflow', 'ellipsis'),
+                    ('padding-left', '10px')  # Consistent left padding for indentation
+                ]
+            },
+            # Style for index header
+            {
+                'selector': 'th.row_heading',
+                'props': [
+                    ('width', name_width), 
+                    ('max-width', name_width), 
+                    ('text-align', 'left'), 
+                    ('white-space', 'nowrap'), 
+                    ('overflow', 'hidden'),
+                    ('text-overflow', 'ellipsis'),
+                    ('padding-left', '10px')  # Match the indentation of the data cells
+                ]
+            }
+        ])
+        
+        # First apply row background colors
+        def highlight_row(row):
+            styles = []
+            for i in range(len(row)):
+                # Apply section color to all columns except percentile columns
+                col_name = row.index[i]
+                if col_name in ['TEN DAY PCTLE', 'FIVE DAY PCTLE']:
+                    styles.append('')  # Empty style for percentile columns
+                else:
+                    styles.append(f'background-color: {color}')
+            return styles
+        
+        styled = styled.apply(highlight_row, axis=1)
+        
+        # Then apply percentile coloring (will override due to !important)
+        styled = styled.applymap(percentile_color, subset=['TEN DAY PCTLE', 'FIVE DAY PCTLE'])
+        
+        # Create display
+        markdown = pn.pane.Markdown(f'### {title}', style={'font-size': '20px', 'font-family': 'Arial, sans-serif'})
+        tables.append(pn.Column(markdown, pn.pane.HTML(styled.render()), width=1800))
+        tables.append(pn.Spacer(height=10))
+    
+    return pn.Column(*tables)
+```
+
+Key changes to fix the percentile gradient issue:
+
+1. **Added CSS `!important` flag**:
+   - Modified the `percentile_color` function to add `!important` to the background-color CSS property
+   - This ensures the gradient colors will override any other applied background colors
+
+2. **Changed the row highlighting approach**:
+   - Rewrote the `highlight_row` function to apply section colors to all columns EXCEPT the percentile columns
+   - This avoids applying the section color to the percentile columns in the first place
+
+3. **Controlled the style application order**:
+   - Apply the row background colors first
+   - Then apply the percentile coloring, which will take precedence for those specific cells due to the `!important` flag
+
+These changes will ensure that the percentile columns display their gradient colors correctly without being overridden by the section background colors. The data cells will still have the appropriate section colors, while the percentile cells will show the blue-white-red gradient based on their values.​​​​​​​​​​​​​​​​
