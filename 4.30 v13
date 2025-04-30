@@ -1,0 +1,95 @@
+I can see you have a Python function that creates cash summaries, and you want to modify it to calculate and visualize rolling load growth. Based on your requirements, you need a daily time series that shows the load growth percentage comparing each day to two months prior.
+
+Here's the modified code to accomplish this:
+
+```python
+import pandas as pd
+import matplotlib.pyplot as plt
+
+def create_load_growth_analysis(df, items_list=None, market_date_col='MARKETDATE'):
+    """
+    Calculate daily load growth by comparing each day with the same day 2 months ago.
+    Returns both a time series dataframe and a plot.
+    
+    Parameters:
+    df (DataFrame): The input dataframe containing load data
+    items_list (list): List of columns to analyze. If None, all numeric columns will be used
+    market_date_col (str): The column name containing the market dates
+    
+    Returns:
+    tuple: (load_growth_df, fig) - A dataframe with daily load growth and a matplotlib figure
+    """
+    # Make a copy to avoid modifying the original
+    df_copy = df.copy()
+    
+    # Convert market date to datetime
+    df_copy[market_date_col] = pd.to_datetime(df_copy[market_date_col])
+    
+    # If no items specified, use all numeric columns except the date column
+    if items_list is None:
+        items_list = df_copy.select_dtypes(include=['number']).columns.tolist()
+        if market_date_col in items_list:
+            items_list.remove(market_date_col)
+    
+    # Set the date as index
+    df_copy.set_index(market_date_col, inplace=True)
+    df_copy.sort_index(inplace=True)
+    
+    # If there are duplicate dates, take the mean
+    df_copy = df_copy.groupby(level=0).mean()
+    
+    # Create a date range from the earliest date to the latest date
+    latest_date = df_copy.index.max()
+    date_range = pd.date_range(start=df_copy.index.min(), end=latest_date, freq='D')
+    
+    # Create an empty dataframe with the full date range
+    daily_df = pd.DataFrame(index=date_range)
+    
+    # Fill in the daily values for each column in items_list
+    for col in items_list:
+        daily_df[col] = df_copy[col].reindex(daily_df.index).ffill()
+    
+    # Calculate the 60-day shifted values (approximately 2 months)
+    shifted_df = daily_df.shift(60)  # 60 days = ~2 months
+    
+    # Calculate the growth percentage for each column
+    growth_df = pd.DataFrame(index=daily_df.index)
+    
+    for col in items_list:
+        growth_df[f'{col} Growth (%)'] = ((daily_df[col] - shifted_df[col]) / shifted_df[col]) * 100
+    
+    # Drop rows with all NaN values (where we don't have data from 2 months ago)
+    growth_df = growth_df.dropna(how='all')
+    
+    # Create a line plot
+    fig, ax = plt.subplots(figsize=(12, 6))
+    
+    # Define colors similar to original code
+    colors = ['#0080A0', '#00B43E', '#FFBC3F', '#FE8701']  # Light blue, green, yellow, red
+    
+    for i, col in enumerate(growth_df.columns):
+        ax.plot(growth_df.index, growth_df[col], 
+                label=col, 
+                color=colors[i % len(colors)],
+                marker='o', 
+                markersize=3)
+    
+    ax.set_title('Daily Load Growth (%) - Two Month Rolling Window')
+    ax.set_xlabel('Date')
+    ax.set_ylabel('Load Growth (%)')
+    ax.legend()
+    ax.grid(True)
+    plt.tight_layout()
+    
+    return growth_df, fig
+```
+
+This function will:
+
+1. Take your dataframe and analyze either specified columns or all numeric columns
+2. Calculate a daily load growth percentage by comparing each day's value with the value from 60 days (≈2 months) prior
+3. Return both the time series dataframe and a plot showing the growth over time
+
+The line graph will have time on the x-axis and load growth percentage on the y-axis, just as you requested. The function handles missing dates by forward-filling values and correctly calculates the percentage change from the value 2 months prior.
+
+Let me know if you need any clarification or adjustments to this implementation!​​​​​​​​​​​​​​​​
