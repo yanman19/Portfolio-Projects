@@ -1,0 +1,88 @@
+import pandas as pd
+import panel as pn
+from datetime import timedelta
+from scipy.stats import percentileofscore
+
+def create_cash_summary(df, lists_of_items, titles):
+    df.index = pd.to_datetime(df['MARKETDATE'])
+    latest_date = df.index.max()
+
+    date_range = [latest_date - pd.Timedelta(days=i) for i in reversed(range(11))]
+    df = df[df.index.isin(date_range)]
+
+    colors = ['#D0EAF8', '#D6F5ED', '#FDF3DC', '#F5B7B1']
+    tables = []
+
+    for item_list, color, title in zip(lists_of_items, colors, titles):
+        df_subset = df[item_list].copy()
+        subset = df_subset.resample('D').mean()
+
+        avg_10 = df_subset.rolling(window=10, min_periods=10).mean().iloc[-1]
+        avg_5 = df_subset.rolling(window=5, min_periods=5).mean().iloc[-1]
+
+        today = df.index.max()
+        historical_values_10 = []
+        historical_values_5 = []
+
+        for past_year in range(1, 6):
+            try:
+                past_date = today - pd.DateOffset(years=past_year)
+                range_10 = df[(df.index >= past_date - timedelta(days=9)) & (df.index <= past_date)]
+                range_5 = df[(df.index >= past_date - timedelta(days=4)) & (df.index <= past_date)]
+
+                if len(range_10) == 10:
+                    historical_values_10.append(range_10[item_list].mean())
+                if len(range_5) == 5:
+                    historical_values_5.append(range_5[item_list].mean())
+            except:
+                continue
+
+        hist_10_df = pd.DataFrame(historical_values_10)
+        hist_5_df = pd.DataFrame(historical_values_5)
+
+        pct_10 = hist_10_df.apply(lambda col: percentileofscore(col.dropna(), avg_10[col.name]), axis=0).astype(float)
+        pct_5 = hist_5_df.apply(lambda col: percentileofscore(col.dropna(), avg_5[col.name]), axis=0).astype(float)
+
+        subset = pd.DataFrame(index=item_list)
+        subset['TEN DAY AVG'] = avg_10.values
+        subset['FIVE DAY AVG'] = avg_5.values
+        subset['TEN DAY PCTLE'] = [f"{pct_10.get(col, 0):.1f}%" for col in item_list]
+        subset['FIVE DAY PCTLE'] = [f"{pct_5.get(col, 0):.1f}%" for col in item_list]
+
+        past_10days = df[item_list].tail(10).transpose()
+        past_10days.columns = [f'DAY {-9 + i}' for i in range(10)]
+        subset = pd.concat([subset, past_10days], axis=1)
+
+        # Style for consistent column and index width
+        styled = subset.style.set_properties(**{
+            'background-color': 'white',
+            'color': 'black',
+            'border-color': 'black',
+            'border-style': 'solid',
+            'border-width': '1px',
+            'font-family': 'Arial',
+            'font-size': '12px',
+            'min-width': '100px',
+            'max-width': '100px'
+        }).set_table_styles([
+            {
+                'selector': 'th',
+                'props': [('background-color', 'white'), ('font-family', 'Arial, sans-serif'), ('font-size', '12px'),
+                          ('min-width', '100px'), ('max-width', '100px')]
+            },
+            {
+                'selector': 'th.col0',
+                'props': [('min-width', '140px'), ('max-width', '140px')]  # Index (row labels) width
+            }
+        ]).set_table_attributes('style="width:100%;"')
+
+        def highlight_row(row):
+            return ['background-color: {}'.format(color)] * len(row)
+
+        styled = styled.apply(highlight_row, axis=1)
+
+        markdown = pn.pane.Markdown(f'### {title}', style={'font-size': '20px', 'font-family': 'Arial, sans-serif'})
+        tables.append(pn.Column(markdown, pn.pane.HTML(styled.to_html()), width=1300))
+        tables.append(pn.Spacer(height=10))
+
+    return pn.Column(*tables)
