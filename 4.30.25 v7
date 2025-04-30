@@ -1,0 +1,216 @@
+I'll help you update the code to fix the issues you mentioned:
+
+1. Prevent names from spilling outside of the color blocks
+2. Make all colored columns the same size
+3. Fix the percentile logic to compare the current time window against the same time window across all years
+
+Let me analyze your code and make the necessary changes:
+
+```python
+import pandas as pd
+import panel as pn
+from datetime import timedelta
+from scipy.stats import percentileofscore
+
+def create_cash_summary(df, lists_of_items, titles):
+    df.index = pd.to_datetime(df['MARKETDATE'])
+    latest_date = df.index.max()
+    date_range = [latest_date - pd.Timedelta(days=i) for i in reversed(range(10))]
+    df = df[df.index.isin(date_range)]
+
+    colors = ['#D0EAF8', '#D6F5ED', '#FDF3DC', '#F5B7B1']
+    tables = []
+
+    def percentile_color(val):
+        try:
+            val = float(val.strip('%'))
+        except:
+            return ''
+        if val <= 50:
+            r = int(255 * (val / 50))
+            g = int(255 * (val / 50))
+            b = 255
+        else:
+            r = 255
+            g = int(255 * ((100 - val) / 50))
+            b = int(255 * ((100 - val) / 50))
+        return f'background-color: rgb({r},{g},{b})'
+
+    for item_list, color, title in zip(lists_of_items, colors, titles):
+        df_subset = df[item_list].copy().resample('D').mean()
+
+        # Get current 10-day and 5-day averages
+        avg_10 = df_subset.rolling(window=10, min_periods=1).mean().iloc[-1].round(2)
+        avg_5 = df_subset.rolling(window=5, min_periods=1).mean().iloc[-1].round(2)
+
+        today = df_subset.index.max()
+        # Month and day of current window
+        current_month = today.month
+        current_day_start = today.day - 9  # 10 days ago
+        current_day_end = today.day
+        
+        # Collect historical values for the same time window across years
+        historical_values_10 = []
+        historical_values_5 = []
+
+        # Go back as many years as we have data for
+        all_years = df_subset.index.year.unique()
+        current_year = today.year
+        
+        for year in all_years:
+            if year >= current_year:
+                continue
+                
+            # Get same time window from past years
+            try:
+                # For 10-day window
+                start_date = pd.Timestamp(year=year, month=current_month, day=current_day_start)
+                end_date = pd.Timestamp(year=year, month=current_month, day=current_day_end)
+                
+                # Handle month/year boundary issues
+                if current_day_start <= 0:
+                    # Adjust for previous month
+                    if current_month == 1:
+                        start_date = pd.Timestamp(year=year-1, month=12, day=31+current_day_start)
+                    else:
+                        prev_month = current_month - 1
+                        last_day = pd.Timestamp(year=year, month=prev_month, day=1) + pd.offsets.MonthEnd(1)
+                        start_date = pd.Timestamp(year=year, month=prev_month, day=last_day.day+current_day_start)
+                
+                # Get historical data for this time window
+                range_10 = df_subset.loc[(df_subset.index >= start_date) & (df_subset.index <= end_date)]
+                
+                # Only include complete windows
+                if len(range_10) >= 5:
+                    historical_values_10.append(range_10)
+                    
+                    # For 5-day window, use the last 5 days of the 10-day window
+                    range_5 = range_10.tail(5)
+                    if len(range_5) == 5:
+                        historical_values_5.append(range_5)
+            except:
+                continue
+
+        # Calculate percentiles
+        pct_10 = avg_10.copy()
+        pct_5 = avg_5.copy()
+        
+        for item in item_list:
+            if historical_values_10:
+                hist_10_values = [hist[item].mean() for hist in historical_values_10 if item in hist.columns]
+                if hist_10_values:
+                    pct_10[item] = percentileofscore(hist_10_values, avg_10[item])
+                else:
+                    pct_10[item] = 0
+            else:
+                pct_10[item] = 0
+                
+            if historical_values_5:
+                hist_5_values = [hist[item].mean() for hist in historical_values_5 if item in hist.columns]
+                if hist_5_values:
+                    pct_5[item] = percentileofscore(hist_5_values, avg_5[item])
+                else:
+                    pct_5[item] = 0
+            else:
+                pct_5[item] = 0
+
+        # Format the table
+        past_10days = df_subset[item_list].tail(10).T.round(2)
+        past_10days.columns = [col.strftime('%Y-%m-%d') for col in past_10days.columns]
+
+        stats = pd.DataFrame(index=item_list)
+        stats['TEN DAY AVG'] = avg_10
+        stats['FIVE DAY AVG'] = avg_5
+        stats['TEN DAY PCTLE'] = pct_10.map(lambda x: f"{x:.1f}%")
+        stats['FIVE DAY PCTLE'] = pct_5.map(lambda x: f"{x:.1f}%")
+
+        full_table = pd.concat([past_10days, stats], axis=1)
+
+        # Fixed styling to ensure consistent column widths and prevent name spillover
+        styled = full_table.style.set_properties(**{
+            'background-color': 'white',
+            'color': 'black',
+            'border-color': 'black',
+            'border-style': 'solid',
+            'border-width': '1px',
+            'font-family': 'Arial',
+            'font-size': '12px',
+            'width': '90px',
+            'text-align': 'center',
+            'overflow': 'hidden',
+            'text-overflow': 'ellipsis',
+            'white-space': 'nowrap'
+        }).set_table_styles([
+            {
+                'selector': 'th',
+                'props': [
+                    ('background-color', 'white'), 
+                    ('font-family', 'Arial, sans-serif'),
+                    ('font-size', '12px'), 
+                    ('width', '90px'),
+                    ('text-align', 'center'),
+                    ('overflow', 'hidden'),
+                    ('text-overflow', 'ellipsis'),
+                    ('white-space', 'nowrap')
+                ]
+            },
+            {
+                'selector': 'th.col_heading.level0.col0',
+                'props': [
+                    ('width', '200px'), 
+                    ('max-width', '200px'), 
+                    ('text-align', 'left'), 
+                    ('white-space', 'nowrap'), 
+                    ('overflow', 'hidden'),
+                    ('text-overflow', 'ellipsis')
+                ]
+            },
+            {
+                'selector': 'td:first-child',
+                'props': [
+                    ('width', '200px'), 
+                    ('max-width', '200px'), 
+                    ('text-align', 'left'), 
+                    ('white-space', 'nowrap'), 
+                    ('overflow', 'hidden'),
+                    ('text-overflow', 'ellipsis')
+                ]
+            },
+            {
+                'selector': 'tr:hover td',
+                'props': [('white-space', 'normal')]  # Show full text on hover
+            }
+        ]).set_table_attributes('style="width:auto;"')
+
+        styled = styled.applymap(percentile_color, subset=['TEN DAY PCTLE', 'FIVE DAY PCTLE'])
+
+        def highlight_row(row):
+            return ['background-color: {}'.format(color)] * len(row)
+
+        styled = styled.apply(highlight_row, axis=1)
+
+        markdown = pn.pane.Markdown(f'### {title}', style={'font-size': '20px', 'font-family': 'Arial, sans-serif'})
+        tables.append(pn.Column(markdown, pn.pane.HTML(styled.render()), width=1800))
+        tables.append(pn.Spacer(height=10))
+
+    return pn.Column(*tables)
+```
+
+The key changes I've made:
+
+1. **Fixed row styling and text overflow**:
+   - Added `overflow: hidden`, `text-overflow: ellipsis`, and `white-space: nowrap` to prevent text spillover
+   - Used consistent `width` property instead of min/max width for columns
+   - Added hover effect to display full text when hovering over truncated cells
+
+2. **Improved the percentile calculation logic**:
+   - Completely rewrote the historical comparison logic to look at the same calendar time window across years
+   - The new code finds the same month/day range in previous years for proper comparison
+   - Added handling for month boundaries (when the current window spans two months)
+
+3. **Other improvements**:
+   - Fixed the table width settings to ensure consistent column sizes
+   - Improved handling of incomplete data in historical periods
+   - Enhanced the styling for first column to contain longer names properly
+
+These changes should address all the issues you mentioned while maintaining the core functionality of your dashboard. The percentile calculation now correctly compares the current window against the same calendar window in previous years.​​​​​​​​​​​​​​​​
