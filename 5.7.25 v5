@@ -1,107 +1,60 @@
-I understand - my solution didn't fix the problem. Let me take a more direct approach by completely revising your function with proven syntax that will fix the styling issues.
-
-Looking at your error specifically, the line `subset=pd.IndexSlice(['Peak', 'OffPeak'], :)` is causing a syntax error. Let me provide a completely different approach that avoids this issue entirely:
-
-```python
 def create_cash_pivot_table(df, column_list):
-    # Data preparation
     df = df.copy()
     df['MARKETDATE'] = pd.to_datetime(df['MARKETDATE'])
     df['ME'] = df['HE'].astype(int)
-    
+
     today = pd.Timestamp.today().normalize()
     start_date = today - pd.Timedelta(days=15)
     end_date = today + pd.Timedelta(days=7)
-    
-    # Filter data to date range
+
     df_filtered = df[(df['MARKETDATE'] >= start_date) & (df['MARKETDATE'] <= end_date)]
-    
-    # Create a more compact HTML table directly
+
     for col in column_list:
-        # Extract data
         sub_df = df_filtered[['ME', 'MARKETDATE', col]].copy()
         sub_df[col] = sub_df[col].fillna(0)
-        
-        # Create pivot
+
         pivot = sub_df.pivot_table(index='ME', columns='MARKETDATE', values=col, aggfunc='mean')
-        
-        # Calculate Peak/OffPeak
         peak_hours = list(range(7, 23))
         offpeak_hours = [h for h in range(1, 25) if h not in peak_hours]
         peak_avg = pivot.loc[pivot.index.isin(peak_hours)].mean()
         offpeak_avg = pivot.loc[pivot.index.isin(offpeak_hours)].mean()
-        
-        # Format dates
         pivot.columns = pivot.columns.strftime('%m/%d')
-        
-        # Build HTML directly - no fancy styling that might cause errors
+
         html_parts = []
-        
-        # Start table with smaller font and compact styling
         html_parts.append('''
         <div style="text-align:center; font-weight:bold; margin-bottom:5px;">DALoad</div>
-        <table style="border-collapse:collapse; font-size:9px; margin:0 auto; width:auto;">
+        <table style="border-collapse:collapse; font-size:8px; margin:0 auto; table-layout:fixed;">
         ''')
-        
-        # Add header row
-        html_parts.append('<tr><th style="padding:1px 2px; border:1px solid #ddd; width:30px;">HE</th>')
+
+        html_parts.append('<tr><th style="padding:1px 3px; border:1px solid #ddd; width:45px;">HE</th>')
         for col_name in pivot.columns:
-            today_style = ''
-            if col_name == today.strftime('%m/%d'):
-                today_style = 'background-color:#e6f0ff;'
-            html_parts.append(f'<th style="padding:1px 2px; border:1px solid #ddd; width:30px; {today_style}">{col_name}</th>')
+            today_style = 'background-color:#e6f0ff;' if col_name == today.strftime('%m/%d') else ''
+            html_parts.append(f'<th style="padding:1px 2px; border:1px solid #ddd; width:35px; {today_style}">{col_name}</th>')
         html_parts.append('</tr>')
-        
-        # Add data rows
+
         for idx in pivot.index:
-            if idx in ['Peak', 'OffPeak']:
-                continue  # We'll add these separately
-                
-            html_parts.append(f'<tr><td style="padding:1px 2px; border:1px solid #ddd; text-align:center;">{idx}</td>')
+            html_parts.append(f'<tr><td style="padding:1px 2px; border:1px solid #ddd; text-align:center; width:45px;">{idx}</td>')
             for col_name in pivot.columns:
                 val = pivot.loc[idx, col_name]
-                today_style = ''
-                if col_name == today.strftime('%m/%d'):
-                    today_style = 'background-color:#e6f0ff;'
-                html_parts.append(f'<td style="padding:1px 2px; border:1px solid #ddd; text-align:center; {today_style}">{int(val)}</td>')
+                today_style = 'background-color:#e6f0ff;' if col_name == today.strftime('%m/%d') else ''
+                html_parts.append(f'<td style="padding:1px 2px; border:1px solid #ddd; text-align:center; width:35px; height:22px; {today_style}">{int(val)}</td>')
             html_parts.append('</tr>')
-        
-        # Add Peak row
+
         html_parts.append('<tr style="background-color:#f0f0f0; font-weight:bold;">')
-        html_parts.append('<td style="padding:1px 2px; border:1px solid #ddd; text-align:center;">Peak</td>')
+        html_parts.append('<td style="padding:1px 2px; border:1px solid #ddd; text-align:center; width:45px;">Peak</td>')
         for col_name in pivot.columns:
             val = peak_avg[col_name]
-            today_style = ''
-            if col_name == today.strftime('%m/%d'):
-                today_style = 'background-color:#e6f0ff;'
-            html_parts.append(f'<td style="padding:1px 2px; border:1px solid #ddd; text-align:center; {today_style}">{int(val)}</td>')
+            today_style = 'background-color:#e6f0ff;' if col_name == today.strftime('%m/%d') else ''
+            html_parts.append(f'<td style="padding:1px 2px; border:1px solid #ddd; text-align:center; width:35px; height:22px; {today_style}">{int(val)}</td>')
         html_parts.append('</tr>')
-        
-        # Add OffPeak row
+
         html_parts.append('<tr style="background-color:#f0f0f0; font-weight:bold;">')
-        html_parts.append('<td style="padding:1px 2px; border:1px solid #ddd; text-align:center;">OffPeak</td>')
+        html_parts.append('<td style="padding:1px 2px; border:1px solid #ddd; text-align:center; width:45px;">OffPeak</td>')
         for col_name in pivot.columns:
             val = offpeak_avg[col_name]
-            today_style = ''
-            if col_name == today.strftime('%m/%d'):
-                today_style = 'background-color:#e6f0ff;'
-            html_parts.append(f'<td style="padding:1px 2px; border:1px solid #ddd; text-align:center; {today_style}">{int(val)}</td>')
+            today_style = 'background-color:#e6f0ff;' if col_name == today.strftime('%m/%d') else ''
+            html_parts.append(f'<td style="padding:1px 2px; border:1px solid #ddd; text-align:center; width:35px; height:22px; {today_style}">{int(val)}</td>')
         html_parts.append('</tr>')
-        
-        # Close table
+
         html_parts.append('</table>')
-        
         return ''.join(html_parts)
-```
-
-This approach:
-
-1. **Completely avoids** the problematic `pd.IndexSlice` syntax by building the HTML directly
-2. **Uses much smaller font sizes** (9px) to make the table compact
-3. **Implements minimal cell padding** (1px 2px) to reduce table size
-4. **Creates narrow columns** (30px) for a more compact display
-5. **Adds highlighting** for Peak/OffPeak rows and today's column
-6. **Ensures clean borders** with consistent styling
-7. **Handles integer formatting** directly in the HTML generation
-
-This direct HTML approach should bypass any pandas styling issues while giving you a significantly more compact and readable table that doesn't require scrolling.​​​​​​​​​​​​​​​​
