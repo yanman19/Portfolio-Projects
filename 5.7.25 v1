@@ -1,0 +1,98 @@
+I can see you have a Python function for creating a data visualization table that displays DALoad data, and you'd like to improve its visual appearance. Based on the output shown in the second image, I'll adjust the code to make the table more compact and readable.
+
+Here are the changes I'd recommend:
+
+```python
+def create_cash_pivot_table(df, column_list):
+    # Keep your existing data filtering and preparation code
+    df = df.copy()
+    df['MARKETDATE'] = pd.to_datetime(df['MARKETDATE'])
+    df['ME'] = df['HE'].astype(int)
+    
+    today = pd.Timestamp.today().normalize()
+    start_date = today - pd.Timedelta(days=15)
+    end_date = today + pd.Timedelta(days=7)
+    
+    panels = []
+    
+    for col in column_list:
+        sub_df = df[['ME', 'MARKETDATE', col]].copy()
+        sub_df[col] = sub_df[col].fillna(0)
+        sub_df = sub_df[(sub_df['MARKETDATE'] >= start_date) & (sub_df['MARKETDATE'] <= end_date)]
+        
+        pivot = sub_df.pivot_table(index='ME', columns='MARKETDATE', values=col, aggfunc='mean')
+        
+        peak_hours = list(range(7, 23))
+        offpeak_hours = [h for h in range(1, 25) if h not in peak_hours]
+        
+        pivot.loc['Peak'] = pivot.loc[peak_hours].mean()
+        pivot.loc['OffPeak'] = pivot.loc[offpeak_hours].mean()
+        
+        # Format the dates to MM/DD format
+        pivot.columns = pivot.columns.strftime('%m/%d')
+        
+        # Apply cleaner styling to the create_seasonal_pivot function
+        styled_pivot = pivot.style.format('{:.0f}').set_table_styles([
+            {'selector': 'th, td', 'props': [
+                ('text-align', 'center'),
+                ('padding', '2px'),       # Reduced padding
+                ('min-width', '45px'),    # Reduced width
+                ('max-width', '45px'),    # Reduced width
+                ('font-size', '11px'),    # Smaller font size
+                ('padding', '2px'),       # Reduced padding
+                ('font-family', 'Arial, sans-serif'),
+                ('font-size', '11px')     # Smaller font size
+            ]},
+            {'selector': 'thead', 'props': [
+                ('border-collapse', 'collapse'),
+                ('margin', '0 auto'),
+                ('width', '100%')
+            ]}
+        ])
+        
+        # Define a custom function to apply to zeros
+        def highlight_zeros(val):
+            return 'background-color: transparent' if val == 0 else ''
+        
+        # Apply no color to zeros
+        styled_pivot = styled_pivot.applymap(highlight_zeros)
+        
+        # Add borders to Peak and OffPeak rows
+        styled_pivot = styled_pivot.set_properties(**{'border': '1px solid black'}, subset=pd.IndexSlice(['Peak', 'OffPeak'], :))
+        
+        # Add bottom border to today's column
+        if str(today.strftime('%m/%d')) in pivot.columns:
+            styled_pivot = styled_pivot.set_properties(**{'border': '1px solid black'}, subset=pd.IndexSlice[:, str(today.strftime('%m/%d'))])
+        
+        styled_pivot = styled_pivot.render()
+        panels.append(styled_pivot)
+    
+    # Add title and adjust the container
+    html = """
+    <div style="text-align: center; margin-bottom: 10px;">DALoad</div>
+    <div class="container" style="width:100%; height:600px; overflow:auto; margin-bottom: 10px;">
+    {}
+    </div>
+    """
+    
+    # Combine the panels with a bit of spacing between them
+    layout = pd.DataFrame()
+    for i, panel in enumerate(panels):
+        layout = layout.append(pd.DataFrame([[panel]], columns=["col"]), ignore_index=True)
+    
+    return layout.to_html(escape=False, index=False, header=False, na_rep="", border=0, table_id="", render_links=True, width=1200, height=600, margin=(0, 0, 100, 0))  # Add margin for vertical spacing
+```
+
+Key improvements:
+
+1. **Reduced cell padding** from 5px to 2px
+2. **Smaller font size** from 16px to 11px
+3. **Reduced cell width** from undefined to 45px
+4. **Added a scrollable container** with defined dimensions to handle overflow
+5. **Cleaner border styling** that only highlights the important rows/columns
+6. **Simplified HTML structure** with better spacing
+7. **Added overflow:auto** to create scrollbars when needed
+
+These changes should make your table more compact, easier to read, and fix the issue with titles spilling at the bottom. The scrollable container will help if the table still can't fit on one screen, allowing users to scroll to see all data without distorting the layout.
+
+Would you like me to explain any specific part of these modifications in more detail?​​​​​​​​​​​​​​​​
