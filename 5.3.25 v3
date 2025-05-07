@@ -1,0 +1,103 @@
+I see the syntax error in your code. The issue is with the `pd.IndexSlice` usage in your styling function. Let's fix that and improve the table:
+
+```python
+def create_cash_pivot_table(df, column_list):
+    # Data preparation
+    df = df.copy()
+    df['MARKETDATE'] = pd.to_datetime(df['MARKETDATE'])
+    df['ME'] = df['HE'].astype(int)
+    
+    today = pd.Timestamp.today().normalize()
+    start_date = today - pd.Timedelta(days=15)
+    end_date = today + pd.Timedelta(days=7)
+    
+    panels = []
+    
+    for col in column_list:
+        sub_df = df[['ME', 'MARKETDATE', col]].copy()
+        sub_df[col] = sub_df[col].fillna(0)
+        sub_df = sub_df[(sub_df['MARKETDATE'] >= start_date) & (sub_df['MARKETDATE'] <= end_date)]
+        
+        pivot = sub_df.pivot_table(index='ME', columns='MARKETDATE', values=col, aggfunc='mean')
+        
+        peak_hours = list(range(7, 23))
+        offpeak_hours = [h for h in range(1, 25) if h not in peak_hours]
+        
+        pivot.loc['Peak'] = pivot.loc[peak_hours].mean()
+        pivot.loc['OffPeak'] = pivot.loc[offpeak_hours].mean()
+        
+        # Format dates to MM/DD format
+        pivot.columns = pivot.columns.strftime('%m/%d')
+        
+        # Apply compact styling
+        styled_pivot = pivot.style.format('{:.0f}').set_table_styles([
+            # Overall table style
+            {'selector': 'table', 'props': [
+                ('border-collapse', 'collapse'),
+                ('font-size', '9px'),
+                ('font-family', 'Arial, sans-serif'),
+                ('width', 'auto')
+            ]},
+            # Cell styling
+            {'selector': 'th, td', 'props': [
+                ('text-align', 'center'),
+                ('padding', '1px 2px'),
+                ('border', '0.5px solid #e0e0e0'),
+                ('width', '32px'),
+                ('max-width', '32px')
+            ]}
+        ])
+        
+        # Define zero value highlighting
+        def highlight_zeros(val):
+            return 'background-color: transparent' if val == 0 else ''
+        
+        # Apply zero highlighting
+        styled_pivot = styled_pivot.applymap(highlight_zeros)
+        
+        # FIX: Correct syntax for pd.IndexSlice - this was causing the error
+        styled_pivot = styled_pivot.set_properties(
+            **{'background-color': '#f0f0f0', 'font-weight': 'bold'}, 
+            subset=pd.IndexSlice[['Peak', 'OffPeak'], :]
+        )
+        
+        # Highlight today's column if present
+        today_str = today.strftime('%m/%d')
+        if today_str in pivot.columns:
+            styled_pivot = styled_pivot.set_properties(
+                **{'background-color': '#e6f0ff'}, 
+                subset=pd.IndexSlice[:, [today_str]]
+            )
+        
+        styled_pivot = styled_pivot.render()
+        panels.append(styled_pivot)
+    
+    # Simple title with compact layout
+    html = """
+    <div style="text-align: center; font-size: 11px; font-weight: bold; margin: 2px 0;">DALoad</div>
+    <div style="width:fit-content; margin:0 auto;">
+    {}
+    </div>
+    """
+    
+    # Combine panels (using concat to avoid the deprecated append warning)
+    layout = pd.DataFrame()
+    for i, panel in enumerate(panels):
+        layout = pd.concat([layout, pd.DataFrame([[panel]], columns=["col"])], ignore_index=True)
+    
+    return html.format(layout.to_html(escape=False, index=False, header=False, na_rep="", border=0))
+```
+
+The key fixes are:
+
+1. **Fixed the syntax error** in the `pd.IndexSlice` usage by using proper double brackets: `pd.IndexSlice[['Peak', 'OffPeak'], :]`
+
+2. **Fixed the subsetting for today's column**: `subset=pd.IndexSlice[:, [today_str]]`
+
+3. **Replaced the deprecated `append`** with `pd.concat` to avoid warnings
+
+4. **Simplified the HTML wrapper** and margin settings
+
+5. **Adjusted font and cell sizes** for a more compact look
+
+These changes should fix the syntax error while making the table compact and visually appealing without any scroll bars, as requested.​​​​​​​​​​​​​​​​
