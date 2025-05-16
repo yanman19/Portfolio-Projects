@@ -1,0 +1,299 @@
+Let's update the function to ensure that the pivot table only includes values for month-year combinations that are in the future relative to the current date. Here's the modified code:
+
+```python
+import pandas as pd
+import numpy as np
+from datetime import datetime
+
+def calculate_percentile_vs_liquidation(price_df, price_tag, liquid_df, liquid_tag):
+    """
+    Calculate percentiles of futures contract prices relative to historical liquidation values.
+    
+    For each contract in price_df with price_tag, find its most recent price and compare it 
+    to the historical liquidation values for the same month from liquid_df with liquid_tag.
+    Only includes contracts with month-year combinations that are in the future.
+    
+    Parameters:
+    price_df (DataFrame): DataFrame containing futures contract prices with MARKETDATE column
+    price_tag (str): The base tag for futures contracts columns
+    liquid_df (DataFrame): DataFrame containing liquidation values with MARKETDATE column
+    liquid_tag (str): The column name for liquidation values
+    
+    Returns:
+    pd.io.formats.style.Styler: A styled pivot table with percentiles and color gradient
+    """
+    # Define month order for sorting
+    months_order = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+    
+    # --- STEP 1: Process the liquidation dataframe ---
+    # Ensure required columns exist
+    if "MARKETDATE" not in liquid_df.columns or liquid_tag not in liquid_df.columns:
+        raise ValueError(f"Liquidation DataFrame must contain MARKETDATE and {liquid_tag} columns")
+    
+    # Create a working copy of the liquidation dataframe
+    liq_df = liquid_df.copy()
+    
+    # Convert MARKETDATE to datetime
+    liq_df["MARKETDATE"] = pd.to_datetime(liq_df["MARKETDATE"])
+    
+    # Extract month and year
+    liq_df["month"] = liq_df["MARKETDATE"].dt.month
+    liq_df["month_name"] = liq_df["MARKETDATE"].dt.strftime("%b")
+    liq_df["year"] = liq_df["MARKETDATE"].dt.year
+    
+    # Group by month and calculate average liquidation values
+    monthly_liquid_values = liq_df.groupby(["month_name", "year"])[liquid_tag].mean().reset_index()
+    
+    # Create a dictionary of historical liquidation values by month
+    liquid_history = {}
+    for _, row in monthly_liquid_values.iterrows():
+        month = row["month_name"]
+        year = row["year"]
+        value = row[liquid_tag]
+        
+        if month not in liquid_history:
+            liquid_history[month] = []
+        
+        liquid_history[month].append((year, value))
+    
+    # --- STEP 2: Process the price dataframe ---
+    # Ensure required column exists
+    if "MARKETDATE" not in price_df.columns:
+        raise ValueError("Price DataFrame must contain a MARKETDATE column")
+    
+    # Create a working copy of the price dataframe
+    df = price_df.copy()
+    df["MARKETDATE"] = pd.to_datetime(df["MARKETDATE"])
+    
+    # Get the current date
+    current_date = pd.Timestamp.today()
+    current_month = current_date.month
+    current_year = current_date.year
+    current_month_str = months_order[current_month - 1]  # Get text representation of current month
+    current_month_idx = months_order.index(current_month_str)  # Get month index for comparison
+    
+    # Find all valid contract columns and extract month/year info
+    valid_contracts = []
+    for col in df.columns:
+        if col.startswith(price_tag + "_") and col != "MARKETDATE":
+            # Extract month and year tokens
+            contract_info = col.split("_")[-1]
+            if len(contract_info) >= 5:  # Ensure it's long enough to contain month+year
+                month_token = contract_info[:3]
+                year_token = contract_info[3:]
+                
+                # Validate month token is in our list of acceptable months
+                if month_token in months_order:
+                    # Convert year token to full year (assuming 20xx for simplicity)
+                    try:
+                        year_token = int("20" + year_token)
+                        valid_contracts.append((col, month_token, year_token))
+                    except ValueError:
+                        continue
+    
+    # Group contracts by month/year
+    month_year_contracts = {}
+    for col, month_token, year_token in valid_contracts:
+        key = (month_token, year_token)
+        month_year_contracts[key] = col
+    
+    results = {}
+    
+    # Dictionary to store Jul25 and Jul26 comparison data for examples
+    jul25_data = {
+        'current_value': None,
+        'liquid_values': [],
+        'percentile': None
+    }
+    
+    jul26_data = {
+        'current_value': None,
+        'liquid_values': [],
+        'percentile': None
+    }
+    
+    # For each contract, calculate percentile vs liquidation values
+    for month_token, year_token in sorted(key for key in month_year_contracts.keys()):
+        # Get month index for comparison
+        month_idx = months_order.index(month_token)
+        
+        # Skip if this contract is in the past or present relative to current month/year
+        # Only include future contracts
+        if (year_token < current_year) or (year_token == current_year and month_idx <= current_month_idx):
+            continue
+            
+        # Get the contract column name for the current month/year
+        current_contract = month_year_contracts.get((month_token, year_token))
+        if current_contract is None:
+            continue
+        
+        # Get the most recent value for this contract
+        current_value = df[current_contract].dropna().iloc[-1] if not df[current_contract].dropna().empty else None
+        if current_value is None or pd.isna(current_value):
+            continue
+        
+        # Get historical liquidation values for this month
+        month_liquid_values = liquid_history.get(month_token, [])
+        if not month_liquid_values:
+            continue
+            
+        # Extract just the values (without years)
+        liquid_values = [value for _, value in month_liquid_values]
+        
+        # Special tracking for Jul25 and Jul26 for examples
+        is_jul25 = month_token == "Jul" and year_token == 2025
+        is_jul26 = month_token == "Jul" and year_token == 2026
+        
+        if is_jul25:
+            jul25_data['current_value'] = current_value
+            jul25_data['liquid_values'] = liquid_values.copy()
+        
+        if is_jul26:
+            jul26_data['current_value'] = current_value
+            jul26_data['liquid_values'] = liquid_values.copy()
+        
+        # Calculate percentile of current value vs liquid values
+        if liquid_values:
+            # Count values lower than current value
+            lower_values = sum(1 for v in liquid_values if v < current_value)
+            equal_values = sum(1 for v in liquid_values if v == current_value)
+            
+            # Calculate percentile (using method similar to Excel's PERCENTRANK)
+            percentile = (lower_values + 0.5 * equal_values) / len(liquid_values) * 100
+            
+            # Store result
+            if month_token not in results:
+                results[month_token] = {}
+            results[month_token][year_token] = percentile
+            
+            # Store percentile for example contracts
+            if is_jul25:
+                jul25_data['percentile'] = percentile
+            if is_jul26:
+                jul26_data['percentile'] = percentile
+    
+    # Print example data
+    print("\n===== Jul25 and Jul26 Percentile vs Liquidation Analysis =====")
+    print(f"Current date: {current_date.strftime('%Y-%m-%d')} (Month: {current_month_str})")
+    
+    # Print Jul25 example
+    if jul25_data['current_value'] is not None:
+        print("\nJul25 Analysis:")
+        print(f"Current Jul25 value: {jul25_data['current_value']:.2f}")
+        print(f"Historical Jul liquidation values: {[f'{x:.2f}' for x in jul25_data['liquid_values']]}")
+        
+        lower_values = sum(1 for v in jul25_data['liquid_values'] if v < jul25_data['current_value'])
+        equal_values = sum(1 for v in jul25_data['liquid_values'] if v == jul25_data['current_value'])
+        total_values = len(jul25_data['liquid_values'])
+        
+        print(f"Lower values: {lower_values}, Equal values: {equal_values}, Total values: {total_values}")
+        print(f"Resulting percentile: {jul25_data['percentile']:.1f}%")
+    
+    # Print Jul26 example
+    if jul26_data['current_value'] is not None:
+        print("\nJul26 Analysis:")
+        print(f"Current Jul26 value: {jul26_data['current_value']:.2f}")
+        print(f"Historical Jul liquidation values: {[f'{x:.2f}' for x in jul26_data['liquid_values']]}")
+        
+        lower_values = sum(1 for v in jul26_data['liquid_values'] if v < jul26_data['current_value'])
+        equal_values = sum(1 for v in jul26_data['liquid_values'] if v == jul26_data['current_value'])
+        total_values = len(jul26_data['liquid_values'])
+        
+        print(f"Lower values: {lower_values}, Equal values: {equal_values}, Total values: {total_values}")
+        print(f"Resulting percentile: {jul26_data['percentile']:.1f}%")
+    
+    print("===========================================================\n")
+    
+    # If no results found
+    if not results:
+        print("No results computed. Please check the data and parameters.")
+        return None
+    
+    # --- STEP 3: Create Pivot Table ---
+    # Convert results dictionary to DataFrame
+    pivot_df = pd.DataFrame(results)
+    
+    # Ensure columns are in month order
+    pivot_columns = [m for m in months_order if m in pivot_df.columns]
+    pivot_df = pivot_df[pivot_columns]
+    
+    # Format percentiles to display as integers
+    pivot_df = pivot_df.applymap(lambda x: int(x) if not pd.isna(x) else x)
+    
+    # --- STEP 4: Create a styled pivot with color gradient ---
+    def color_gradient(val):
+        """
+        Create a color gradient from dark green (0%) to dark red (100%)
+        
+        Args:
+            val: The percentile value (0-100)
+            
+        Returns:
+            String with CSS background-color property
+        """
+        if pd.isna(val):
+            return ""
+        
+        # Ensure val is in range 0-100
+        val = max(0, min(100, val))
+        
+        if val == 0:
+            return "background-color: #006400"  # Dark green for 0%
+        elif val == 100:
+            return "background-color: #8B0000"  # Dark red for 100%
+        
+        # Create a gradient between green and red
+        # For values below 50, transition from dark green to yellow
+        # For values above 50, transition from yellow to dark red
+        if val <= 50:
+            # Calculate green to yellow gradient (dark green to yellow)
+            green = 100 + (156 * val / 50)    # 100 (dark green) to 255 (yellow)
+            red = 255 * val / 50              # 0 to 255 (yellow)
+            blue = 0
+        else:
+            # Calculate yellow to red gradient (yellow to red)
+            green = 255 - (255 * (val - 50) / 50)  # 255 (yellow) to 0 (red)
+            red = 139 + (116 * (100 - val) / 50)   # 139 (dark red) to 255 (yellow)
+            blue = 0
+        
+        # Convert to hex and format background color
+        r, g, b = int(red), int(green), int(blue)
+        return f"background-color: rgb({r}, {g}, {b})"
+    
+    styled_pivot = pivot_df.style.applymap(color_gradient)
+    return styled_pivot
+```
+
+The key changes I made:
+
+1. Added tracking for the current month's index in the months_order list:
+   ```python
+   current_month_idx = months_order.index(current_month_str)  # Get month index for comparison
+   ```
+
+2. Modified the filtering criteria to only include contracts in the future:
+   ```python
+   # Get month index for comparison
+   month_idx = months_order.index(month_token)
+   
+   # Skip if this contract is in the past or present relative to current month/year
+   # Only include future contracts
+   if (year_token < current_year) or (year_token == current_year and month_idx <= current_month_idx):
+       continue
+   ```
+
+   Note the `<=` comparison, which ensures we skip the current month as well.
+
+3. Added the current date to the example output for clarity:
+   ```python
+   print(f"Current date: {current_date.strftime('%Y-%m-%d')} (Month: {current_month_str})")
+   ```
+
+With these changes, if the current date is in May 2025:
+- The function will skip all contracts from prior years
+- It will skip Jan25, Feb25, Mar25, Apr25 (earlier months in current year)
+- It will also skip May25 (current month)
+- The first contract it will include will be Jun25
+- It will also include Jul25, Aug25, ..., Dec25, and all contracts in future years
+
+This ensures the pivot table only shows the percentile analysis for contracts that are in the future relative to the current date, which is what you requested.​​​​​​​​​​​​​​​​
