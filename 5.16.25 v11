@@ -1,0 +1,177 @@
+I'll create a function that combines the results from your four pivots into a single "Buy/Sell" recommendation pivot with appropriate color coding. The function will evaluate the strength of each signal and weigh them accordingly to produce a final recommendation.
+
+```python
+import pandas as pd
+import numpy as np
+
+def generate_buy_sell_pivot(path_raw, hist_raw, traj_raw, liq_raw):
+    """
+    Generate a combined Buy/Sell recommendation pivot based on four input pivots.
+    
+    Parameters:
+    path_raw (DataFrame): Percentile pivot (lower is better for buy)
+    hist_raw (DataFrame): Percentile pivot (lower is better for buy)
+    traj_raw (DataFrame): BULL/BEAR pivot (BULL is buy, BEAR is sell)
+    liq_raw (DataFrame): Percentile pivot (lower is better for buy)
+    
+    Returns:
+    pd.io.formats.style.Styler: A styled pivot table with BUY/SELL recommendations and color gradient
+    """
+    # Make copies of the input dataframes to avoid modifications
+    path_df = path_raw.copy() if isinstance(path_raw, pd.DataFrame) else path_raw.data.copy()
+    hist_df = hist_raw.copy() if isinstance(hist_raw, pd.DataFrame) else hist_raw.data.copy()
+    traj_df = traj_raw.copy() if isinstance(traj_raw, pd.DataFrame) else traj_raw.data.copy()
+    liq_df = liq_raw.copy() if isinstance(liq_raw, pd.DataFrame) else liq_raw.data.copy()
+    
+    # Create an empty dataframe to store the combined results
+    result_df = pd.DataFrame(index=path_df.index, columns=path_df.columns)
+    
+    # Create an empty dataframe to store the score values
+    score_df = pd.DataFrame(index=path_df.index, columns=path_df.columns)
+    
+    # Iterate through each cell in the result dataframe
+    for year in result_df.index:
+        for month in result_df.columns:
+            # Initialize counters for buy and sell signals
+            buy_signals = 0
+            sell_signals = 0
+            
+            # Initialize score (0 = neutral, negative = buy, positive = sell)
+            # The more negative, the stronger the buy signal
+            # The more positive, the stronger the sell signal
+            score = 0
+            
+            # Check path_raw signal (lower is better for buy)
+            if pd.notna(path_df.loc[year, month]):
+                path_value = path_df.loc[year, month]
+                # Convert to a score between -5 (strong buy) and +5 (strong sell)
+                path_score = (path_value - 50) / 10  # Scale from -5 to +5
+                score += path_score
+                
+                if path_value < 50:
+                    buy_signals += 1
+                else:
+                    sell_signals += 1
+            
+            # Check hist_raw signal (lower is better for buy)
+            if pd.notna(hist_df.loc[year, month]):
+                hist_value = hist_df.loc[year, month]
+                # Convert to a score between -5 (strong buy) and +5 (strong sell)
+                hist_score = (hist_value - 50) / 10  # Scale from -5 to +5
+                score += hist_score
+                
+                if hist_value < 50:
+                    buy_signals += 1
+                else:
+                    sell_signals += 1
+            
+            # Check traj_raw signal (BULL is buy, BEAR is sell)
+            if pd.notna(traj_df.loc[year, month]):
+                traj_value = traj_df.loc[year, month]
+                
+                if traj_value == "BULL":
+                    buy_signals += 1
+                    score -= 2.5  # Add a fixed buy score
+                elif traj_value == "BEAR":
+                    sell_signals += 1
+                    score += 2.5  # Add a fixed sell score
+            
+            # Check liq_raw signal (lower is better for buy)
+            if pd.notna(liq_df.loc[year, month]):
+                liq_value = liq_df.loc[year, month]
+                # Convert to a score between -5 (strong buy) and +5 (strong sell)
+                liq_score = (liq_value - 50) / 10  # Scale from -5 to +5
+                score += liq_score
+                
+                if liq_value < 50:
+                    buy_signals += 1
+                else:
+                    sell_signals += 1
+            
+            # Store the overall score
+            score_df.loc[year, month] = score
+            
+            # Determine the final recommendation based on the signals
+            if buy_signals >= 3 and buy_signals > sell_signals:
+                result_df.loc[year, month] = "BUY"
+            elif sell_signals >= 3 and sell_signals > buy_signals:
+                result_df.loc[year, month] = "SELL"
+            elif buy_signals > 0 or sell_signals > 0:
+                result_df.loc[year, month] = "-"  # Neutral or conflicting signals
+            else:
+                result_df.loc[year, month] = np.nan  # No data
+    
+    # Create a function to apply color formatting based on the score
+    def color_format(val, score):
+        """Apply color formatting based on the recommendation and score strength"""
+        if pd.isna(val):
+            return ""
+            
+        if val == "BUY":
+            # Scale from light green (weak buy) to dark green (strong buy)
+            # Score will be negative for buys, stronger buy = more negative
+            # Map from 0 to -10 (score range) to 0-100 (intensity percentage)
+            intensity = min(100, max(0, abs(score) * 10))
+            
+            # Create green gradient from light to dark
+            # Darker green for stronger buy (more negative score)
+            r = max(0, 50 - intensity * 0.5)
+            g = max(100, 150 - intensity * 0.5)
+            b = max(0, 50 - intensity * 0.5)
+            
+            return f"background-color: rgb({int(r)}, {int(g)}, {int(b)}); color: white; font-weight: bold"
+            
+        elif val == "SELL":
+            # Scale from light red (weak sell) to dark red (strong sell)
+            # Score will be positive for sells, stronger sell = more positive
+            # Map from 0 to 10 (score range) to 0-100 (intensity percentage)
+            intensity = min(100, max(0, abs(score) * 10))
+            
+            # Create red gradient from light to dark
+            # Darker red for stronger sell (more positive score)
+            r = max(100, 150 - intensity * 0.5)
+            g = max(0, 50 - intensity * 0.5)
+            b = max(0, 50 - intensity * 0.5)
+            
+            return f"background-color: rgb({int(r)}, {int(g)}, {int(b)}); color: white; font-weight: bold"
+            
+        else:  # Neutral ("-")
+            return "background-color: #CCCCCC; color: black"
+    
+    # Apply the color formatting
+    styled_result = result_df.style.apply(lambda x: [color_format(val, score_df.loc[x.name, col]) 
+                                                    for col, val in x.items()], axis=1)
+    
+    return styled_result
+```
+
+Here's how to use the function:
+
+```python
+# Call the function with your four pivot tables
+buy_sell_pivot = generate_buy_sell_pivot(path_raw, hist_raw, traj_raw, liq_raw)
+```
+
+Key features of this implementation:
+
+1. **Signal Counting**:
+   - For each month-year combination, it counts how many "buy" and how many "sell" signals there are across the four pivots.
+   - It needs a 3-1 or 4-0 majority to make a BUY or SELL recommendation.
+   - If it's tied (2-2) or has insufficient signals, it shows "-" (neutral).
+
+2. **Score Calculation**:
+   - Beyond simple counting, it calculates a numeric score that represents the strength of the signal.
+   - For percentile-based pivots (path_raw, hist_raw, liq_raw), it converts the percentile to a score from -5 to +5.
+   - For BULL/BEAR signals, it assigns a fixed score of -2.5 for BULL (buy) and +2.5 for BEAR (sell).
+   - These scores are summed to get a total score for each cell.
+
+3. **Color Gradient**:
+   - For BUY recommendations: Uses a green gradient where darker green indicates a stronger buy signal.
+   - For SELL recommendations: Uses a red gradient where darker red indicates a stronger sell signal.
+   - Neutral signals are shown in gray.
+
+4. **Signal Strength Consideration**:
+   - The color intensity directly relates to the calculated score, not just the number of signals.
+   - This ensures that 4/4 alignment with strong percentiles (e.g., all 0%) results in a darker color than 4/4 alignment with weaker percentiles (e.g., all 25%).
+
+This approach should provide a clear visual representation of both the recommendation (BUY/SELL/-) and the strength of that recommendation through color intensity.​​​​​​​​​​​​​​​​
