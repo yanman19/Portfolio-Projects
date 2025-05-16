@@ -1,0 +1,169 @@
+I understand now - you want to compare each contract with its equivalent contract from previous years at the same point in the calendar year. Let me correct the code:
+
+```python
+import pandas as pd
+import numpy as np
+from datetime import datetime
+
+def calculate_historical_price_percentile(df_in, name_tag):
+    """
+    Calculate the price percentile relative to historical contracts for each column that matches the
+    specified tag. The function:
+    - Converts the "MARKETDATE" column to datetime
+    - Filters for columns whose names start with the given name_tag and end with a month-year token (like "Jun25")
+    - For each contract column, calculates the percentile based on where the contract is now compared to where 
+      its equivalent contract was in previous years on the same calendar date
+    - Creates a pivot table with years as the index and months as the columns
+    - Returns the pivot with a red background if the value is < 50% and a green background if the value is > 50%
+    
+    Parameters:
+    df_in (DataFrame): A timestamp DataFrame containing a "MARKETDATE" column.
+    name_tag (str): The base tag (everything before the last "_") to look for in the column names.
+    
+    Returns:
+    pd.io.formats.style.Styler: A styled pivot table with the computed percentiles and conditional formatting.
+    """
+    # Define month order at the beginning of the function
+    months_order = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+    
+    # --- STEP 1: Convert MARKETDATE column to datetime -----
+    if "MARKETDATE" not in df_in.columns:
+        raise ValueError("DataFrame must contain a 'MARKETDATE' column")
+    
+    df = df_in.copy()
+    df["MARKETDATE"] = pd.to_datetime(df["MARKETDATE"])
+    
+    # Get the current date
+    current_date = pd.Timestamp.today()
+    
+    # Find all valid contract columns and extract month/year info
+    valid_contracts = []
+    for col in df.columns:
+        if col.startswith(name_tag + "_") and col != "MARKETDATE":
+            # Extract month and year tokens
+            contract_info = col.split("_")[-1]
+            if len(contract_info) >= 5:  # Ensure it's long enough to contain month+year
+                month_token = contract_info[:3]
+                year_token = contract_info[3:]
+                
+                # Validate month token is in our list of acceptable months
+                if month_token in months_order:
+                    # Convert year token to full year (assuming 20xx for simplicity)
+                    try:
+                        year_token = int("20" + year_token)
+                        valid_contracts.append((col, month_token, year_token))
+                    except ValueError:
+                        continue
+    
+    # Group contracts by month
+    month_year_contracts = {}
+    for col, month_token, year_token in valid_contracts:
+        key = (month_token, year_token)
+        month_year_contracts[key] = col
+    
+    results = {}
+    
+    # For each contract, find its current value and compare with equivalent contracts from past years
+    for month_token, year_token in sorted(key for key in month_year_contracts.keys()):
+        # Get the contract column name for the current month/year
+        current_contract = month_year_contracts.get((month_token, year_token))
+        if current_contract is None:
+            continue
+        
+        # Get the most recent value for this contract
+        current_value = df[current_contract].dropna().iloc[-1] if not df[current_contract].dropna().empty else None
+        if current_value is None:
+            continue
+        
+        # Now find values for equivalent contracts from previous years
+        equivalent_values = []
+        years_to_check = 5  # Look back 5 years
+        
+        for i in range(1, years_to_check + 1):
+            # Calculate the equivalent year (same month, but i years ago)
+            equiv_year = year_token - i
+            
+            # Calculate the date from i years ago (same day/month, i years back)
+            historical_date = current_date.replace(year=current_date.year - i)
+            
+            # Find the equivalent contract (same month, i years earlier)
+            equiv_contract = month_year_contracts.get((month_token, equiv_year))
+            if equiv_contract is None:
+                continue
+                
+            # Find the closest data point to the historical date
+            closest_idx = (df['MARKETDATE'] - historical_date).abs().idxmin()
+            historical_row = df.loc[closest_idx]
+            
+            # Get the value of the equivalent contract on that date
+            if equiv_contract in historical_row and not pd.isna(historical_row[equiv_contract]):
+                equivalent_values.append(historical_row[equiv_contract])
+        
+        # If we have historical values, calculate the percentile
+        if equivalent_values:
+            # Calculate where current value ranks among equivalent historical values
+            lower_values = sum(1 for v in equivalent_values if v < current_value)
+            equal_values = sum(1 for v in equivalent_values if v == current_value)
+            
+            # Calculate percentile (using a method similar to Excel's PERCENTRANK)
+            if len(equivalent_values) > 0:
+                percentile = (lower_values + 0.5 * equal_values) / len(equivalent_values) * 100
+            else:
+                percentile = 50  # Default if no comparison available
+                
+            # Store the result
+            if month_token not in results:
+                results[month_token] = {}
+            results[month_token][year_token] = percentile
+    
+    # If no results found
+    if not results:
+        print("No results computed. Please check the DataFrame and the provided parameters.")
+        return None
+    
+    # --- STEP 2: Create Pivot Table -----
+    # Convert results dictionary to DataFrame
+    pivot_df = pd.DataFrame(results)
+    
+    # Ensure columns are in month order
+    pivot_columns = [m for m in months_order if m in pivot_df.columns]
+    pivot_df = pivot_df[pivot_columns]
+    
+    # Format percentiles to display as integers
+    pivot_df = pivot_df.applymap(lambda x: int(x) if not pd.isna(x) else x)
+    
+    # --- STEP 3: Create a styled pivot with custom formatting -----
+    def color_format(val):
+        """Apply red background for <50% and green for >50%"""
+        if pd.isna(val):
+            return ""
+        elif val < 50:
+            return "background-color: red"
+        else:
+            return "background-color: green"
+    
+    styled_pivot = pivot_df.style.applymap(color_format)
+    return styled_pivot
+```
+
+Key changes in this updated version:
+
+1. For each contract (e.g., Jun25), it finds its current value from the most recent data point.
+
+2. Then, it looks for the equivalent contracts from previous years (Jun24, Jun23, etc.) but crucially, it retrieves their values from the same calendar date in those past years.
+
+3. For example:
+   - For Jun25 on May 16, 2025, it compares with:
+   - Jun24's value on May 16, 2024
+   - Jun23's value on May 16, 2023
+   - And so on
+
+4. The percentile calculation is now based on where the current value ranks among these equivalent historical values.
+
+5. Using your example:
+   - If Jun25 is currently at 23.72
+   - And Jun24 was at 75.79 on this day last year
+   - And Jun23 was at 24.71 on this day two years ago
+   - Then Jun25 would be at 0% percentile since it's lower than both historical values
+
+This approach maintains the equivalence relationship you're looking for - comparing each contract with what would have been the equivalent contract on the same calendar date in previous years.​​​​​​​​​​​​​​​​
