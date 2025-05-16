@@ -1,0 +1,137 @@
+You're absolutely right - I misread "MARKETDATE" as "IMMEDIATE" in your code. Let me correct that and provide the updated version:
+
+```python
+import pandas as pd
+import numpy as np
+from datetime import datetime
+
+def calculate_historical_price_percentile(df_in, name_tag):
+    """
+    Calculate the price percentile relative to historical contracts for each column that matches the
+    specified tag. The function:
+    - Converts the "MARKETDATE" column to datetime
+    - Filters for columns whose names start with the given name_tag and end with a month-year token (like "Jun25")
+    - For each contract column, calculates the percentile of the most recent price relative to historical equivalents
+    - Creates a pivot table with years as the index and months as the columns
+    - Returns the pivot with a red background if the value is < 50% and a green background if the value is > 50%
+    
+    Parameters:
+    df_in (DataFrame): A timestamp DataFrame containing a "MARKETDATE" column.
+    name_tag (str): The base tag (everything before the last "_") to look for in the column names.
+    
+    Returns:
+    pd.io.formats.style.Styler: A styled pivot table with the computed percentiles and conditional formatting.
+    """
+    # Define month order at the beginning of the function
+    months_order = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+    
+    # --- STEP 1: Convert MARKETDATE column to datetime -----
+    if "MARKETDATE" not in df_in.columns:
+        raise ValueError("DataFrame must contain a 'MARKETDATE' column")
+    
+    df = df_in.copy()
+    df["MARKETDATE"] = pd.to_datetime(df["MARKETDATE"])
+    
+    # Get the current month and year
+    current_date = pd.Timestamp.today()
+    current_month = current_date.month
+    current_year = current_date.year
+    current_month_str = months_order[current_month - 1]  # Get text representation of month
+    valid_cols = []
+    
+    # Find all columns matching the pattern name_tag + "_" + month + year
+    for col in df.columns:
+        if col.startswith(name_tag + "_"):
+            # Extract month and year tokens
+            contract_info = col.split("_")[-1]
+            # Find the month token (first 3 characters) and year token (last 2 digits)
+            if len(contract_info) >= 5:  # Ensure it's long enough to contain month+year
+                month_token = contract_info[:3]
+                year_token = contract_info[3:]
+                
+                # Validate month token is in our list of acceptable months
+                if month_token in months_order:
+                    # Convert year token to full year (assuming 20xx for simplicity)
+                    try:
+                        year_token = int("20" + year_token)
+                        valid_cols.append((col, month_token, year_token))
+                    except ValueError:
+                        continue
+    
+    results = {}
+    
+    for col, month_token, year_token in valid_cols:
+        # Get the most recent non-null price for this contract
+        most_recent_price = df[col].dropna().iloc[-1] if not df[col].dropna().empty else None
+        
+        if most_recent_price is None:
+            continue
+            
+        # Now find equivalent contracts from previous years
+        # For example, if looking at Jun25, we want Jun24, Jun23, etc.
+        historical_prices = []
+        
+        # Look back up to 5 years for historical comparison
+        for previous_year in range(1, 6):
+            # Calculate the equivalent year
+            equivalent_year = year_token - previous_year
+            
+            # Format the equivalent contract name
+            equivalent_contract = f"{name_tag}_{month_token}{str(equivalent_year)[-2:]}"
+            
+            # Find what the price of this equivalent contract was at the SAME POINT IN TIME last year
+            if equivalent_contract in df.columns:
+                # Calculate the reference date (same day/month but previous year)
+                reference_date = current_date.replace(year=current_date.year - previous_year)
+                
+                # Find the closest data point to this reference date
+                closest_idx = (df['MARKETDATE'] - reference_date).abs().argsort()[0]
+                historical_price = df.iloc[closest_idx][equivalent_contract]
+                
+                if not pd.isna(historical_price):
+                    historical_prices.append(historical_price)
+        
+        # Skip if we don't have enough historical data
+        if not historical_prices:
+            continue
+            
+        # Calculate percentile of current price relative to historical prices
+        percentile = (sum(most_recent_price >= hp for hp in historical_prices) / len(historical_prices)) * 100.0
+        
+        # Store the result by year and month
+        if month_token not in results:
+            results[month_token] = {}
+        
+        results[month_token][year_token] = percentile
+    
+    # If no results found
+    if not results:
+        print("No results computed. Please check the DataFrame and the provided parameters.")
+        return None
+    
+    # --- STEP 2: Create Pivot Table -----
+    # Convert results dictionary to DataFrame
+    pivot_df = pd.DataFrame(results)
+    
+    # Ensure columns are in month order
+    pivot_columns = [m for m in months_order if m in pivot_df.columns]
+    pivot_df = pivot_df[pivot_columns]
+    
+    # Format percentiles to display as integers
+    pivot_df = pivot_df.applymap(lambda x: int(x) if not pd.isna(x) else x)
+    
+    # --- STEP 3: Create a styled pivot with custom formatting -----
+    def color_format(val):
+        """Apply red background for <50% and green for >50%"""
+        if pd.isna(val):
+            return ""
+        elif val < 50:
+            return "background-color: red"
+        else:
+            return "background-color: green"
+    
+    styled_pivot = pivot_df.style.applymap(color_format)
+    return styled_pivot
+```
+
+All references to "IMMEDIATE" have been corrected to "MARKETDATE" to match what's in your original code. The overall logic remains the same, but now it properly works with the MARKETDATE column for datetime operations and finding the equivalent points in time from previous years.​​​​​​​​​​​​​​​​
