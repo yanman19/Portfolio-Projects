@@ -1,0 +1,254 @@
+I'll update the code to ensure that the pivot table doesn't include any month-year combinations that are earlier than the current month-year. This way, only future contracts (relative to the current month-year) will be displayed in the pivot table.
+
+Here's the modified code:
+
+```python
+import pandas as pd
+import numpy as np
+from datetime import datetime, timedelta
+
+def calculate_historical_price_trajectory(df_in, name_tag):
+    """
+    Calculate the price trajectory for each contract compared to its historical equivalents.
+    For each contract, look at equivalent contracts in past years and determine if their
+    1-month forward price trajectory was BULL (positive) or BEAR (negative).
+    If more BULL than BEAR, label as BULL, otherwise BEAR.
+    Only includes contracts that are in the future relative to the current month/year.
+    
+    Parameters:
+    df_in (DataFrame): A timestamp DataFrame containing a "MARKETDATE" column.
+    name_tag (str): The base tag (everything before the last "_") to look for in the column names.
+    
+    Returns:
+    pd.io.formats.style.Styler: A styled pivot table indicating BULL or BEAR for each contract.
+    """
+    # Define month order at the beginning of the function
+    months_order = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+    
+    # --- STEP 1: Convert MARKETDATE column to datetime -----
+    if "MARKETDATE" not in df_in.columns:
+        raise ValueError("DataFrame must contain a 'MARKETDATE' column")
+    
+    df = df_in.copy()
+    df["MARKETDATE"] = pd.to_datetime(df["MARKETDATE"])
+    
+    # Get the current date
+    current_date = pd.Timestamp.today()
+    current_month = current_date.month
+    current_year = current_date.year
+    current_month_str = months_order[current_month - 1]  # Get text representation of current month
+    current_month_idx = months_order.index(current_month_str)
+    
+    # Find all valid contract columns and extract month/year info
+    valid_contracts = []
+    for col in df.columns:
+        if col.startswith(name_tag + "_") and col != "MARKETDATE":
+            # Extract month and year tokens
+            contract_info = col.split("_")[-1]
+            if len(contract_info) >= 5:  # Ensure it's long enough to contain month+year
+                month_token = contract_info[:3]
+                year_token = contract_info[3:]
+                
+                # Validate month token is in our list of acceptable months
+                if month_token in months_order:
+                    # Convert year token to full year (assuming 20xx for simplicity)
+                    try:
+                        year_token = int("20" + year_token)
+                        valid_contracts.append((col, month_token, year_token))
+                    except ValueError:
+                        continue
+    
+    # Group contracts by month/year
+    month_year_contracts = {}
+    for col, month_token, year_token in valid_contracts:
+        key = (month_token, year_token)
+        month_year_contracts[key] = col
+    
+    results = {}
+    
+    # Dictionary to store Jun25 comparison data
+    jun25_data = {
+        'current_value': None,
+        'historical_comparisons': []
+    }
+    
+    # For each contract, analyze historical trajectories
+    for month_token, year_token in sorted(key for key in month_year_contracts.keys()):
+        # Get month index
+        month_idx = months_order.index(month_token)
+        
+        # Skip if this contract is in the past relative to current month/year
+        if (year_token < current_year) or (year_token == current_year and month_idx < current_month_idx):
+            continue
+            
+        # Skip the current month/year combination
+        if month_token == current_month_str and year_token == current_year:
+            continue
+            
+        # Get the contract column name for the current month/year
+        current_contract = month_year_contracts.get((month_token, year_token))
+        if current_contract is None:
+            continue
+        
+        # Get the most recent value for this contract
+        current_value = df[current_contract].dropna().iloc[-1] if not df[current_contract].dropna().empty else None
+        if current_value is None:
+            continue
+        
+        # Special tracking for Jun25
+        is_jun25 = month_token == "Jun" and year_token == 2025
+        if is_jun25:
+            jun25_data['current_value'] = current_value
+        
+        # Track bull/bear counts from historical trajectories
+        bull_count = 0
+        bear_count = 0
+        
+        # Look back at equivalent contracts from previous years
+        years_to_check = 5  # Look back 5 years
+        
+        for i in range(1, years_to_check + 1):
+            # Calculate the equivalent year (same month, but i years ago)
+            equiv_year = year_token - i
+            
+            # Calculate the date from i years ago (same day/month, i years back)
+            historical_date = current_date.replace(year=current_date.year - i)
+            
+            # Calculate the date 1 month later (for trajectory calculation)
+            one_month_later = historical_date + timedelta(days=30)  # Approximate 1 month
+            
+            # Find the equivalent contract (same month, i years earlier)
+            equiv_contract = month_year_contracts.get((month_token, equiv_year))
+            if equiv_contract is None:
+                continue
+                
+            # Find the closest data point to the historical date
+            closest_idx = (df['MARKETDATE'] - historical_date).abs().idxmin()
+            historical_row = df.loc[closest_idx]
+            
+            # Find the closest data point to the date 1 month later
+            future_idx = (df['MARKETDATE'] - one_month_later).abs().idxmin()
+            future_row = df.loc[future_idx]
+            
+            # Get the values for the equivalent contract at both dates
+            if equiv_contract in historical_row and equiv_contract in future_row:
+                historical_price = historical_row[equiv_contract]
+                future_price = future_row[equiv_contract]
+                
+                if not pd.isna(historical_price) and not pd.isna(future_price):
+                    # Calculate price trajectory
+                    trajectory = future_price - historical_price
+                    
+                    # Determine if BULL or BEAR
+                    is_bull = trajectory > 0
+                    
+                    if is_bull:
+                        bull_count += 1
+                    else:
+                        bear_count += 1
+                    
+                    # Track Jun25 comparison data
+                    if is_jun25:
+                        jun25_data['historical_comparisons'].append({
+                            'contract': f"{month_token}{equiv_year}",
+                            'historical_date': historical_date.strftime("%Y-%m-%d"),
+                            'historical_price': historical_price,
+                            'future_date': one_month_later.strftime("%Y-%m-%d"),
+                            'future_price': future_price,
+                            'trajectory': trajectory,
+                            'signal': "BULL" if is_bull else "BEAR"
+                        })
+        
+        # Determine overall sentiment based on majority
+        if bull_count > bear_count:
+            sentiment = "BULL"
+        elif bear_count > bull_count:
+            sentiment = "BEAR"
+        else:
+            sentiment = "NEUTRAL"  # In case of a tie
+            
+        # Store the result
+        if month_token not in results:
+            results[month_token] = {}
+        results[month_token][year_token] = sentiment
+    
+    # Print Jun25 comparison data if available
+    if jun25_data['current_value'] is not None:
+        print("\n===== Jun25 Price Trajectory Analysis =====")
+        print(f"Current Jun25 value: {jun25_data['current_value']}")
+        print("\nHistorical 1-Month Trajectories:")
+        print(f"{'Contract':<10} {'Start Date':<12} {'Start Price':<12} {'End Date':<12} {'End Price':<12} {'Change':<10} {'Signal':<8}")
+        print("-" * 80)
+        
+        bull_count = 0
+        bear_count = 0
+        
+        for comp in jun25_data['historical_comparisons']:
+            print(f"{comp['contract']:<10} {comp['historical_date']:<12} {comp['historical_price']:<12.2f} "
+                  f"{comp['future_date']:<12} {comp['future_price']:<12.2f} "
+                  f"{comp['trajectory']:<+10.2f} {comp['signal']:<8}")
+            
+            if comp['signal'] == "BULL":
+                bull_count += 1
+            else:
+                bear_count += 1
+        
+        print("-" * 80)
+        print(f"Summary: {bull_count} BULL, {bear_count} BEAR")
+        overall = "BULL" if bull_count > bear_count else "BEAR" if bear_count > bull_count else "NEUTRAL"
+        print(f"Overall Signal: {overall}")
+        print("============================================\n")
+    
+    # If no results found
+    if not results:
+        print("No results computed. Please check the DataFrame and the provided parameters.")
+        return None
+    
+    # --- STEP 2: Create Pivot Table -----
+    # Convert results dictionary to DataFrame
+    pivot_df = pd.DataFrame(results)
+    
+    # Ensure columns are in month order
+    pivot_columns = [m for m in months_order if m in pivot_df.columns]
+    pivot_df = pivot_df[pivot_columns]
+    
+    # --- STEP 3: Create a styled pivot with custom formatting -----
+    def color_format(val):
+        """Apply formatting based on BULL/BEAR status"""
+        if pd.isna(val):
+            return ""
+        elif val == "BULL":
+            return "background-color: #006400; color: white"  # Dark green for BULL
+        elif val == "BEAR":
+            return "background-color: #8B0000; color: white"  # Dark red for BEAR
+        else:
+            return "background-color: #FFFF00"  # Yellow for NEUTRAL
+    
+    styled_pivot = pivot_df.style.applymap(color_format)
+    return styled_pivot
+```
+
+The key changes I made:
+
+1. Added tracking for the current month's index in the months_order list:
+   ```python
+   current_month_idx = months_order.index(current_month_str)
+   ```
+
+2. Added a check to skip any contract that is in the past relative to the current month/year:
+   ```python
+   # Get month index
+   month_idx = months_order.index(month_token)
+   
+   # Skip if this contract is in the past relative to current month/year
+   if (year_token < current_year) or (year_token == current_year and month_idx < current_month_idx):
+       continue
+   ```
+
+With these changes, the pivot table will only include future contracts relative to the current month-year. For example, if today is May 2025:
+- It will skip all contracts from prior years
+- It will skip Jan25, Feb25, Mar25, Apr25 (earlier months in current year)
+- It will skip May25 (current month)
+- It will include Jun25, Jul25, ..., Dec25, and all contracts in future years
+
+This ensures the pivot only shows the BULL/BEAR signals for contracts that are still in the future, which is what's most relevant for decision-making.​​​​​​​​​​​​​​​​
