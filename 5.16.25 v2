@@ -1,0 +1,149 @@
+I see the issue. Looking at your data:
+
+- Jun23: 24.71
+- Jun24: 75.79
+- Jun25: 23.72
+
+You're right - Jun25 is the lowest value and should have a percentile of 0%, yet the table shows 50%.
+
+The problem is in how the percentiles are being calculated. Let me correct the code specifically focusing on the percentile calculation logic:
+
+```python
+import pandas as pd
+import numpy as np
+from datetime import datetime
+
+def calculate_historical_price_percentile(df_in, name_tag):
+    """
+    Calculate the price percentile relative to historical contracts for each column that matches the
+    specified tag. The function:
+    - Converts the "MARKETDATE" column to datetime
+    - Filters for columns whose names start with the given name_tag and end with a month-year token (like "Jun25")
+    - For each contract column, calculates the percentile of the most recent price relative to historical equivalents
+    - Creates a pivot table with years as the index and months as the columns
+    - Returns the pivot with a red background if the value is < 50% and a green background if the value is > 50%
+    
+    Parameters:
+    df_in (DataFrame): A timestamp DataFrame containing a "MARKETDATE" column.
+    name_tag (str): The base tag (everything before the last "_") to look for in the column names.
+    
+    Returns:
+    pd.io.formats.style.Styler: A styled pivot table with the computed percentiles and conditional formatting.
+    """
+    # Define month order at the beginning of the function
+    months_order = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+    
+    # --- STEP 1: Convert MARKETDATE column to datetime -----
+    if "MARKETDATE" not in df_in.columns:
+        raise ValueError("DataFrame must contain a 'MARKETDATE' column")
+    
+    df = df_in.copy()
+    df["MARKETDATE"] = pd.to_datetime(df["MARKETDATE"])
+    
+    # Get the current month and year
+    current_date = pd.Timestamp.today()
+    current_month = current_date.month
+    current_year = current_date.year
+    valid_cols = []
+    
+    # Find all columns matching the pattern name_tag + "_" + month + year
+    for col in df.columns:
+        if col.startswith(name_tag + "_"):
+            # Extract month and year tokens
+            contract_info = col.split("_")[-1]
+            # Find the month token (first 3 characters) and year token (last 2 digits)
+            if len(contract_info) >= 5:  # Ensure it's long enough to contain month+year
+                month_token = contract_info[:3]
+                year_token = contract_info[3:]
+                
+                # Validate month token is in our list of acceptable months
+                if month_token in months_order:
+                    # Convert year token to full year (assuming 20xx for simplicity)
+                    try:
+                        year_token = int("20" + year_token)
+                        valid_cols.append((col, month_token, year_token))
+                    except ValueError:
+                        continue
+    
+    # Group contracts by month for easier processing
+    month_contracts = {}
+    for col, month_token, year_token in valid_cols:
+        if month_token not in month_contracts:
+            month_contracts[month_token] = []
+        month_contracts[month_token].append((col, year_token))
+    
+    results = {}
+    
+    # Process each month group separately
+    for month_token, contracts in month_contracts.items():
+        # Sort contracts by year for each month
+        contracts.sort(key=lambda x: x[1])
+        
+        # Get the most recent values for each contract
+        contract_values = {}
+        for col, year_token in contracts:
+            most_recent_value = df[col].dropna().iloc[-1] if not df[col].dropna().empty else None
+            if most_recent_value is not None:
+                contract_values[year_token] = most_recent_value
+        
+        # Calculate percentiles within each month group
+        if len(contract_values) >= 2:  # Need at least 2 contracts to calculate percentile
+            sorted_values = sorted(contract_values.items(), key=lambda x: x[1])
+            total_contracts = len(sorted_values)
+            
+            # Calculate actual percentile (0% for lowest, 100% for highest)
+            for rank, (year, value) in enumerate(sorted_values):
+                percentile = (rank / (total_contracts - 1)) * 100 if total_contracts > 1 else 50
+                
+                # Store result
+                if month_token not in results:
+                    results[month_token] = {}
+                results[month_token][year] = percentile
+    
+    # If no results found
+    if not results:
+        print("No results computed. Please check the DataFrame and the provided parameters.")
+        return None
+    
+    # --- STEP 2: Create Pivot Table -----
+    # Convert results dictionary to DataFrame
+    pivot_df = pd.DataFrame(results)
+    
+    # Ensure columns are in month order
+    pivot_columns = [m for m in months_order if m in pivot_df.columns]
+    pivot_df = pivot_df[pivot_columns]
+    
+    # Format percentiles to display as integers
+    pivot_df = pivot_df.applymap(lambda x: int(x) if not pd.isna(x) else x)
+    
+    # --- STEP 3: Create a styled pivot with custom formatting -----
+    def color_format(val):
+        """Apply red background for <50% and green for >50%"""
+        if pd.isna(val):
+            return ""
+        elif val < 50:
+            return "background-color: red"
+        else:
+            return "background-color: green"
+    
+    styled_pivot = pivot_df.style.applymap(color_format)
+    return styled_pivot
+```
+
+Key changes made to fix the percentile calculation:
+
+1. Instead of comparing a contract with its historical counterparts from previous years, the code now groups all contracts by month and then ranks them against each other.
+
+2. For each month (like "Jun"), it collects the most recent values of all contracts (Jun23, Jun24, Jun25, etc.) and sorts them from lowest to highest.
+
+3. It then assigns percentiles based on rank:
+   - Lowest value gets 0%
+   - Highest value gets 100%
+   - Values in between get evenly spaced percentiles
+
+4. For your Jun example:
+   - Jun23: 24.71 (middle) → would get 50%
+   - Jun24: 75.79 (highest) → would get 100% 
+   - Jun25: 23.72 (lowest) → would get 0%
+
+This should now correctly show Jun25 with a 0% percentile (red background) since it has the lowest value compared to its Jun counterparts in previous years.​​​​​​​​​​​​​​​​
