@@ -1,0 +1,258 @@
+I can see that your `generate_buy_sell_pivot` function is now executing and printing debug information, but it appears that the resulting pivot table might be missing some columns or not displaying correctly. The debug information shows:
+
+```
+path_df shape: (7, 12), index: ['2025', '2026', '2027', '2028', '2029', '2030', '2031'], columns: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+hist_df shape: (7, 12), index: ['2025', '2026', '2027', '2028', '2029', '2030', '2031'], columns: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+traj_df shape: (7, 12), index: ['2025', '2026', '2027', '2028', '2029', '2030', '2031'], columns: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+liq_df shape: (7, 12), index: ['2025', '2026', '2027', '2028', '2029', '2030', '2031'], columns: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+```
+
+The common columns found are limited to: `['Apr', 'Aug', 'Dec', 'Feb', 'Jan', 'Jul', 'Jun', 'Mar', 'May', 'Nov', 'Oct', 'Sep']`
+
+And the output at the end appears to only have a few months: `Apr Aug Dec Feb Jan Jul Jun Mar May Nov Oct Sep`
+
+Let's fix the issue with the missing or improperly displayed data. The problem might be related to:
+
+1. The sorting of the months (they're in alphabetical order rather than calendar order)
+2. Data type issues when comparing values across different dataframes
+
+Here's a revised version of the function that should address these issues:
+
+```python
+import pandas as pd
+import numpy as np
+
+def generate_buy_sell_pivot(path_raw, hist_raw, traj_raw, liq_raw):
+    """
+    Generate a combined Buy/Sell recommendation pivot based on four input pivots.
+    
+    Parameters:
+    path_raw (DataFrame): Percentile pivot (lower is better for buy)
+    hist_raw (DataFrame): Percentile pivot (lower is better for buy)
+    traj_raw (DataFrame): BULL/BEAR pivot (BULL is buy, BEAR is sell)
+    liq_raw (DataFrame): Percentile pivot (lower is better for buy)
+    
+    Returns:
+    pd.io.formats.style.Styler: A styled pivot table with BUY/SELL recommendations and color gradient
+    """
+    # Define month order for proper sorting
+    months_order = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+    
+    # Extract the underlying DataFrames if we're given Styler objects
+    try:
+        path_df = path_raw.data if hasattr(path_raw, 'data') else path_raw.copy()
+    except:
+        path_df = path_raw.copy()
+        
+    try:
+        hist_df = hist_raw.data if hasattr(hist_raw, 'data') else hist_raw.copy()
+    except:
+        hist_df = hist_raw.copy()
+        
+    try:
+        traj_df = traj_raw.data if hasattr(traj_raw, 'data') else traj_raw.copy()
+    except:
+        traj_df = traj_raw.copy()
+        
+    try:
+        liq_df = liq_raw.data if hasattr(liq_raw, 'data') else liq_raw.copy()
+    except:
+        liq_df = liq_raw.copy()
+    
+    # Print information about the DataFrames for debugging
+    print(f"path_df shape: {path_df.shape}, index: {path_df.index.tolist()}, columns: {path_df.columns.tolist()}")
+    print(f"hist_df shape: {hist_df.shape}, index: {hist_df.index.tolist()}, columns: {hist_df.columns.tolist()}")
+    print(f"traj_df shape: {traj_df.shape}, index: {traj_df.index.tolist()}, columns: {traj_df.columns.tolist()}")
+    print(f"liq_df shape: {liq_df.shape}, index: {liq_df.index.tolist()}, columns: {liq_df.columns.tolist()}")
+    
+    # Find common indices and columns - maintain correct month order
+    common_index = sorted(set(path_df.index) & set(hist_df.index) & set(traj_df.index) & set(liq_df.index))
+    all_common_columns = set(path_df.columns) & set(hist_df.columns) & set(traj_df.columns) & set(liq_df.columns)
+    common_columns = [month for month in months_order if month in all_common_columns]
+    
+    print(f"Common index: {common_index}")
+    print(f"Common columns: {common_columns}")
+    
+    # Create an empty dataframe to store the combined results
+    result_df = pd.DataFrame(index=common_index, columns=common_columns)
+    
+    # Create an empty dataframe to store the score values
+    score_df = pd.DataFrame(index=common_index, columns=common_columns)
+    
+    # Initialize result_df and score_df with NaN values
+    result_df[:] = np.nan
+    score_df[:] = np.nan
+    
+    # Get the current date
+    current_date = pd.Timestamp.today()
+    current_month = current_date.month
+    current_year = current_date.year
+    current_month_str = months_order[current_month - 1]
+    
+    # Iterate through each cell in the result dataframe
+    for year in common_index:
+        year_int = int(year)
+        
+        for month in common_columns:
+            month_idx = months_order.index(month) + 1  # 1-based index
+            
+            # Skip if this contract is in the past or present relative to current month/year
+            if (year_int < current_year) or (year_int == current_year and month_idx <= current_month):
+                continue
+                
+            # Initialize counters for buy and sell signals
+            buy_signals = 0
+            sell_signals = 0
+            
+            # Initialize score (0 = neutral, negative = buy, positive = sell)
+            score = 0
+            signal_count = 0
+            
+            # Check path_raw signal (lower is better for buy)
+            try:
+                path_value = path_df.loc[year, month]
+                if pd.notna(path_value):
+                    path_value = float(path_value)
+                    signal_count += 1
+                    
+                    # Convert to a score between -5 (strong buy) and +5 (strong sell)
+                    path_score = (path_value - 50) / 10  # Scale from -5 to +5
+                    score += path_score
+                    
+                    if path_value < 50:
+                        buy_signals += 1
+                    else:
+                        sell_signals += 1
+            except Exception as e:
+                print(f"Error processing path_df at {year}, {month}: {e}")
+            
+            # Check hist_raw signal (lower is better for buy)
+            try:
+                hist_value = hist_df.loc[year, month]
+                if pd.notna(hist_value):
+                    hist_value = float(hist_value)
+                    signal_count += 1
+                    
+                    # Convert to a score between -5 (strong buy) and +5 (strong sell)
+                    hist_score = (hist_value - 50) / 10  # Scale from -5 to +5
+                    score += hist_score
+                    
+                    if hist_value < 50:
+                        buy_signals += 1
+                    else:
+                        sell_signals += 1
+            except Exception as e:
+                print(f"Error processing hist_df at {year}, {month}: {e}")
+            
+            # Check traj_raw signal (BULL is buy, BEAR is sell)
+            try:
+                traj_value = traj_df.loc[year, month]
+                if pd.notna(traj_value):
+                    traj_value = str(traj_value)
+                    signal_count += 1
+                    
+                    if traj_value == "BULL":
+                        buy_signals += 1
+                        score -= 2.5  # Add a fixed buy score
+                    elif traj_value == "BEAR":
+                        sell_signals += 1
+                        score += 2.5  # Add a fixed sell score
+            except Exception as e:
+                print(f"Error processing traj_df at {year}, {month}: {e}")
+            
+            # Check liq_raw signal (lower is better for buy)
+            try:
+                liq_value = liq_df.loc[year, month]
+                if pd.notna(liq_value):
+                    liq_value = float(liq_value)
+                    signal_count += 1
+                    
+                    # Convert to a score between -5 (strong buy) and +5 (strong sell)
+                    liq_score = (liq_value - 50) / 10  # Scale from -5 to +5
+                    score += liq_score
+                    
+                    if liq_value < 50:
+                        buy_signals += 1
+                    else:
+                        sell_signals += 1
+            except Exception as e:
+                print(f"Error processing liq_df at {year}, {month}: {e}")
+            
+            # Only process if we have enough signals
+            if signal_count >= 1:
+                # Store the overall score
+                score_df.loc[year, month] = score
+                
+                # Determine the final recommendation based on the signals
+                if buy_signals >= 3 and buy_signals > sell_signals:
+                    result_df.loc[year, month] = "BUY"
+                elif sell_signals >= 3 and sell_signals > buy_signals:
+                    result_df.loc[year, month] = "SELL"
+                else:
+                    result_df.loc[year, month] = "-"  # Neutral or conflicting signals
+    
+    # Create a function to apply color formatting based on the score
+    def color_format(val, score):
+        """Apply color formatting based on the recommendation and score strength"""
+        if pd.isna(val):
+            return ""
+            
+        if val == "BUY":
+            # Scale from light green (weak buy) to dark green (strong buy)
+            # Score will be negative for buys, stronger buy = more negative
+            intensity = min(100, max(0, abs(score) * 10))
+            
+            # Create green gradient from light to dark
+            r = max(0, 50 - intensity * 0.5)
+            g = max(100, 150 - intensity * 0.5)
+            b = max(0, 50 - intensity * 0.5)
+            
+            return f"background-color: rgb({int(r)}, {int(g)}, {int(b)}); color: white; font-weight: bold"
+            
+        elif val == "SELL":
+            # Scale from light red (weak sell) to dark red (strong sell)
+            intensity = min(100, max(0, abs(score) * 10))
+            
+            # Create red gradient from light to dark
+            r = max(100, 150 - intensity * 0.5)
+            g = max(0, 50 - intensity * 0.5)
+            b = max(0, 50 - intensity * 0.5)
+            
+            return f"background-color: rgb({int(r)}, {int(g)}, {int(b)}); color: white; font-weight: bold"
+            
+        else:  # Neutral ("-")
+            return "background-color: #CCCCCC; color: black"
+    
+    # Define a function to apply styling row by row
+    def style_row(row):
+        styles = []
+        for col in common_columns:  # Use ordered columns
+            val = row[col]
+            if pd.isna(val):
+                styles.append("")
+            else:
+                score = score_df.loc[row.name, col] if pd.notna(score_df.loc[row.name, col]) else 0
+                styles.append(color_format(val, score))
+        return styles
+    
+    # Apply the color formatting
+    styled_result = result_df.style.apply(style_row, axis=1)
+    
+    return styled_result
+```
+
+Key improvements:
+
+1. **Proper Month Ordering**: Ensures columns are in calendar order (Jan, Feb, Mar, etc.) instead of alphabetical.
+
+2. **Filtering Future Contracts**: Added logic to only include future contract months relative to the current date.
+
+3. **Simplified Access**: Removed redundant checks for index/column existence since we're already using common indices and columns.
+
+4. **Consistent Column Order**: Uses the ordered month list when looping through columns and when applying styles.
+
+This function should now correctly:
+- Process your four pivot tables to generate a combined BUY/SELL recommendation
+- Only include future contracts (after current month/year)
+- Apply color formatting to indicate signal strength
+- Display months in the correct calendar order​​​​​​​​​​​​​​​​
