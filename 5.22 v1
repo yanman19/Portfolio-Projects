@@ -1,0 +1,53 @@
+def calculate_percentile_vs_liquidation(price_df, price_tag, liquid_df, liquid_tag, trade_date):
+    today_prices = price_df.loc[trade_date].dropna()
+    today_prices = today_prices[today_prices.index.str.contains(price_tag)]
+    today_prices = today_prices[today_prices.index.str.contains('Win|Sum|Cal', case=False)]
+
+    if today_prices.empty:
+        return pd.DataFrame()
+
+    liquid_df = liquid_df.copy()
+    liquid_df = liquid_df[liquid_df['MARKETDATE'].dt.month.notna()]
+    liquid_df['Year'] = liquid_df['MARKETDATE'].dt.year
+    liquid_df['Month'] = liquid_df['MARKETDATE'].dt.month
+
+    def label_season(month):
+        if month in [7, 8]:
+            return 'Sum'
+        elif month in [1, 2]:
+            return 'Win'
+        else:
+            return 'Cal'
+
+    liquid_df['Season'] = liquid_df['Month'].apply(label_season)
+    liquid_df = liquid_df[['MARKETDATE', 'Year', 'Season', liquid_tag]]
+
+    seasonal_avg = (
+        liquid_df
+        .groupby(['Year', 'Season'])[liquid_tag]
+        .mean()
+        .unstack()
+    )
+
+    results = []
+
+    for col, price in today_prices.items():
+        if 'Sum' in col:
+            season = 'Sum'
+        elif 'Win' in col:
+            season = 'Win'
+        else:
+            season = 'Cal'
+
+        historical = seasonal_avg[season].dropna()
+        result_row = historical.to_frame(name='Historical')
+        result_row['TodayPrice'] = price
+        result_row['Percentile'] = (result_row['Historical'] < price).astype(int) * 100
+        result_row['Season'] = season
+        result_row['PriceLabel'] = col
+        results.append(result_row)
+
+    final_df = pd.concat(results)
+    pivot = final_df.pivot_table(index='Year', columns='PriceLabel', values='Percentile')
+
+    return pivot.round(2)
