@@ -1,0 +1,61 @@
+def calculate_percentile_vs_liquidation(price_df, price_tag, liquid_df, liquid_tag, trade_date):
+    price_df = price_df.copy()
+    liquid_df = liquid_df.copy()
+
+    price_df['MARKETDATE'] = pd.to_datetime(price_df['MARKETDATE'])
+    liquid_df['MARKETDATE'] = pd.to_datetime(liquid_df['MARKETDATE'])
+
+    today_prices = price_df[price_df['MARKETDATE'] == trade_date]
+    today_prices = today_prices.drop(columns=['MARKETDATE'])
+    today_prices = today_prices.loc[:, today_prices.columns.str.contains(price_tag)]
+    today_prices = today_prices.loc[:, today_prices.columns.str.contains('Win|Sum|Cal', case=False)].dropna(axis=1)
+
+    if today_prices.empty:
+        return pd.DataFrame()
+
+    liquid_df['Year'] = liquid_df['MARKETDATE'].dt.year
+    liquid_df['Month'] = liquid_df['MARKETDATE'].dt.month
+
+    def label_season(month):
+        if month in [7, 8]:
+            return 'Sum'
+        elif month in [1, 2]:
+            return 'Win'
+        else:
+            return 'Cal'
+
+    liquid_df['Season'] = liquid_df['Month'].apply(label_season)
+
+    seasonal_avg = (
+        liquid_df.groupby(['Year', 'Season'])[liquid_tag]
+        .mean()
+        .unstack()
+    )
+
+    result_rows = []
+
+    for col in today_prices.columns:
+        price = today_prices[col].values[0]
+
+        if 'Sum' in col:
+            season = 'Sum'
+        elif 'Win' in col:
+            season = 'Win'
+        else:
+            season = 'Cal'
+
+        # Extract year from price label, e.g., "Cal28" -> 2028
+        year_str = ''.join(filter(str.isdigit, col))
+        if not year_str:
+            continue
+        year = int('20' + year_str) if len(year_str) == 2 else int(year_str)
+
+        historical = seasonal_avg[season].dropna()
+        percentile = (historical < price).mean() * 100
+
+        result_rows.append({'Year': year, 'Season': season, 'Percentile': round(percentile, 2)})
+
+    result_df = pd.DataFrame(result_rows)
+    pivot = result_df.pivot(index='Year', columns='Season', values='Percentile')
+
+    return pivot[['Cal', 'Sum', 'Win']] if set(['Cal', 'Sum', 'Win']).issubset(pivot.columns) else pivot
