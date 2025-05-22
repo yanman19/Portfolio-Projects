@@ -1,0 +1,61 @@
+def calculate_percentile_vs_liquidation(price_df, price_tag, liquid_df, liquid_tag, trade_date):
+    price_df = price_df.copy()
+    liquid_df = liquid_df.copy()
+
+    price_df['MARKETDATE'] = pd.to_datetime(price_df['MARKETDATE'])
+    liquid_df['MARKETDATE'] = pd.to_datetime(liquid_df['MARKETDATE'])
+
+    today_prices = price_df[price_df['MARKETDATE'] == trade_date]
+    today_prices = today_prices.drop(columns=['MARKETDATE'])
+    today_prices = today_prices.loc[:, today_prices.columns.str.contains(price_tag)]
+    today_prices = today_prices.loc[:, today_prices.columns.str.contains('Win|Sum|Cal', case=False)].dropna(axis=1)
+
+    if today_prices.empty:
+        return pd.DataFrame()
+
+    liquid_df['Month'] = liquid_df['MARKETDATE'].dt.month
+
+    def label_season(month):
+        if month in [7, 8]:
+            return 'Sum'
+        elif month in [1, 2]:
+            return 'Win'
+        else:
+            return 'Cal'
+
+    liquid_df['Season'] = liquid_df['Month'].apply(label_season)
+
+    season_map = {'Sum': [], 'Win': [], 'Cal': []}
+    for season in ['Sum', 'Win', 'Cal']:
+        values = liquid_df[liquid_df['Season'] == season][liquid_tag].dropna().values
+        if len(values) > 0:
+            season_map[season] = values
+
+    results = []
+
+    for col in today_prices.columns:
+        price = today_prices[col].values[0]
+
+        if 'Sum' in col:
+            season = 'Sum'
+        elif 'Win' in col:
+            season = 'Win'
+        else:
+            season = 'Cal'
+
+        year_digits = ''.join(filter(str.isdigit, col))
+        if not year_digits:
+            continue
+        year = int('20' + year_digits) if len(year_digits) == 2 else int(year_digits)
+
+        historical_values = season_map.get(season, [])
+        if len(historical_values) == 0:
+            continue
+
+        percentile = (historical_values < price).mean() * 100
+        results.append({'Year': year, 'Season': season, 'Percentile': round(percentile, 2)})
+
+    result_df = pd.DataFrame(results)
+    pivot = result_df.pivot(index='Year', columns='Season', values='Percentile')
+
+    return pivot[['Cal', 'Sum', 'Win']] if set(['Cal', 'Sum', 'Win']).intersection(pivot.columns) else pivot
