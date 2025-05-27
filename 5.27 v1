@@ -1,0 +1,40 @@
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+import matplotlib.colors as mcolors
+
+def plot_monthly_min_max_pivots(df):
+    df = df.copy()
+    df = df.dropna(subset=["ERCOT_Pop Temp (F)"])
+    
+    fig_list = []
+    for month in range(1, 13):
+        df_month = df[df["MONTH"] == month]
+
+        pivot_min = df_month.pivot_table(index="DAY", columns="YEAR", values="ERCOT_Pop Temp (F)", aggfunc="min")
+        pivot_max = df_month.pivot_table(index="DAY", columns="YEAR", values="ERCOT_Pop Temp (F)", aggfunc="max")
+
+        fig_min, ax_min = plt.subplots(figsize=(10, 6))
+        cmap_blue = plt.cm.Blues
+        norm_min = mcolors.Normalize(vmin=np.nanmin(pivot_min.values), vmax=np.nanmax(pivot_min.values))
+        ax_min.imshow(pivot_min, aspect='auto', cmap=cmap_blue.reversed(), norm=norm_min)
+        ax_min.set_title(f"Month {month} - MIN")
+        ax_min.set_xticks(np.arange(pivot_min.shape[1]))
+        ax_min.set_xticklabels(pivot_min.columns)
+        ax_min.set_yticks(np.arange(pivot_min.shape[0]))
+        ax_min.set_yticklabels(pivot_min.index)
+        fig_list.append(fig_min)
+
+        fig_max, ax_max = plt.subplots(figsize=(10, 6))
+        cmap_red = plt.cm.Reds
+        norm_max = mcolors.Normalize(vmin=np.nanmin(pivot_max.values), vmax=np.nanmax(pivot_max.values))
+        ax_max.imshow(pivot_max, aspect='auto', cmap=cmap_red, norm=norm_max)
+        ax_max.set_title(f"Month {month} - MAX")
+        ax_max.set_xticks(np.arange(pivot_max.shape[1]))
+        ax_max.set_xticklabels(pivot_max.columns)
+        ax_max.set_yticks(np.arange(pivot_max.shape[0]))
+        ax_max.set_yticklabels(pivot_max.index)
+        fig_list.append(fig_max)
+
+    plt.show()
+    return fig_list
