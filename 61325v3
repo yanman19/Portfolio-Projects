@@ -1,0 +1,37 @@
+import pandas as pd
+import numpy as np
+
+def getBatteryGen(df, datetime_col, netload_col, battery_col):
+    df[datetime_col] = pd.to_datetime(df[datetime_col])
+    df['Date'] = df[datetime_col].dt.date
+    result = []
+
+    for date, group in df.groupby('Date'):
+        y_orig = group[netload_col].values.astype(float)
+        battery_mwh = group[battery_col].iloc[0]
+
+        # Charging: minimize the curve from the bottom (remove battery_mwh total)
+        remaining_energy = battery_mwh
+        y = y_orig.copy()
+        charge = np.zeros_like(y)
+        while remaining_energy > 0:
+            min_idx = np.argmin(y)
+            y[min_idx] += 1
+            charge[min_idx] -= 1
+            remaining_energy -= 1
+
+        # Discharging: maximize curve from the top (add battery_mwh total)
+        remaining_energy = battery_mwh
+        y = y_orig + charge  # use updated net load from charging
+        discharge = np.zeros_like(y)
+        while remaining_energy > 0:
+            max_idx = np.argmax(y)
+            y[max_idx] -= 1
+            discharge[max_idx] += 1
+            remaining_energy -= 1
+
+        adjustment = charge + discharge
+        result.extend(adjustment)
+
+    df['xBatteryGen'] = result
+    return df
