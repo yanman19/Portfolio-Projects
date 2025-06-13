@@ -1,0 +1,39 @@
+def getBatteryGen(df, datetime_col, netload_col, battery_col):
+    df[datetime_col] = pd.to_datetime(df[datetime_col])
+    df['Date'] = df[datetime_col].dt.date
+    battery_gen_result = []
+    netload_adj_result = []
+
+    for date, group in df.groupby('Date'):
+        y_orig = group[netload_col].values.astype(float)
+        battery_mwh = group[battery_col].iloc[0]
+
+        # Charging phase: battery absorbs power (should increase net load)
+        remaining_energy = battery_mwh
+        y = y_orig.copy()
+        charge = np.zeros_like(y)
+        while remaining_energy > 0:
+            min_idx = np.argmin(y)
+            y[min_idx] += 1
+            charge[min_idx] += 1  # charging increases net load
+            remaining_energy -= 1
+
+        # Discharging phase: battery supplies power (should decrease net load)
+        remaining_energy = battery_mwh
+        y = y_orig + charge
+        discharge = np.zeros_like(y)
+        while remaining_energy > 0:
+            max_idx = np.argmax(y)
+            y[max_idx] -= 1
+            discharge[max_idx] -= 1  # discharging decreases net load
+            remaining_energy -= 1
+
+        adjustment = charge + discharge
+        netload_adj = y_orig + adjustment
+
+        battery_gen_result.extend(adjustment)
+        netload_adj_result.extend(netload_adj)
+
+    df['xBatteryGen'] = battery_gen_result
+    df['xNetLoad_adj'] = netload_adj_result
+    return df
