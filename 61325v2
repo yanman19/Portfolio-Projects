@@ -1,0 +1,37 @@
+def getBatteryGen(df, datetime_col, netload_col, battery_col):
+    df[datetime_col] = pd.to_datetime(df[datetime_col])
+    df['Date'] = df[datetime_col].dt.date
+    result = []
+
+    for date, group in df.groupby('Date'):
+        y = group[netload_col].values
+        battery_mwh = group[battery_col].iloc[0]
+
+        # Allocate negative (charging) energy to lowest hours
+        sorted_indices_low = np.argsort(y)
+        charge_allocation = np.zeros_like(y, dtype=float)
+        energy_to_allocate = battery_mwh / 2
+        for idx in sorted_indices_low:
+            if energy_to_allocate <= 0:
+                break
+            max_possible = energy_to_allocate
+            charge_allocation[idx] -= max_possible
+            energy_to_allocate -= max_possible
+
+        # Allocate positive (discharging) energy to highest hours
+        sorted_indices_high = np.argsort(-y)
+        discharge_allocation = np.zeros_like(y, dtype=float)
+        energy_to_allocate = battery_mwh / 2
+        for idx in sorted_indices_high:
+            if energy_to_allocate <= 0:
+                break
+            max_possible = energy_to_allocate
+            discharge_allocation[idx] += max_possible
+            energy_to_allocate -= max_possible
+
+        # Combine both charge and discharge allocations
+        adjustment = charge_allocation + discharge_allocation
+        result.extend(adjustment)
+
+    df['xBatteryGen'] = result
+    return df
