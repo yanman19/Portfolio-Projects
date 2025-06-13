@@ -1,0 +1,31 @@
+def getBatteryGen(df, datetime_col, netload_col, battery_col):
+    df[datetime_col] = pd.to_datetime(df[datetime_col])
+    df['Date'] = df[datetime_col].dt.date
+    result = []
+
+    for date, group in df.groupby('Date'):
+        y = group[netload_col].values
+        battery_mwh = group[battery_col].iloc[0]
+
+        sorted_indices = np.argsort(y)
+        low_indices = sorted_indices[:len(y)//2]
+        high_indices = sorted_indices[len(y)//2:]
+        
+        adjustment = np.zeros_like(y, dtype=float)
+
+        # Allocate half battery energy to lows
+        low_total = len(low_indices)
+        if low_total > 0:
+            raise_amount = (battery_mwh / 2) / low_total
+            adjustment[low_indices] += raise_amount
+
+        # Allocate half battery energy to highs
+        high_total = len(high_indices)
+        if high_total > 0:
+            lower_amount = (battery_mwh / 2) / high_total
+            adjustment[high_indices] -= lower_amount
+
+        result.extend(adjustment)
+
+    df['xBatteryGen'] = result
+    return df
