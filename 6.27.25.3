@@ -1,0 +1,234 @@
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+from scipy import stats
+
+class PredictionBands:
+def **init**(self, df, predicted_col, actual_col):
+“””
+Initialize with dataframe and column names
+
+```
+    Parameters:
+    df: pandas DataFrame containing the data
+    predicted_col: string, name of column with predicted values (e.g., 'xPrice')
+    actual_col: string, name of column with actual values (e.g., 'NorthRTLMP')
+    """
+    self.df = df.copy()
+    self.predicted_col = predicted_col
+    self.actual_col = actual_col
+    
+    # Calculate errors (actual - predicted)
+    self.errors = self.df[actual_col] - self.df[predicted_col]
+    self.bias = np.mean(self.errors)
+    self.mae = np.mean(np.abs(self.errors))
+    self.rmse = np.sqrt(np.mean(self.errors**2))
+    
+    print(f"Model Performance Summary:")
+    print(f"Bias (mean error): ${self.bias:.2f}")
+    print(f"MAE: ${self.mae:.2f}")
+    print(f"RMSE: ${self.rmse:.2f}")
+    print(f"Total observations: {len(self.errors)}")
+    
+def get_confidence_band(self, prediction, confidence=0.67):
+    """
+    Get confidence band for a given prediction
+    
+    Parameters:
+    prediction: float, the predicted value
+    confidence: float, confidence level (e.g., 0.67 for 67%)
+    
+    Returns:
+    tuple: (lower_bound, upper_bound)
+    """
+    alpha = (1 - confidence) / 2
+    lower_error = np.percentile(self.errors, alpha * 100)
+    upper_error = np.percentile(self.errors, (1 - alpha) * 100)
+    
+    lower_bound = prediction + lower_error
+    upper_bound = prediction + upper_error
+    
+    return lower_bound, upper_bound
+
+def error_probabilities(self, max_error=10):
+    """
+    Return probability of each dollar error amount
+    
+    Parameters:
+    max_error: int, maximum error amount to calculate (e.g., 10 for -$10 to +$10)
+    
+    Returns:
+    dict: {error_amount: probability}
+    """
+    probs = {}
+    for error in range(-max_error, max_error + 1):
+        count = np.sum((self.errors >= error - 0.5) & (self.errors < error + 0.5))
+        probs[error] = count / len(self.errors)
+    return probs
+
+def conditional_bands(self, price_ranges=None, confidence=0.67):
+    """
+    Calculate prediction bands for different price ranges
+    
+    Parameters:
+    price_ranges: list of tuples, price ranges to analyze
+    confidence: float, confidence level
+    
+    Returns:
+    dict: {price_range: (lower_error, upper_error)}
+    """
+    if price_ranges is None:
+        price_ranges = [(0, 50), (50, 100), (100, 150), (150, float('inf'))]
+    
+    results = {}
+    alpha = (1 - confidence) / 2
+    
+    for low, high in price_ranges:
+        if high == float('inf'):
+            mask = self.df[self.predicted_col] >= low
+            range_name = f"${low}+"
+        else:
+            mask = (self.df[self.predicted_col] >= low) & (self.df[self.predicted_col] < high)
+            range_name = f"${low}-${high}"
+        
+        range_errors = self.errors[mask]
+        
+        if len(range_errors) > 10:  # Minimum sample size
+            lower_error = np.percentile(range_errors, alpha * 100)
+            upper_error = np.percentile(range_errors, (1 - alpha) * 100)
+            results[range_name] = {
+                'lower_error': lower_error,
+                'upper_error': upper_error,
+                'sample_size': len(range_errors),
+                'bias': np.mean(range_errors)
+            }
+    
+    return results
+
+def plot_error_analysis(self, figsize=(15, 10)):
+    """
+    Create comprehensive error analysis plots
+    """
+    fig, axes = plt.subplots(2, 2, figsize=figsize)
+    
+    # 1. Error distribution histogram
+    axes[0, 0].hist(self.errors, bins=50, alpha=0.7, edgecolor='black')
+    axes[0, 0].axvline(self.bias, color='red', linestyle='--', label=f'Bias: ${self.bias:.2f}')
+    axes[0, 0].set_xlabel('Error (Actual - Predicted)')
+    axes[0, 0].set_ylabel('Frequency')
+    axes[0, 0].set_title('Error Distribution')
+    axes[0, 0].legend()
+    axes[0, 0].grid(True, alpha=0.3)
+    
+    # 2. Errors vs Predicted values
+    axes[0, 1].scatter(self.df[self.predicted_col], self.errors, alpha=0.5)
+    axes[0, 1].axhline(y=0, color='red', linestyle='--')
+    axes[0, 1].set_xlabel(f'Predicted ({self.predicted_col})')
+    axes[0, 1].set_ylabel('Error (Actual - Predicted)')
+    axes[0, 1].set_title('Errors vs Predicted Values')
+    axes[0, 1].grid(True, alpha=0.3)
+    
+    # 3. Actual vs Predicted scatter plot
+    min_val = min(self.df[self.predicted_col].min(), self.df[self.actual_col].min())
+    max_val = max(self.df[self.predicted_col].max(), self.df[self.actual_col].max())
+    
+    axes[1, 0].scatter(self.df[self.predicted_col], self.df[self.actual_col], alpha=0.5)
+    axes[1, 0].plot([min_val, max_val], [min_val, max_val], 'r--', label='Perfect Prediction')
+    axes[1, 0].set_xlabel(f'Predicted ({self.predicted_col})')
+    axes[1, 0].set_ylabel(f'Actual ({self.actual_col})')
+    axes[1, 0].set_title('Actual vs Predicted')
+    axes[1, 0].legend()
+    axes[1, 0].grid(True, alpha=0.3)
+    
+    # 4. Error probabilities bar chart
+    error_probs = self.error_probabilities(max_error=15)
+    errors_list = list(error_probs.keys())
+    probs_list = list(error_probs.values())
+    
+    axes[1, 1].bar(errors_list, probs_list, alpha=0.7, edgecolor='black')
+    axes[1, 1].set_xlabel('Error Amount ($)')
+    axes[1, 1].set_ylabel('Probability')
+    axes[1, 1].set_title('Error Probability Distribution')
+    axes[1, 1].grid(True, alpha=0.3)
+    
+    plt.tight_layout()
+    plt.show()
+
+def generate_report(self, test_predictions=None, confidence_levels=[0.5, 0.67, 0.8, 0.9, 0.95]):
+    """
+    Generate a comprehensive report
+    
+    Parameters:
+    test_predictions: list of predictions to test bands for
+    confidence_levels: list of confidence levels to calculate
+    """
+    print("="*60)
+    print("PREDICTION BANDS ANALYSIS REPORT")
+    print("="*60)
+    
+    # Model performance
+    print(f"\nMODEL PERFORMANCE:")
+    print(f"Bias: ${self.bias:.2f}")
+    print(f"MAE: ${self.mae:.2f}")
+    print(f"RMSE: ${self.rmse:.2f}")
+    
+    # Confidence bands for different levels
+    print(f"\nCONFIDENCE BANDS (for prediction = $100):")
+    for conf in confidence_levels:
+        lower, upper = self.get_confidence_band(100, conf)
+        band_width = upper - lower
+        print(f"{conf*100:4.0f}% confidence: ${lower:6.2f} - ${upper:6.2f} (width: ${band_width:5.2f})")
+    
+    # Error probabilities
+    print(f"\nERROR PROBABILITIES:")
+    error_probs = self.error_probabilities(max_error=10)
+    for error in sorted(error_probs.keys()):
+        if error_probs[error] > 0.01:  # Only show errors with >1% probability
+            print(f"Error ${error:+3d}: {error_probs[error]*100:5.1f}%")
+    
+    # Conditional analysis
+    print(f"\nCONDITIONAL ANALYSIS (67% confidence bands by price range):")
+    conditional_results = self.conditional_bands()
+    for price_range, stats in conditional_results.items():
+        print(f"{price_range:>8}: [{stats['lower_error']:+6.2f}, {stats['upper_error']:+6.2f}] "
+              f"(bias: {stats['bias']:+5.2f}, n={stats['sample_size']})")
+    
+    # Test specific predictions if provided
+    if test_predictions:
+        print(f"\nTEST PREDICTIONS (67% confidence bands):")
+        for pred in test_predictions:
+            lower, upper = self.get_confidence_band(pred, 0.67)
+            print(f"Prediction ${pred}: ${lower:.2f} - ${upper:.2f}")
+```
+
+# Example usage:
+
+# ================
+
+# Load your data
+
+# df = pd.read_csv(‘your_data.csv’)  # Replace with your data loading
+
+# Initialize the analysis
+
+# pb = PredictionBands(df, predicted_col=‘xPrice’, actual_col=‘NorthRTLMP’)
+
+# Get confidence band for a specific prediction
+
+# lower, upper = pb.get_confidence_band(67, confidence=0.67)
+
+# print(f”For prediction of $67, 67% confidence band: ${lower:.2f} - ${upper:.2f}”)
+
+# Generate full report
+
+# pb.generate_report(test_predictions=[50, 67, 100, 150])
+
+# Create plots
+
+# pb.plot_error_analysis()
+
+# Get error probabilities
+
+# error_probs = pb.error_probabilities(max_error=15)
+
+# print(“Error probabilities:”, error_probs)
