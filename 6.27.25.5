@@ -1,0 +1,119 @@
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+
+class PredictionBands:
+def **init**(self, df, predicted_col, actual_col):
+“””
+Initialize with dataframe and column names
+
+```
+    Parameters:
+    df: pandas DataFrame containing the data
+    predicted_col: string, name of column with predicted values (e.g., 'xPrice')
+    actual_col: string, name of column with actual values (e.g., 'NorthRTLMP')
+    """
+    self.df = df.copy()
+    self.predicted_col = predicted_col
+    self.actual_col = actual_col
+    
+    # Calculate errors (predicted - actual, so over-prediction is positive)
+    self.errors = self.df[predicted_col] - self.df[actual_col]
+    self.bias = np.mean(self.errors)
+    self.mae = np.mean(np.abs(self.errors))
+    self.rmse = np.sqrt(np.mean(self.errors**2))
+    
+    print(f"Model Performance Summary:")
+    print(f"Bias (mean error): ${self.bias:.2f}")
+    print(f"MAE: ${self.mae:.2f}")
+    print(f"RMSE: ${self.rmse:.2f}")
+    print(f"Total observations: {len(self.errors)}")
+
+def analyze_bucket_errors(self, price_ranges=None, figsize=(16, 12)):
+    """
+    Analyze error patterns within each price bucket and create histograms
+    
+    Parameters:
+    price_ranges: list of tuples, price ranges to analyze
+    figsize: tuple, figure size for plots
+    """
+    if price_ranges is None:
+        price_ranges = [(0, 50), (50, 100), (100, 150), (150, 200), (200, float('inf'))]
+    
+    # Calculate number of subplot rows and columns
+    n_buckets = len(price_ranges)
+    n_cols = min(3, n_buckets)
+    n_rows = (n_buckets + n_cols - 1) // n_cols
+    
+    fig, axes = plt.subplots(n_rows, n_cols, figsize=figsize)
+    if n_buckets == 1:
+        axes = [axes]
+    elif n_rows == 1:
+        axes = [axes]
+    else:
+        axes = axes.flatten()
+    
+    for i, (low, high) in enumerate(price_ranges):
+        # Create mask for price range
+        if high == float('inf'):
+            mask = self.df[self.predicted_col] >= low
+            range_label = f"${low}+"
+        else:
+            mask = (self.df[self.predicted_col] >= low) & (self.df[self.predicted_col] < high)
+            range_label = f"${low}-${high}"
+        
+        range_errors = self.errors[mask]
+        
+        if len(range_errors) > 5:  # Minimum sample size
+            # Calculate statistics
+            bias = np.mean(range_errors)
+            mae = np.mean(np.abs(range_errors))
+            std_error = np.std(range_errors)
+            
+            # Create histogram
+            ax = axes[i]
+            n_bins = min(30, max(10, len(range_errors) // 10))
+            ax.hist(range_errors, bins=n_bins, alpha=0.7, edgecolor='black', density=True)
+            
+            # Add vertical line for bias
+            ax.axvline(bias, color='red', linestyle='--', linewidth=2, 
+                      label=f'Bias: ${bias:.2f}\nMAE: ${mae:.2f}\n1σ: ${std_error:.2f}')
+            ax.axvline(0, color='green', linestyle='-', linewidth=1, alpha=0.7, label='Perfect (0)')
+            
+            ax.set_xlabel('Error (Predicted - Actual)')
+            ax.set_ylabel('Density')
+            ax.set_title(f'{range_label} (n={len(range_errors)})')
+            ax.legend()
+            ax.grid(True, alpha=0.3)
+    
+    # Hide empty subplots
+    if n_buckets < len(axes):
+        for j in range(n_buckets, len(axes)):
+            axes[j].set_visible(False)
+    
+    plt.suptitle('Error Distribution by Price Bucket', fontsize=16, y=0.98)
+    plt.tight_layout()
+    plt.show()
+```
+
+# Example usage:
+
+# ================
+
+# Load your data
+
+# df = pd.read_csv(‘your_data.csv’)  # Replace with your data loading
+
+# Initialize the analysis
+
+# pb = PredictionBands(df, predicted_col=‘xPrice’, actual_col=‘NorthRTLMP’)
+
+# Create bucket error analysis with histograms
+
+# pb.analyze_bucket_errors()
+
+# Or with custom price ranges
+
+# custom_ranges = [(0, 60), (60, 120), (120, 180), (180, float(‘inf’))]
+
+# pb.analyze_bucket_errors(price_ranges=custom_ranges)
