@@ -1,0 +1,503 @@
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+from scipy import stats
+
+class PredictionBands:
+def **init**(self, df, predicted_col, actual_col):
+“””
+Initialize with dataframe and column names
+
+```
+    Parameters:
+    df: pandas DataFrame containing the data
+    predicted_col: string, name of column with predicted values (e.g., 'xPrice')
+    actual_col: string, name of column with actual values (e.g., 'NorthRTLMP')
+    """
+    self.df = df.copy()
+    self.predicted_col = predicted_col
+    self.actual_col = actual_col
+    
+    # Calculate errors (actual - predicted)
+    self.errors = self.df[actual_col] - self.df[predicted_col]
+    self.bias = np.mean(self.errors)
+    self.mae = np.mean(np.abs(self.errors))
+    self.rmse = np.sqrt(np.mean(self.errors**2))
+    
+    print(f"Model Performance Summary:")
+    print(f"Bias (mean error): ${self.bias:.2f}")
+    print(f"MAE: ${self.mae:.2f}")
+    print(f"RMSE: ${self.rmse:.2f}")
+    print(f"Total observations: {len(self.errors)}")
+    
+def get_confidence_band(self, prediction, confidence=0.67):
+    """
+    Get confidence band for a given prediction
+    
+    Parameters:
+    prediction: float, the predicted value
+    confidence: float, confidence level (e.g., 0.67 for 67%)
+    
+    Returns:
+    tuple: (lower_bound, upper_bound)
+    """
+    alpha = (1 - confidence) / 2
+    lower_error = np.percentile(self.errors, alpha * 100)
+    upper_error = np.percentile(self.errors, (1 - alpha) * 100)
+    
+    lower_bound = prediction + lower_error
+    upper_bound = prediction + upper_error
+    
+    return lower_bound, upper_bound
+
+def error_probabilities(self, max_error=10):
+    """
+    Return probability of each dollar error amount
+    
+    Parameters:
+    max_error: int, maximum error amount to calculate (e.g., 10 for -$10 to +$10)
+    
+    Returns:
+    dict: {error_amount: probability}
+    """
+    probs = {}
+    for error in range(-max_error, max_error + 1):
+        count = np.sum((self.errors >= error - 0.5) & (self.errors < error + 0.5))
+        probs[error] = count / len(self.errors)
+    return probs
+
+def conditional_bands(self, price_ranges=None, confidence=0.67):
+    """
+    Calculate prediction bands for different price ranges
+    
+    Parameters:
+    price_ranges: list of tuples, price ranges to analyze
+    confidence: float, confidence level
+    
+    Returns:
+    dict: {price_range: (lower_error, upper_error)}
+    """
+    if price_ranges is None:
+        price_ranges = [(0, 50), (50, 100), (100, 150), (150, float('inf'))]
+    
+    results = {}
+    alpha = (1 - confidence) / 2
+    
+    for low, high in price_ranges:
+        if high == float('inf'):
+            mask = self.df[self.predicted_col] >= low
+            range_name = f"${low}+"
+        else:
+            mask = (self.df[self.predicted_col] >= low) & (self.df[self.predicted_col] < high)
+            range_name = f"${low}-${high}"
+        
+        range_errors = self.errors[mask]
+        
+        if len(range_errors) > 10:  # Minimum sample size
+            lower_error = np.percentile(range_errors, alpha * 100)
+            upper_error = np.percentile(range_errors, (1 - alpha) * 100)
+            results[range_name] = {
+                'lower_error': lower_error,
+                'upper_error': upper_error,
+                'sample_size': len(range_errors),
+                'bias': np.mean(range_errors)
+            }
+    
+    return results
+
+def plot_error_analysis(self, figsize=(15, 10)):
+    """
+    Create comprehensive error analysis plots
+    """
+    fig, axes = plt.subplots(2, 2, figsize=figsize)
+    
+    # 1. Error distribution histogram
+    axes[0, 0].hist(self.errors, bins=50, alpha=0.7, edgecolor='black')
+    axes[0, 0].axvline(self.bias, color='red', linestyle='--', label=f'Bias: ${self.bias:.2f}')
+    axes[0, 0].set_xlabel('Error (Actual - Predicted)')
+    axes[0, 0].set_ylabel('Frequency')
+    axes[0, 0].set_title('Error Distribution')
+    axes[0, 0].legend()
+    axes[0, 0].grid(True, alpha=0.3)
+    
+    # 2. Errors vs Predicted values
+    axes[0, 1].scatter(self.df[self.predicted_col], self.errors, alpha=0.5)
+    axes[0, 1].axhline(y=0, color='red', linestyle='--')
+    axes[0, 1].set_xlabel(f'Predicted ({self.predicted_col})')
+    axes[0, 1].set_ylabel('Error (Actual - Predicted)')
+    axes[0, 1].set_title('Errors vs Predicted Values')
+    axes[0, 1].grid(True, alpha=0.3)
+    
+    # 3. Actual vs Predicted scatter plot
+    min_val = min(self.df[self.predicted_col].min(), self.df[self.actual_col].min())
+    max_val = max(self.df[self.predicted_col].max(), self.df[self.actual_col].max())
+    
+    axes[1, 0].scatter(self.df[self.predicted_col], self.df[self.actual_col], alpha=0.5)
+    axes[1, 0].plot([min_val, max_val], [min_val, max_val], 'r--', label='Perfect Prediction')
+    axes[1, 0].set_xlabel(f'Predicted ({self.predicted_col})')
+    axes[1, 0].set_ylabel(f'Actual ({self.actual_col})')
+    axes[1, 0].set_title('Actual vs Predicted')
+    axes[1, 0].legend()
+    axes[1, 0].grid(True, alpha=0.3)
+    
+    # 4. Error probabilities bar chart
+    error_probs = self.error_probabilities(max_error=15)
+    errors_list = list(error_probs.keys())
+    probs_list = list(error_probs.values())
+    
+    axes[1, 1].bar(errors_list, probs_list, alpha=0.7, edgecolor='black')
+    axes[1, 1].set_xlabel('Error Amount ($)')
+    axes[1, 1].set_ylabel('Probability')
+    axes[1, 1].set_title('Error Probability Distribution')
+    axes[1, 1].grid(True, alpha=0.3)
+    
+    plt.tight_layout()
+    plt.show()
+
+def analyze_bucket_errors(self, price_ranges=None, create_histograms=True, figsize=(16, 12)):
+    """
+    Analyze error patterns within each price bucket and create histograms
+    
+    Parameters:
+    price_ranges: list of tuples, price ranges to analyze
+    create_histograms: bool, whether to create histogram plots
+    figsize: tuple, figure size for plots
+    
+    Returns:
+    dict: bucket analysis results including bias adjustment factors
+    """
+    if price_ranges is None:
+        price_ranges = [(0, 50), (50, 100), (100, 150), (150, 200), (200, float('inf'))]
+    
+    bucket_analysis = {}
+    
+    # Calculate number of subplot rows and columns
+    n_buckets = len(price_ranges)
+    n_cols = min(3, n_buckets)
+    n_rows = (n_buckets + n_cols - 1) // n_cols
+    
+    if create_histograms:
+        fig, axes = plt.subplots(n_rows, n_cols, figsize=figsize)
+        if n_buckets == 1:
+            axes = [axes]
+        elif n_rows == 1:
+            axes = [axes]
+        else:
+            axes = axes.flatten()
+    
+    for i, (low, high) in enumerate(price_ranges):
+        # Create mask for price range
+        if high == float('inf'):
+            mask = self.df[self.predicted_col] >= low
+            range_name = f"${low}+"
+            range_label = f"${low}+"
+        else:
+            mask = (self.df[self.predicted_col] >= low) & (self.df[self.predicted_col] < high)
+            range_name = f"${low}-${high}"
+            range_label = f"${low}-${high}"
+        
+        range_errors = self.errors[mask]
+        range_predictions = self.df[self.predicted_col][mask]
+        range_actuals = self.df[self.actual_col][mask]
+        
+        if len(range_errors) > 5:  # Minimum sample size
+            # Calculate statistics
+            bias = np.mean(range_errors)
+            std_error = np.std(range_errors)
+            median_error = np.median(range_errors)
+            
+            # Test for normality (Shapiro-Wilk test)
+            if len(range_errors) <= 5000:  # Shapiro-Wilk has sample size limit
+                shapiro_stat, shapiro_p = stats.shapiro(range_errors)
+                is_normal = shapiro_p > 0.05
+            else:
+                is_normal = None
+                shapiro_stat, shapiro_p = None, None
+            
+            # Calculate percentiles for confidence bands
+            p16_5 = np.percentile(range_errors, 16.5)
+            p83_5 = np.percentile(range_errors, 83.5)
+            
+            bucket_analysis[range_name] = {
+                'sample_size': len(range_errors),
+                'bias': bias,
+                'std_error': std_error,
+                'median_error': median_error,
+                'p16_5': p16_5,
+                'p83_5': p83_5,
+                'is_normal': is_normal,
+                'shapiro_stat': shapiro_stat,
+                'shapiro_p': shapiro_p,
+                'min_error': np.min(range_errors),
+                'max_error': np.max(range_errors),
+                'error_adjustment': bias  # This is the bias correction factor
+            }
+            
+            # Create histogram if requested
+            if create_histograms and i < len(axes):
+                ax = axes[i]
+                
+                # Create histogram
+                n_bins = min(30, max(10, len(range_errors) // 10))
+                ax.hist(range_errors, bins=n_bins, alpha=0.7, edgecolor='black', density=True)
+                
+                # Add vertical lines for key statistics
+                ax.axvline(bias, color='red', linestyle='--', linewidth=2, label=f'Bias: ${bias:.2f}')
+                ax.axvline(median_error, color='orange', linestyle='--', linewidth=2, label=f'Median: ${median_error:.2f}')
+                ax.axvline(0, color='green', linestyle='-', linewidth=1, alpha=0.7, label='Perfect (0)')
+                
+                # Add confidence interval shading
+                ax.axvspan(p16_5, p83_5, alpha=0.2, color='blue', label='67% Range')
+                
+                ax.set_xlabel('Error (Actual - Predicted)')
+                ax.set_ylabel('Density')
+                ax.set_title(f'{range_label}\n(n={len(range_errors)}, bias=${bias:.2f})')
+                ax.legend(fontsize=8)
+                ax.grid(True, alpha=0.3)
+    
+    # Hide empty subplots
+    if create_histograms and n_buckets < len(axes):
+        for j in range(n_buckets, len(axes)):
+            axes[j].set_visible(False)
+    
+    if create_histograms:
+        plt.suptitle('Error Distribution by Price Bucket', fontsize=16, y=0.98)
+        plt.tight_layout()
+        plt.show()
+    
+    return bucket_analysis
+
+def create_error_adjustment_model(self, price_ranges=None, method='bias_correction'):
+    """
+    Create an error adjustment model based on price buckets
+    
+    Parameters:
+    price_ranges: list of tuples, price ranges for adjustment
+    method: str, 'bias_correction' or 'quantile_mapping'
+    
+    Returns:
+    dict: adjustment model parameters
+    """
+    if price_ranges is None:
+        price_ranges = [(0, 50), (50, 100), (100, 150), (150, 200), (200, float('inf'))]
+    
+    bucket_analysis = self.analyze_bucket_errors(price_ranges, create_histograms=False)
+    
+    adjustment_model = {}
+    
+    for range_name, stats in bucket_analysis.items():
+        if method == 'bias_correction':
+            # Simple bias correction: subtract the mean error
+            adjustment_model[range_name] = {
+                'adjustment_factor': stats['bias'],
+                'method': 'bias_correction'
+            }
+        elif method == 'quantile_mapping':
+            # More sophisticated: map quantiles
+            adjustment_model[range_name] = {
+                'p16_5': stats['p16_5'],
+                'p83_5': stats['p83_5'],
+                'median': stats['median_error'],
+                'method': 'quantile_mapping'
+            }
+    
+    return adjustment_model
+
+def apply_error_adjustment(self, predictions, adjustment_model, price_ranges=None):
+    """
+    Apply error adjustment to new predictions
+    
+    Parameters:
+    predictions: array-like, predictions to adjust
+    adjustment_model: dict, model from create_error_adjustment_model()
+    price_ranges: list of tuples, same ranges used to create model
+    
+    Returns:
+    array: adjusted predictions
+    """
+    if price_ranges is None:
+        price_ranges = [(0, 50), (50, 100), (100, 150), (150, 200), (200, float('inf'))]
+    
+    predictions = np.array(predictions)
+    adjusted_predictions = predictions.copy()
+    
+    for i, (low, high) in enumerate(price_ranges):
+        # Create mask for price range
+        if high == float('inf'):
+            mask = predictions >= low
+            range_name = f"${low}+"
+        else:
+            mask = (predictions >= low) & (predictions < high)
+            range_name = f"${low}-${high}"
+        
+        if range_name in adjustment_model and np.any(mask):
+            if adjustment_model[range_name]['method'] == 'bias_correction':
+                # Simple bias correction
+                adjustment = adjustment_model[range_name]['adjustment_factor']
+                adjusted_predictions[mask] = predictions[mask] + adjustment
+    
+    return adjusted_predictions
+
+def compare_adjustments(self, test_predictions, price_ranges=None):
+    """
+    Compare original vs adjusted predictions with confidence bands
+    
+    Parameters:
+    test_predictions: list, predictions to test
+    price_ranges: list of tuples, price ranges for adjustment
+    """
+    if price_ranges is None:
+        price_ranges = [(0, 50), (50, 100), (100, 150), (150, 200), (200, float('inf'))]
+    
+    # Create adjustment model
+    adjustment_model = self.create_error_adjustment_model(price_ranges)
+    
+    print("="*80)
+    print("ORIGINAL vs BIAS-ADJUSTED PREDICTIONS COMPARISON")
+    print("="*80)
+    
+    print(f"{'Prediction':<12} {'Original Band':<20} {'Adjusted Pred':<15} {'Adjusted Band':<20} {'Improvement'}")
+    print("-" * 80)
+    
+    for pred in test_predictions:
+        # Original confidence band
+        orig_lower, orig_upper = self.get_confidence_band(pred, 0.67)
+        orig_width = orig_upper - orig_lower
+        
+        # Apply adjustment
+        adjusted_pred = self.apply_error_adjustment([pred], adjustment_model, price_ranges)[0]
+        
+        # Adjusted confidence band (using original error distribution for now)
+        adj_lower, adj_upper = self.get_confidence_band(adjusted_pred, 0.67)
+        adj_width = adj_upper - adj_lower
+        
+        width_improvement = orig_width - adj_width
+        
+        print(f"${pred:<11.2f} ${orig_lower:6.2f}-${orig_upper:6.2f} ({orig_width:5.2f})   "
+              f"${adjusted_pred:<14.2f} ${adj_lower:6.2f}-${adj_upper:6.2f} ({adj_width:5.2f})   "
+              f"${width_improvement:+5.2f}")
+
+def generate_report(self, test_predictions=None, confidence_levels=[0.5, 0.67, 0.8, 0.9, 0.95], 
+                   include_bucket_analysis=True, price_ranges=None):
+    """
+    Generate a comprehensive report
+    
+    Parameters:
+    test_predictions: list of predictions to test bands for
+    confidence_levels: list of confidence levels to calculate
+    include_bucket_analysis: bool, whether to include detailed bucket analysis
+    price_ranges: list of tuples, price ranges for bucket analysis
+    """
+    print("="*60)
+    print("PREDICTION BANDS ANALYSIS REPORT")
+    print("="*60)
+    
+    # Model performance
+    print(f"\nMODEL PERFORMANCE:")
+    print(f"Bias: ${self.bias:.2f}")
+    print(f"MAE: ${self.mae:.2f}")
+    print(f"RMSE: ${self.rmse:.2f}")
+    
+    # Confidence bands for different levels
+    print(f"\nCONFIDENCE BANDS (for prediction = $100):")
+    for conf in confidence_levels:
+        lower, upper = self.get_confidence_band(100, conf)
+        band_width = upper - lower
+        print(f"{conf*100:4.0f}% confidence: ${lower:6.2f} - ${upper:6.2f} (width: ${band_width:5.2f})")
+    
+    # Error probabilities
+    print(f"\nERROR PROBABILITIES:")
+    error_probs = self.error_probabilities(max_error=10)
+    for error in sorted(error_probs.keys()):
+        if error_probs[error] > 0.01:  # Only show errors with >1% probability
+            print(f"Error ${error:+3d}: {error_probs[error]*100:5.1f}%")
+    
+    # Bucket analysis
+    if include_bucket_analysis:
+        if price_ranges is None:
+            price_ranges = [(0, 50), (50, 100), (100, 150), (150, 200), (200, float('inf'))]
+        
+        print(f"\nBUCKET ERROR ANALYSIS:")
+        bucket_results = self.analyze_bucket_errors(price_ranges, create_histograms=False)
+        
+        print(f"{'Range':<12} {'N':<6} {'Bias':<8} {'Std':<8} {'Normal?':<8} {'67% Range':<15}")
+        print("-" * 65)
+        
+        for range_name, stats in bucket_results.items():
+            normal_str = "Yes" if stats['is_normal'] else "No" if stats['is_normal'] is not None else "N/A"
+            range_str = f"[{stats['p16_5']:+.1f}, {stats['p83_5']:+.1f}]"
+            
+            print(f"{range_name:<12} {stats['sample_size']:<6} "
+                  f"{stats['bias']:+7.2f} {stats['std_error']:7.2f} "
+                  f"{normal_str:<8} {range_str:<15}")
+    
+    # Test specific predictions if provided
+    if test_predictions:
+        print(f"\nTEST PREDICTIONS (67% confidence bands):")
+        for pred in test_predictions:
+            lower, upper = self.get_confidence_band(pred, 0.67)
+            print(f"Prediction ${pred}: ${lower:.2f} - ${upper:.2f}")
+        
+        # Show adjustment comparison
+        if include_bucket_analysis:
+            print()
+            self.compare_adjustments(test_predictions, price_ranges)
+```
+
+# Example usage:
+
+# ================
+
+# Load your data
+
+# df = pd.read_csv(‘your_data.csv’)  # Replace with your data loading
+
+# Initialize the analysis
+
+# pb = PredictionBands(df, predicted_col=‘xPrice’, actual_col=‘NorthRTLMP’)
+
+# Get confidence band for a specific prediction
+
+# lower, upper = pb.get_confidence_band(67, confidence=0.67)
+
+# print(f”For prediction of $67, 67% confidence band: ${lower:.2f} - ${upper:.2f}”)
+
+# *** NEW BUCKET ANALYSIS FEATURES ***
+
+# 1. Analyze error patterns by price bucket with histograms
+
+# bucket_stats = pb.analyze_bucket_errors(create_histograms=True)
+
+# 2. Create error adjustment model
+
+# price_ranges = [(0, 50), (50, 100), (100, 150), (150, 200), (200, float(‘inf’))]
+
+# adjustment_model = pb.create_error_adjustment_model(price_ranges)
+
+# 3. Apply adjustments to new predictions
+
+# new_predictions = [45, 67, 120, 180]
+
+# adjusted_predictions = pb.apply_error_adjustment(new_predictions, adjustment_model, price_ranges)
+
+# print(“Original:”, new_predictions)
+
+# print(“Adjusted:”, adjusted_predictions)
+
+# 4. Compare original vs adjusted predictions
+
+# pb.compare_adjustments(test_predictions=[50, 67, 100, 150, 200])
+
+# Generate full report with bucket analysis
+
+# pb.generate_report(test_predictions=[50, 67, 100, 150], include_bucket_analysis=True)
+
+# Create all diagnostic plots
+
+# pb.plot_error_analysis()
+
+# Get error probabilities
+
+# error_probs = pb.error_probabilities(max_error=15)
+
+# print(“Error probabilities:”, error_probs)
