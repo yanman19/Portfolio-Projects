@@ -1,0 +1,230 @@
+import numpy as np
+from typing import Dict, List, Tuple, Callable
+
+def calculate_ev_price(
+pred: float,
+pred10: float,
+pred90: float,
+cash_model: Callable[[float], float],
+method: str = “three_point”
+) -> Dict:
+“””
+Calculate expected value of price based on load forecast percentiles.
+
+```
+Args:
+    pred: 50th percentile (median) prediction
+    pred10: 10th percentile prediction  
+    pred90: 90th percentile prediction
+    cash_model: Function that takes load and returns price
+    method: "three_point" or "monte_carlo" or "five_point"
+
+Returns:
+    Dictionary with EV price and scenario details
+"""
+
+if method == "three_point":
+    return _three_point_ev(pred, pred10, pred90, cash_model)
+elif method == "five_point":
+    return _five_point_ev(pred, pred10, pred90, cash_model)
+elif method == "monte_carlo":
+    return _monte_carlo_ev(pred, pred10, pred90, cash_model)
+else:
+    raise ValueError("Method must be 'three_point', 'five_point', or 'monte_carlo'")
+```
+
+def _three_point_ev(pred: float, pred10: float, pred90: float, cash_model: Callable) -> Dict:
+“””
+Simple 3-point estimation using percentile probabilities.
+“””
+# Define scenarios and their probabilities
+scenarios = [
+{“load”: pred10, “probability”: 0.1, “label”: “10th percentile”},
+{“load”: pred, “probability”: 0.8, “label”: “50th percentile”},  # 90th - 10th = 80%
+{“load”: pred90, “probability”: 0.1, “label”: “90th percentile”}
+]
+
+```
+# Calculate prices for each scenario
+total_ev = 0
+scenario_results = []
+
+for scenario in scenarios:
+    price = cash_model(scenario["load"])
+    weighted_price = price * scenario["probability"]
+    total_ev += weighted_price
+    
+    scenario_results.append({
+        "load": scenario["load"],
+        "price": price,
+        "probability": scenario["probability"],
+        "weighted_price": weighted_price,
+        "label": scenario["label"]
+    })
+
+return {
+    "ev_price": total_ev,
+    "method": "three_point",
+    "scenarios": scenario_results
+}
+```
+
+def _five_point_ev(pred: float, pred10: float, pred90: float, cash_model: Callable) -> Dict:
+“””
+5-point estimation with interpolated percentiles.
+“””
+# Interpolate additional percentiles assuming normal-ish distribution
+pred25 = pred10 + 0.25 * (pred - pred10)
+pred75 = pred + 0.25 * (pred90 - pred)
+
+```
+scenarios = [
+    {"load": pred10, "probability": 0.1, "label": "10th percentile"},
+    {"load": pred25, "probability": 0.15, "label": "25th percentile"},
+    {"load": pred, "probability": 0.5, "label": "50th percentile"},
+    {"load": pred75, "probability": 0.15, "label": "75th percentile"},
+    {"load": pred90, "probability": 0.1, "label": "90th percentile"}
+]
+
+total_ev = 0
+scenario_results = []
+
+for scenario in scenarios:
+    price = cash_model(scenario["load"])
+    weighted_price = price * scenario["probability"]
+    total_ev += weighted_price
+    
+    scenario_results.append({
+        "load": scenario["load"],
+        "price": price,
+        "probability": scenario["probability"], 
+        "weighted_price": weighted_price,
+        "label": scenario["label"]
+    })
+
+return {
+    "ev_price": total_ev,
+    "method": "five_point",
+    "scenarios": scenario_results
+}
+```
+
+def _monte_carlo_ev(pred: float, pred10: float, pred90: float, cash_model: Callable, n_sims: int = 1000) -> Dict:
+“””
+Monte Carlo simulation assuming normal distribution fitted to percentiles.
+“””
+# Estimate normal distribution parameters from percentiles
+# For normal distribution: P10 ≈ μ - 1.282σ, P90 ≈ μ + 1.282σ
+sigma = (pred90 - pred10) / (2 * 1.282)
+mu = pred
+
+```
+# Generate random samples
+np.random.seed(42)  # For reproducibility
+load_samples = np.random.normal(mu, sigma, n_sims)
+
+# Calculate price for each sample
+prices = [cash_model(load) for load in load_samples]
+
+ev_price = np.mean(prices)
+
+# Create percentile summary
+load_percentiles = np.percentile(load_samples, [10, 25, 50, 75, 90])
+price_percentiles = [cash_model(load) for load in load_percentiles]
+
+scenario_results = []
+for i, (pct, load, price) in enumerate(zip([10, 25, 50, 75, 90], load_percentiles, price_percentiles)):
+    scenario_results.append({
+        "load": load,
+        "price": price,
+        "percentile": pct,
+        "label": f"{pct}th percentile"
+    })
+
+return {
+    "ev_price": ev_price,
+    "method": "monte_carlo",
+    "n_simulations": n_sims,
+    "estimated_mu": mu,
+    "estimated_sigma": sigma,
+    "scenarios": scenario_results,
+    "price_std": np.std(prices)
+}
+```
+
+# Example usage and testing
+
+def example_cash_model(load: float) -> float:
+“””
+Example cash model - replace with your actual model.
+Simple non-linear relationship for demonstration.
+“””
+return 50 + 0.5 * load + 0.001 * load**2
+
+# Example usage
+
+if **name** == “**main**”:
+# Example data
+pred = 70
+pred10 = 60  
+pred90 = 80
+
+```
+# Calculate EV using different methods
+results_3pt = calculate_ev_price(pred, pred10, pred90, example_cash_model, "three_point")
+results_5pt = calculate_ev_price(pred, pred10, pred90, example_cash_model, "five_point") 
+results_mc = calculate_ev_price(pred, pred10, pred90, example_cash_model, "monte_carlo")
+
+print("=== THREE POINT METHOD ===")
+print(f"EV Price: ${results_3pt['ev_price']:.2f}")
+for scenario in results_3pt['scenarios']:
+    print(f"  {scenario['label']}: Load={scenario['load']:.1f}, Price=${scenario['price']:.2f}, "
+          f"Prob={scenario['probability']:.1%}, Weighted=${scenario['weighted_price']:.2f}")
+
+print("\n=== FIVE POINT METHOD ===")
+print(f"EV Price: ${results_5pt['ev_price']:.2f}")
+for scenario in results_5pt['scenarios']:
+    print(f"  {scenario['label']}: Load={scenario['load']:.1f}, Price=${scenario['price']:.2f}, "
+          f"Prob={scenario['probability']:.1%}, Weighted=${scenario['weighted_price']:.2f}")
+
+print("\n=== MONTE CARLO METHOD ===")
+print(f"EV Price: ${results_mc['ev_price']:.2f}")
+print(f"Price Std Dev: ${results_mc['price_std']:.2f}")
+print(f"Estimated μ={results_mc['estimated_mu']:.1f}, σ={results_mc['estimated_sigma']:.1f}")
+for scenario in results_mc['scenarios']:
+    print(f"  {scenario['label']}: Load={scenario['load']:.1f}, Price=${scenario['price']:.2f}")
+```
+
+# Batch processing function for multiple forecasts
+
+def batch_ev_calculation(
+forecasts: List[Dict],
+cash_model: Callable,
+method: str = “three_point”
+) -> List[Dict]:
+“””
+Process multiple forecasts at once.
+
+```
+Args:
+    forecasts: List of dicts with keys 'pred', 'pred10', 'pred90'
+    cash_model: Your cash model function
+    method: Calculation method
+
+Returns:
+    List of EV results
+"""
+results = []
+for i, forecast in enumerate(forecasts):
+    result = calculate_ev_price(
+        forecast['pred'], 
+        forecast['pred10'], 
+        forecast['pred90'],
+        cash_model,
+        method
+    )
+    result['forecast_id'] = i
+    results.append(result)
+
+return results
+```
