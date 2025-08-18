@@ -1,0 +1,33 @@
+import pandas as pd
+
+df = pd.DataFrame(
+    {
+        "Year": [2015, 2016, 2017, 2018, 2019, 2020, 2021, 2022, 2023, 2024],
+        "Capacity revenue ($)": [
+            9018343604,
+            8906998628,
+            8763578112,
+            10331688133,
+            8734613179,
+            7084072778,
+            8421703404,
+            6215973960,
+            2993266921,
+            2464115790,
+        ],
+        "PAI performance ($)": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1226000000,
+            0,
+            0,
+        ],
+    }
+).set_index("Year")
+
+df["Net revenue after penalties ($)"] = df["Capacity revenue ($)"] - df["PAI performance ($)"]
