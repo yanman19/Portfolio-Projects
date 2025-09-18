@@ -1,0 +1,15 @@
+import requests
+import pandas as pd
+
+def get_gas_outages(date_str):
+    url = (
+        "https://dataminer2.pjm.com/feed/gen_outages_by_type"
+        f"?startDate={date_str}&endDate={date_str}&fuelType=Gas&format=csv"
+    )
+    df = pd.read_csv(url)
+    return df
+
+# Example: pull gas outages for Sept 17, 2025
+date = "2025-09-17"
+gas_outages = get_gas_outages(date)
+print(gas_outages)
