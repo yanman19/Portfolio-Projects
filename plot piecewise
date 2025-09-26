@@ -1,0 +1,37 @@
+import matplotlib.pyplot as plt
+import pandas as pd
+
+def plot_piecewise(df, x_col, y_col, date_col, months, years, inflection):
+    # Filter dataframe by months and years
+    df[date_col] = pd.to_datetime(df[date_col])
+    df = df[df[date_col].dt.month.isin(months)]
+    df = df[df[date_col].dt.year.isin(years)]
+    
+    # Group by year for separate plotting
+    grouped = df.groupby(df[date_col].dt.year)
+    
+    plt.figure(figsize=(10,6))
+    
+    for year, data in grouped:
+        data = data.sort_values(by=x_col)
+        
+        # Split at inflection point
+        left = data[data[x_col] <= inflection]
+        right = data[data[x_col] >= inflection]
+        
+        # Plot piecewise with connecting line at inflection
+        plt.plot(left[x_col], left[y_col], marker='o', label=f"{year} (left)")
+        plt.plot(right[x_col], right[y_col], marker='o', label=f"{year} (right)")
+        
+        if not left.empty and not right.empty:
+            plt.plot([left[x_col].iloc[-1], right[x_col].iloc[0]],
+                     [left[y_col].iloc[-1], right[y_col].iloc[0]], 
+                     'k--', alpha=0.6)  # connector at inflection
+    
+    # Title
+    plt.title(f"Piecewise function for {months} - {years} for {x_col} vs {y_col}")
+    plt.xlabel(x_col)
+    plt.ylabel(y_col)
+    plt.legend()
+    plt.grid(True)
+    plt.show()
