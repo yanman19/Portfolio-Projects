@@ -1,0 +1,56 @@
+import matplotlib.pyplot as plt
+import pandas as pd
+import numpy as np
+from sklearn.linear_model import LinearRegression
+
+def plot_piecewise_continuous(df, x_col, y_col, date_col, months, years, inflection):
+    # filter dataframe
+    df[date_col] = pd.to_datetime(df[date_col])
+    df = df[df[date_col].dt.month.isin(months)]
+    df = df[df[date_col].dt.year.isin(years)]
+    
+    grouped = df.groupby(df[date_col].dt.year)
+    plt.figure(figsize=(10,6))
+    
+    for year, data in grouped:
+        data = data.sort_values(by=x_col)
+        X = data[[x_col]].values
+        y = data[y_col].values
+
+        # scatter raw data
+        plt.scatter(X, y, label=f"{year} data")
+        
+        # split by inflection
+        left = data[data[x_col] <= inflection]
+        right = data[data[x_col] >= inflection]
+        
+        if not left.empty and not right.empty:
+            # fit left
+            X_left = left[[x_col]].values
+            y_left = left[y_col].values
+            model_left = LinearRegression().fit(X_left, y_left)
+            
+            # y value at inflection
+            y_inflect = model_left.predict(np.array([[inflection]]))[0]
+            
+            # fit right but force intercept through (inflection, y_inflect)
+            X_right = right[[x_col]].values
+            y_right = right[y_col].values
+            slope = np.sum((X_right.flatten()-inflection)*(y_right-y_inflect)) / np.sum((X_right.flatten()-inflection)**2)
+            
+            # left regression line
+            x_range_left = np.linspace(X_left.min(), inflection, 50).reshape(-1,1)
+            y_pred_left = model_left.predict(x_range_left)
+            plt.plot(x_range_left, y_pred_left, label=f"{year} left fit")
+            
+            # right regression line (forced continuity)
+            x_range_right = np.linspace(inflection, X_right.max(), 50)
+            y_pred_right = y_inflect + slope*(x_range_right-inflection)
+            plt.plot(x_range_right, y_pred_right, label=f"{year} right fit")
+    
+    plt.title(f"Piecewise function for {months} - {years} for {x_col} vs {y_col}")
+    plt.xlabel(x_col)
+    plt.ylabel(y_col)
+    plt.legend()
+    plt.grid(True)
+    plt.show()
