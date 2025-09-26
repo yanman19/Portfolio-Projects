@@ -1,0 +1,63 @@
+import matplotlib.pyplot as plt
+import pandas as pd
+import numpy as np
+from sklearn.linear_model import LinearRegression
+
+def plot_piecewise_continuous(df, x_col, y_col, date_col, months, years, inflection):
+    # filter dataframe
+    df[date_col] = pd.to_datetime(df[date_col])
+    df = df[df[date_col].dt.month.isin(months)]
+    df = df[df[date_col].dt.year.isin(years)]
+
+    plt.figure(figsize=(10,6))
+
+    # scatter by year
+    for year, data in df.groupby(df[date_col].dt.year):
+        plt.scatter(data[x_col], data[y_col], label=f"{year} data")
+
+    # fit one regression for left side
+    left = df[df[x_col] <= inflection]
+    right = df[df[x_col] >= inflection]
+
+    if not left.empty and not right.empty:
+        # Left regression
+        X_left = left[[x_col]].values
+        y_left = left[y_col].values
+        model_left = LinearRegression().fit(X_left, y_left)
+        slope_left = model_left.coef_[0]
+        intercept_left = model_left.intercept_
+        r2_left = model_left.score(X_left, y_left)
+        
+        # y value at inflection
+        y_inflect = model_left.predict(np.array([[inflection]]))[0]
+
+        # Right regression (forced continuity)
+        X_right = right[[x_col]].values
+        y_right = right[y_col].values
+        slope_right = np.sum((X_right.flatten()-inflection)*(y_right-y_inflect)) / np.sum((X_right.flatten()-inflection)**2)
+        y_pred_right = y_inflect + slope_right*(X_right.flatten()-inflection)
+        ss_res = np.sum((y_right - y_pred_right)**2)
+        ss_tot = np.sum((y_right - np.mean(y_right))**2)
+        r2_right = 1 - ss_res/ss_tot
+
+        # equations for legend
+        eq_left = f"Left: y = {slope_left:.2f}x + {intercept_left:.2f}, R²={r2_left:.3f}"
+        eq_right = f"Right: y = {slope_right:.2f}(x-{inflection}) + {y_inflect:.2f}, R²={r2_right:.3f}"
+
+        # plot left
+        x_range_left = np.linspace(X_left.min(), inflection, 200).reshape(-1,1)
+        y_pred_left = model_left.predict(x_range_left)
+        plt.plot(x_range_left, y_pred_left, color="black", label=eq_left)
+
+        # plot right
+        x_range_right = np.linspace(inflection, X_right.max(), 200)
+        y_pred_right = y_inflect + slope_right*(x_range_right-inflection)
+        plt.plot(x_range_right, y_pred_right, color="red", label=eq_right)
+
+    # title and labels
+    plt.title(f"Piecewise function for {months} - {years} for {x_col} vs {y_col}")
+    plt.xlabel(x_col)
+    plt.ylabel(y_col)
+    plt.legend()
+    plt.grid(True)
+    plt.show()
