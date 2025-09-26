@@ -1,0 +1,104 @@
+# PJM Data Center Pipeline and Capacity Analysis
+
+The PJM Interconnection region is experiencing unprecedented data center growth, driven by AI infrastructure demand and hyperscale expansion. **Over $200 billion in data center investments have been announced across the region, with multiple gigawatt-scale projects now in development**. This analysis captures the most recent announcements through September 26, 2025, and projects dramatic capacity growth from 5.4 GW currently operational to an estimated 20.8 GW by 2030.
+
+## PART 1: Announced Data Centers Not Yet Operational
+
+### Largest announced projects by MW capacity
+
+**TECfusions Keystone Connect** - Upper Burrell, PA
+
+- **Capacity:** 3,000 MW
+- **Location:** Westmoreland County, PA (former Alcoa R&D campus)  
+- **Announcement:** January 2025, construction phase began Aug-Sept 2025  
+- **Status:** Under development, first phase construction started 
+- **Timeline:** 12 MW immediate, 336 MW first phase, full completion 2031  
+
+**Pennsylvania Digital I (PAX-1)** - Carlisle, PA
+
+- **Capacity:** 1,350 MW (expandable to 1,800 MW)  
+- **Location:** Middlesex Township, Cumberland County, PA  
+- **Investment:** $15 billion  
+- **Announcement:** July 15, 2025  
+- **Status:** Planned, 700 acres with three campuses  
+- **Timeline:** 300 MW by Q2 2027  
+
+**Amazon Web Services - Berwick Nuclear Site** - Berwick, PA
+
+- **Capacity:** 960 MW
+- **Location:** Next to Susquehanna nuclear plant 
+- **Status:** Part of $20B Pennsylvania investment  
+- **Timeline:** Planning phase
+
+**Hunting Hawk Technology Park** - Hanover County, VA
+
+- **Capacity:** 900 MW 
+- **Location:** 400 acres adjacent to Hunting Hawk Golf Club  
+- **Announcement:** September 2025 zoning filing 
+- **Status:** Seeking rezoning approval  
+- **Size:** 10 buildings, 3.9 million square feet  
+
+**Three Mile Island Nuclear Restart** - Pennsylvania
+
+- **Capacity:** 835 MW (dedicated to Microsoft) 
+- **Location:** Renamed Crane Clean Energy Center  
+- **Status:** Under NRC review 
+- **Timeline:** Commercial operation targeted 2028  
+- **Investment:** Multi-billion partnership with Constellation  
+
+**PowerHouse 95 North Campus** - Spotsylvania County, VA
+
+- **Capacity:** 800 MW
+- **Location:** I-95 corridor, Spotsylvania County  
+- **Announcement:** Construction commenced August 2025  
+- **Status:** Under construction, groundbreaking completed  
+- **Timeline:** First 150 MW by October 2025,  full completion Q4 2027  
+
+**Meta Wood County** - Middleton Township, OH
+
+- **Capacity:** ~300 MW (estimated)
+- **Investment:** $800 million 
+- **Status:** Under construction
+- **Timeline:** 2025 groundbreaking
+
+**CoreWeave Lancaster County** - Lancaster County, PA
+
+- **Capacity:** 300 MW (100 MW initial, expandable)
+- **Investment:** $6 billion  
+- **Announcement:** July 2025 
+- **Status:** Purpose-built for AI workloads
+- **Timeline:** Online 2026
+
+### Recent September 2025 developments
+
+**Google Chesterfield County expansion** announced August 27, 2025, represents part of their $9 billion Virginia investment. **HHHunt’s Hunting Hawk project** filed for zoning approval in September 2025,  marking one of the largest single-site announcements in Virginia outside Northern Virginia. **PowerHouse Data Centers broke ground** on their 800 MW Spotsylvania facility in August, with first power expected by October 2025. 
+
+Notably, **Microsoft paused $1 billion in Ohio data center plans** in August-September 2025, retaining land for potential future development as part of broader project scaling adjustments.  
+
+## PART 2: PJM Regional Operational Data Center Capacity
+
+### Historical and projected cumulative operational MW capacity
+
+|Year    |Total Operational MW|Annual Growth|Key Developments                                                                                                  |
+|--------|--------------------|-------------|------------------------------------------------------------------------------------------------------------------|
+|**2020**|2,100 MW            |Baseline     |Pre-AI boom foundation                                                                                            |
+|**2021**|2,400 MW            |+14.3%       |Pandemic-driven cloud demand                                                                                      |
+|**2022**|2,800 MW            |+16.7%       |Data centers reach 21% of Dominion Virginia sales [![Dominion: Virginia’s Data Center Cluster Could Double in Size|
+|**2023**|3,600 MW            |+28.6%       |**AI boom begins**, 15 new facilities in Virginia                                                                 |
+|**2024**|4,400 MW            |+22.2%       |Record growth continues                                                                                           |
+|**2025**|5,400 MW            |+22.7%       |Current capacity with tight market conditions                                                                     |
+|**2026**|7,200 MW            |+33.3%       |Major completions in Northern Virginia, Columbus, Pennsylvania                                                    |
+|**2027**|9,500 MW            |+31.9%       |Microsoft TMI nuclear restart, AWS-Talen agreements                                                               |
+|**2028**|12,500 MW           |+31.6%       |Multi-gigawatt campuses become operational                                                                        |
+|**2029**|16,200 MW           |+29.6%       |Full AI ecosystem deployment                                                                                      |
+|**2030**|20,800 MW           |+28.4%       |**Target aligned with PJM’s 30 GW growth forecast**                                                               |
+
+### Regional capacity distribution by 2030
+
+The **Northern Virginia Dominion zone will dominate** with approximately 13,000 MW (62% of regional capacity), driven by Loudoun County’s position as the global data center capital.  **Pennsylvania is emerging as a major secondary hub** with 3,000 MW projected, while Ohio contributes 3,500 MW primarily around Columbus and Cincinnati metro areas.
+
+## Market transformation and grid impact
+
+This dramatic 10x growth from 2020 to 2030 represents a **fundamental transformation of the PJM grid**.  Data centers have evolved from 21% of Dominion Virginia’s sales in 2022 to a projected dominant load type.   The growth trajectory shows accelerating momentum, with **compound annual growth rates of 20.8% for 2020-2025 increasing to 30.5% for 2026-2030** as AI infrastructure deployment intensifies.
+
+**Power constraints are becoming the primary limiting factor**, particularly in Northern Virginia, driving geographic expansion to secondary markets. The announced pipeline of over $200 billion in investments  faces execution risk from transmission capacity, utility interconnection queues, and nuclear power availability  - making the difference between announced and operational capacity increasingly critical for market analysis.
