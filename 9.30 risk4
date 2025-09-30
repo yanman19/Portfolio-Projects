@@ -1,0 +1,90 @@
+Option Explicit
+'===== Module: modMarketDateNormalize =====
+
+'ENTRY POINT: normalize a column that contains tokens like 19Oct25 / Nov29 / Oct25
+Public Sub NormalizeMarketDates(ByVal ws As Worksheet, ByVal col As Long, Optional ByVal firstDataRow As Long = 2)
+    Dim r As Long, lastRow As Long, s As String, v As Variant
+    If ws Is Nothing Then Exit Sub
+    lastRow = ws.Cells(ws.Rows.Count, col).End(xlUp).Row
+    If lastRow < firstDataRow Then Exit Sub
+
+    Application.ScreenUpdating = False
+    For r = firstDataRow To lastRow
+        s = CStr(ws.Cells(r, col).Value2)
+        If Len(s) > 0 Then
+            v = ParseTokenToDate(s)
+            If Not IsEmpty(v) Then
+                ws.Cells(r, col).Value = v
+                ws.Cells(r, col).NumberFormat = "m/d/yyyy"
+            End If
+        End If
+    Next r
+    Application.ScreenUpdating = True
+End Sub
+
+'OPTIONAL: call by header text instead of column number (searches row 1)
+Public Sub NormalizeMarketDatesByHeader(ByVal ws As Worksheet, ByVal headerText As String, Optional ByVal firstDataRow As Long = 2)
+    Dim c As Range
+    If ws Is Nothing Then Exit Sub
+    Set c = Nothing
+    On Error Resume Next
+    Set c = ws.Rows(1).Find(What:=headerText, LookAt:=xlWhole, MatchCase:=False)
+    On Error GoTo 0
+    If Not c Is Nothing Then
+        NormalizeMarketDates ws, c.Column, firstDataRow
+    End If
+End Sub
+
+'— converts "19Oct25" -> 10/19/2025, "Nov29"/"Oct25" -> first of month (11/1/2029, 10/1/2025)
+Private Function ParseTokenToDate(ByVal s As String) As Variant
+    Dim rx As Object, m As Object, mon As Long, d As Long, y As Long
+    s = Trim$(s)
+    If Len(s) < 5 Then Exit Function
+
+    Set rx = CreateObject("VBScript.RegExp")
+    rx.Global = False
+    rx.IgnoreCase = True
+
+    'Case 1: DDMonYY (or DMonYY)
+    rx.Pattern = "^\s*(\d{1,2})([A-Za-z]{3})(\d{2})\s*$"
+    If rx.Test(s) Then
+        Set m = rx.Execute(s)(0)
+        d = CLng(m.SubMatches(0))
+        mon = MonthFrom3(m.SubMatches(1))
+        y = 2000 + CLng(m.SubMatches(2))
+        If mon > 0 Then
+            ParseTokenToDate = DateSerial(y, mon, d)
+            Exit Function
+        End If
+    End If
+
+    'Case 2: MonYY -> first of month
+    rx.Pattern = "^\s*([A-Za-z]{3})(\d{2})\s*$"
+    If rx.Test(s) Then
+        Set m = rx.Execute(s)(0)
+        mon = MonthFrom3(m.SubMatches(0))
+        y = 2000 + CLng(m.SubMatches(1))
+        If mon > 0 Then
+            ParseTokenToDate = DateSerial(y, mon, 1)
+            Exit Function
+        End If
+    End If
+End Function
+
+Private Function MonthFrom3(ByVal m As String) As Long
+    Select Case LCase$(m)
+        Case "jan": MonthFrom3 = 1
+        Case "feb": MonthFrom3 = 2
+        Case "mar": MonthFrom3 = 3
+        Case "apr": MonthFrom3 = 4
+        Case "may": MonthFrom3 = 5
+        Case "jun": MonthFrom3 = 6
+        Case "jul": MonthFrom3 = 7
+        Case "aug": MonthFrom3 = 8
+        Case "sep": MonthFrom3 = 9
+        Case "oct": MonthFrom3 = 10
+        Case "nov": MonthFrom3 = 11
+        Case "dec": MonthFrom3 = 12
+        Case Else:  MonthFrom3 = 0
+    End Select
+End Function
