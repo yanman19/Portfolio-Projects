@@ -1,0 +1,104 @@
+'PUT THIS IN A STANDARD MODULE (Insert > Module), ABOVE OR BELOW YOUR EXISTING SUBS
+'— Helpers (unchanged) —
+Private Function ParseMarketToken(ByVal s As String) As Variant
+    Dim dayStr As String, monStr As String, yrStr As String
+    Dim i As Long, ch As String
+    s = Trim$(s)
+    If Len(s) < 5 Then Exit Function
+    i = 1
+    Do While i <= Len(s)
+        ch = Mid$(s, i, 1)
+        If ch < "0" Or ch > "9" Then Exit Do
+        dayStr = dayStr & ch
+        i = i + 1
+    Loop
+    If Len(dayStr) >= 1 And Len(dayStr) <= 2 Then
+        If i + 4 = Len(s) + 1 Then
+            monStr = Mid$(s, i, 3)
+            yrStr = Right$(s, 2)
+            If IsMonth3(monStr) And IsNumeric(yrStr) Then
+                ParseMarketToken = DateSerial(2000 + CInt(yrStr), MonthFrom3(monStr), CInt(dayStr))
+                Exit Function
+            End If
+        End If
+    End If
+    If Len(s) = 5 Then
+        monStr = Left$(s, 3)
+        yrStr = Right$(s, 2)
+        If IsMonth3(monStr) And IsNumeric(yrStr) Then
+            ParseMarketToken = DateSerial(2000 + CInt(yrStr), MonthFrom3(monStr), 1)
+            Exit Function
+        End If
+    End If
+End Function
+
+Private Function IsMonth3(ByVal m As String) As Boolean
+    m = LCase$(m)
+    IsMonth3 = (m = "jan" Or m = "feb" Or m = "mar" Or m = "apr" Or m = "may" Or _
+                m = "jun" Or m = "jul" Or m = "aug" Or m = "sep" Or m = "oct" Or _
+                m = "nov" Or m = "dec")
+End Function
+
+Private Function MonthFrom3(ByVal m As String) As Long
+    Select Case LCase$(m)
+        Case "jan": MonthFrom3 = 1
+        Case "feb": MonthFrom3 = 2
+        Case "mar": MonthFrom3 = 3
+        Case "apr": MonthFrom3 = 4
+        Case "may": MonthFrom3 = 5
+        Case "jun": MonthFrom3 = 6
+        Case "jul": MonthFrom3 = 7
+        Case "aug": MonthFrom3 = 8
+        Case "sep": MonthFrom3 = 9
+        Case "oct": MonthFrom3 = 10
+        Case "nov": MonthFrom3 = 11
+        Case "dec": MonthFrom3 = 12
+    End Select
+End Function
+
+Private Sub NormalizeMarketDateColumn(ByVal ws As Worksheet, ByVal headerName As String)
+    Dim hdrRow As Long, hdrCol As Long, lastRow As Long
+    Dim c As Range, v As Variant
+
+    hdrRow = FindHeaderRow(ws, headerName, 1, 20)
+    If hdrRow = 0 Then Exit Sub
+    hdrCol = FindHeaderCol(ws, headerName, hdrRow)
+    If hdrCol = 0 Then Exit Sub
+
+    lastRow = ws.Cells(ws.Rows.Count, hdrCol).End(xlUp).Row
+    If lastRow <= hdrRow Then Exit Sub
+
+    Application.ScreenUpdating = False
+    For Each c In ws.Range(ws.Cells(hdrRow + 1, hdrCol), ws.Cells(lastRow, hdrCol)).Cells
+        If Len(c.Value2) > 0 Then
+            v = ParseMarketToken(CStr(c.Value2))
+            If Not IsEmpty(v) Then
+                c.Value = v
+                c.NumberFormat = "m/d/yyyy"
+            End If
+        End If
+    Next c
+    Application.ScreenUpdating = True
+End Sub
+
+Private Function FindHeaderRow(ByVal ws As Worksheet, ByVal headerName As String, _
+                               ByVal startRow As Long, ByVal endRow As Long) As Long
+    Dim r As Long
+    For r = startRow To endRow
+        If Application.WorksheetFunction.CountIf(ws.Rows(r), "*" & headerName & "*") > 0 Then
+            FindHeaderRow = r
+            Exit Function
+        End If
+    Next r
+End Function
+
+Private Function FindHeaderCol(ByVal ws As Worksheet, ByVal headerName As String, ByVal hdrRow As Long) As Long
+    Dim c As Range
+    For Each c In ws.Rows(hdrRow).Cells
+        If Len(c.Value2) = 0 Then Exit For
+        If LCase$(Trim$(c.Value2)) = LCase$(headerName) Then
+            FindHeaderCol = c.Column
+            Exit Function
+        End If
+    Next c
+End Function
