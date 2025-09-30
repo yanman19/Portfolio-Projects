@@ -1,0 +1,36 @@
+'REPLACE your existing ParseMarketToken with this fixed version
+Private Function ParseMarketToken(ByVal s As String) As Variant
+    Dim dayStr As String, monStr As String, yrStr As String
+    Dim i As Long, ch As String
+
+    s = Trim$(s)
+    If Len(s) < 5 Then Exit Function
+
+    i = 1
+    Do While i <= Len(s)
+        ch = Mid$(s, i, 1)
+        If ch < "0" Or ch > "9" Then Exit Do
+        dayStr = dayStr & ch
+        i = i + 1
+    Loop
+
+    If Len(dayStr) >= 1 And Len(dayStr) <= 2 Then
+        If Len(s) = i + 4 Then
+            monStr = Mid$(s, i, 3)
+            yrStr = Mid$(s, i + 3, 2)
+            If IsMonth3(monStr) And IsNumeric(yrStr) Then
+                ParseMarketToken = DateSerial(2000 + CInt(yrStr), MonthFrom3(monStr), CInt(dayStr))
+                Exit Function
+            End If
+        End If
+    End If
+
+    If Len(s) = 5 Then
+        monStr = Left$(s, 3)
+        yrStr = Right$(s, 2)
+        If IsMonth3(monStr) And IsNumeric(yrStr) Then
+            ParseMarketToken = DateSerial(2000 + CInt(yrStr), MonthFrom3(monStr), 1)
+            Exit Function
+        End If
+    End If
+End Function
