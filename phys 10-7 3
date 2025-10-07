@@ -1,0 +1,77 @@
+Excellent — that’s the next layer you really need when moving beyond ERCOT.
+In ERCOT, a bilat error is mostly between counterparties. In the FERC-jurisdictional ISOs, mismatched, late, or untagged schedules can trigger ISO-level penalties, imbalance charges, or even NERC violations.
+
+Here’s a summary of penalty exposure for bilateral trades by ISO — focused on mistiming, mismatches, or tagging failures.
+
+⸻
+
+⚡ General Across All Non-ERCOT ISOs
+	•	NERC e-Tag compliance:
+	•	If your tag isn’t submitted, approved, or updated before the ISO cutoff (usually 20–30 min prior to the hour), the schedule is rejected and flagged as a non-compliant interchange.
+	•	Repeated violations → NERC compliance findings (could result in fines on the BA, passed down contractually).
+	•	Imbalance energy penalties:
+	•	If you deliver less or more than scheduled, the ISO settles the difference at real-time imbalance prices, which can be punitive (e.g., $1000+/MWh during scarcity).
+	•	Late or missing confirmation:
+	•	In PJM, ISO-NE, NYISO, CAISO — unconfirmed or mismatched IBTs/ISTs default to zero schedule, and both counterparties get imbalance charges.
+	•	Tag correction timing:
+	•	Most ISOs require updates before T-20 or T-30 minutes; editing after the window can trigger automatic curtailment or denial, effectively canceling the transfer.
+
+⸻
+
+PJM
+	•	IBT mismatch: If counterparties submit differing MWs or timestamps → PJM auto-rejects the IBT.
+	•	Missed tagging: If an external tag is missing or not approved → PJM charges the energy deviation at real-time LMP.
+	•	Persistent mismatches: May be escalated as a Tariff Section 10.4 violation, subject to financial penalties or suspension.
+	•	Late submission: Missed IBT deadline (often 10:00 EPT for DA, 2 hours prior for RT) → treated as imbalance exposure.
+
+⸻
+
+MISO
+	•	Invalid tag or schedule ID: The transaction won’t settle; both sides receive Uninstructed Deviation Charges (UDCs).
+	•	Tag correction cutoff: T-20 min; later edits ignored, leading to imbalance settlement.
+	•	RSG (Revenue Sufficiency Guarantee) claw-back: If a mismatched tag causes the ISO to redispatch, the participant can lose RSG credits.
+	•	Repeated tagging errors: May trigger Market Monitoring notifications and could suspend scheduling privileges.
+
+⸻
+
+NYISO
+	•	Late or incorrect bilateral submissions: NYISO’s Day-Ahead Bilateral (DAB) and Hour-Ahead Bilateral (HAB) deadlines are enforced strictly — missed = no schedule.
+	•	Underdelivery: Charged at real-time LMP + penalty adder.
+	•	Unverified tags: ISO can cancel interchange and apply deviation penalties under OATT Attachment M.
+	•	Data errors: Repeated mismatches between participants → flagged by the ISO and can lead to market suspension hearings.
+
+⸻
+
+ISO-NE
+	•	IBT deadline: Both counterparties must confirm before ISO-NE’s daily cutoff (normally 4 p.m. ET for DA, 1 hour prior for RT). Missed → not recognized.
+	•	Discrepancies: MW or time mismatches = auto-rejection.
+	•	Failure to meet schedule: Deviations settled at RT LMP with Deviation Charge.
+	•	Chronic timing errors: Can violate Market Rule 1, Section III.1.10, exposing you to ISO enforcement actions.
+
+⸻
+
+CAISO
+	•	e-Tag cutoff: T-20 min firm — CAISO will not accept a tag or correction after that.
+	•	Scheduling Coordinator (SC) obligations:
+	•	SCs face financial imbalance penalties and possible Performance Penalties for persistent late tags.
+	•	Non-compliant SCs risk suspension from CAISO scheduling.
+	•	Dynamic schedule mismatch: If your actual MWs deviate from approved dynamic profile → Uninstructed Deviation Penalty (UDP) applies.
+	•	Missed intertie window: Lost opportunity; no back-scheduling allowed.
+
+⸻
+
+Practical Summary of Penalty Types
+
+Penalty Type	Where It Applies	Typical Impact
+e-Tag late/invalid	All except ERCOT	Schedule rejection; imbalance settlement
+IBT/IST mismatch	PJM, ISO-NE, CAISO	Auto-reject; deviation charge
+Late submission	PJM, NYISO, ISO-NE	Treated as 0 MW; imbalance charge
+Uninstructed deviation	CAISO, MISO	Financial penalty (per MWh deviation)
+NERC violation	All (via BA)	Compliance fine passed to participant
+Market suspension	Any repeated offender	Temporary loss of scheduling rights
+
+
+⸻
+
+Would you like me to add this penalty section into your PDF (as an updated version, still in bullet form, consistent with the prior style)?
+I can label it “Penalty & Compliance Exposure” and append it right after the Practical Checklist.
