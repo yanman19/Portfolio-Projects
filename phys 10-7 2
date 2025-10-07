@@ -1,0 +1,53 @@
+
+"""
+This note summarizes how bilateral physical trading differs between ERCOT and other U.S. ISOs
+(PJM, MISO, NYISO, ISO-NE, CAISO). Focus is only on bilateral trades — not ISO market offers.
+---
+Common to Most Non-ERCOT ISOs
+• FERC jurisdiction – Market-based rate (MBR) authority and EQR filings usually required.
+• Transmission reservations – Must use OASIS under an Open Access Transmission Tariff (OATT).
+• NERC e-Tags – Required for any physical interchange between Balancing Authorities.
+---
+PJM
+• Internal bilateral transactions (IBTs) must be reported to PJM; both parties confirm in PJM systems.
+• OASIS used for all transmission reservations, including resale postings.
+• Cross-seam scheduling (e.g. with MISO) may apply.
+→ Expect additional admin: IBT submissions, e-Tags, PJM settlement credits/charges even for bilats.
+---
+MISO
+• All bilats rely on OASIS and NERC e-Tags; settlement IDs reference the Tag or Schedule ID.
+• Dynamic transfers/pseudo-ties have formal BPM rules.
+• Complex uplift allocation may touch interchange schedules.
+→ Expect tagging paperwork, transmission reservations, and potential uplift exposure.
+---
+NYISO
+• Bilateral schedules submitted to NYISO; firm and non-firm categories with ISO confirmation.
+• ISO operations manuals govern curtailments and notifications.
+→ ISO visibility and confirmation mandatory—NYISO settles internal bilats directly.
+---
+ISO-NE
+• IBTs must be formally submitted and confirmed by both parties in ISO-NE’s SMS.
+• Deadlines are strict (hour-ahead to day-ahead windows).
+• Bilateral capacity (CSO) trades tracked by ISO as well.
+→ Even purely bilateral energy trades must be entered and confirmed in ISO-NE systems.
+---
+CAISO
+• Participants act through Scheduling Coordinators (SCs); bilateral transfers done via Inter-SC Trades
+(ISTs).
+• Strict NERC e-Tag timing (T-20 minutes) for intertie flows.
+• Dynamic schedules and pseudo-ties subject to CAISO tariff protocols.
+→ Requires SC-to-SC structure, tight tag compliance, and ISO acknowledgment.
+---
+Practical Checklist
+1. Confirm FERC MBR authority and EQR obligations.
+2. Obtain ISO participant or scheduling rights (for IBT/IST entry).
+3. Reserve transmission via OASIS.
+4. Create and validate NERC e-Tags within ISO timelines.
+5. Submit/confirm internal bilats (IBT/IST) in ISO systems for settlement credit or offset.
+---
+Summary
+Unlike ERCOT—where bilaterals remain mostly internal and untagged—other ISOs require FERC
+authority, tagging, OASIS transmission rights, and ISO confirmations. The “bilateral” layer is more
+regulated and administratively visible even when no day-ahead or real-time bids are placed
+
+"""
