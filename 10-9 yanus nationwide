@@ -1,0 +1,171 @@
+import os
+from pathlib import Path
+import lib.sftp
+
+# 1. HTML content (interactive map)
+dashboard_html = """<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>YANUS | US ISO Map</title>
+<style>
+  :root{
+    --bg:#0f1117;
+    --card:#111827;
+    --accent:#3b82f6;
+    --muted:#94a3b8;
+    --ercot:#ef4444;
+    --pjm:#f59e0b;
+    --state:#1f2937;
+    --state-stroke:#0b1220;
+    --hover:#334155;
+    --clickable:#22c55e;
+  }
+  html,body{height:100%;margin:0;background:var(--bg);color:white;font-family:Inter,Segoe UI,Arial,sans-serif}
+  .wrap{display:flex;flex-direction:column;align-items:center;gap:12px;padding:28px 18px 36px 18px}
+  .yanus-logo{font-size:72px;letter-spacing:14px;font-family:Arial, sans-serif;user-select:none}
+  .yanus-logo span:nth-child(1){color:#4285F4}
+  .yanus-logo span:nth-child(2){color:#DB4437}
+  .yanus-logo span:nth-child(3){color:#F4B400}
+  .yanus-logo span:nth-child(4){color:#0F9D58}
+  .yanus-logo span:nth-child(5){color:#4285F4}
+  .card{width:100%;max-width:1100px;background:var(--card);border-radius:16px;box-shadow:0 10px 30px rgba(0,0,0,.35);padding:18px 18px 6px}
+  .header{display:flex;justify-content:space-between;align-items:center;gap:16px;padding:6px 6px 12px}
+  .title{font-size:20px;font-weight:600}
+  .legend{display:flex;gap:14px;flex-wrap:wrap}
+  .legend .item{display:flex;align-items:center;gap:8px;color:var(--muted);font-size:14px}
+  .legend .dot{width:14px;height:14px;border-radius:50%}
+  .map-wrap{width:100%;position:relative}
+  svg{width:100%;height:auto;display:block}
+  .state{fill:var(--state);stroke:var(--state-stroke);stroke-width:.75}
+  .state.clickable{cursor:pointer}
+  .state:hover{fill:var(--hover)}
+  .iso-fill-ercot{fill:var(--ercot)}
+  .iso-fill-pjm{fill:var(--pjm)}
+  .tooltip{
+    position:absolute;pointer-events:none;opacity:0;transform:translate(-50%,-130%);
+    background:#0b1220;border:1px solid #1f2937;border-radius:10px;padding:8px 10px;
+    color:#e5e7eb;font-size:13px;white-space:nowrap;
+    box-shadow:0 8px 24px rgba(0,0,0,.45)
+  }
+  .note{color:var(--muted);font-size:12px;padding:10px 6px 18px}
+  a.clean{color:#a5b4fc;text-decoration:none}
+  a.clean:hover{text-decoration:underline}
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="yanus-logo" aria-label="YANUS">
+      <span>Y</span><span>A</span><span>N</span><span>U</span><span>S</span>
+    </div>
+    <div class="card">
+      <div class="header">
+        <div class="title">Interactive US ISO Map (click into ERCOT &amp; PJM)</div>
+        <div class="legend" aria-label="Legend">
+          <div class="item"><span class="dot" style="background:var(--ercot)"></span><span>ERCOT (TX)</span></div>
+          <div class="item"><span class="dot" style="background:var(--pjm)"></span><span>PJM (rough footprint)</span></div>
+        </div>
+      </div>
+      <div class="map-wrap">
+        <svg id="usmap" viewBox="0 0 975 610" role="img" aria-label="Clickable map of US ISO regions"></svg>
+        <div class="tooltip" id="tip"></div>
+      </div>
+      <div class="note">
+        Tip: hover a state to see its name; click any highlighted state to open that ISO dashboard.
+        Edit the two links in the links object below. PJM states are a simplified core set.
+      </div>
+    </div>
+  </div>
+  <script src="https://d3js.org/d3.v7.min.js"></script>
+  <script src="https://unpkg.com/topojson-client@3"></script>
+  <script>
+  const links = {
+    ERCOT: "file:///S:/POWER/Yianni/Dashboards/ERCOT/YANUS_ERCOT.htm",
+    PJM:   "file:///S:/POWER/Yianni/Dashboards/PJM/YANUS_PJM.htm"
+  };
+  const ERCOT = new Set([48]);
+  const PJM = new Set([42,34,24,10,11,39,54,51]);
+  fetch("https://cdn.jsdelivr.net/npm/us-atlas@3/states-10m.json")
+    .then(r => r.json())
+    .then(us => {
+      const svg = d3.select("#usmap");
+      const tip = d3.select("#tip");
+      const path = d3.geoPath();
+      const states = topojson.feature(us, us.objects.states).features;
+      const nation = topojson.feature(us, us.objects.nation).features[0];
+      svg.append("path").attr("d", d3.geoPath()(nation)).attr("fill", "none").attr("stroke", "#0b1220").attr("stroke-width", 1.25);
+      svg.append("g")
+        .selectAll("path")
+        .data(states)
+        .join("path")
+          .attr("class", d => {
+            const id = +d.id;
+            const inERCOT = ERCOT.has(id);
+            const inPJM   = PJM.has(id);
+            return `state ${inERCOT ? "iso-fill-ercot clickable" : inPJM ? "iso-fill-pjm clickable" : ""}`;
+          })
+          .attr("d", path)
+          .on("mousemove", function(event, d){
+            const [x,y] = d3.pointer(event, this.ownerSVGElement);
+            const name = stateName(+d.id);
+            const iso = ERCOT.has(+d.id) ? "ERCOT" : PJM.has(+d.id) ? "PJM" : "—";
+            tip.style("left", x+"px").style("top", y+"px").style("opacity", 1)
+               .html(`<strong>${name}</strong>${iso !== "—" ? ` &middot; <span style="color:#a5b4fc">${iso}</span>` : ""}`);
+          })
+          .on("mouseleave", () => tip.style("opacity", 0))
+          .on("click", (event, d) => {
+            const id = +d.id;
+            if (ERCOT.has(id)) window.location.href = links.ERCOT;
+            else if (PJM.has(id)) window.location.href = links.PJM;
+          });
+      svg.append("path")
+        .attr("fill","none")
+        .attr("stroke","#0b1220")
+        .attr("stroke-width",0.75)
+        .attr("d", d3.geoPath()(topojson.mesh(us, us.objects.states, (a,b)=>a!==b)));
+    });
+  const fipsToName = new Map([
+    [1,"Alabama"],[2,"Alaska"],[4,"Arizona"],[5,"Arkansas"],[6,"California"],[8,"Colorado"],[9,"Connecticut"],
+    [10,"Delaware"],[11,"District of Columbia"],[12,"Florida"],[13,"Georgia"],[15,"Hawaii"],[16,"Idaho"],[17,"Illinois"],
+    [18,"Indiana"],[19,"Iowa"],[20,"Kansas"],[21,"Kentucky"],[22,"Louisiana"],[23,"Maine"],[24,"Maryland"],[25,"Massachusetts"],
+    [26,"Michigan"],[27,"Minnesota"],[28,"Mississippi"],[29,"Missouri"],[30,"Montana"],[31,"Nebraska"],[32,"Nevada"],
+    [33,"New Hampshire"],[34,"New Jersey"],[35,"New Mexico"],[36,"New York"],[37,"North Carolina"],[38,"North Dakota"],
+    [39,"Ohio"],[40,"Oklahoma"],[41,"Oregon"],[42,"Pennsylvania"],[44,"Rhode Island"],[45,"South Carolina"],
+    [46,"South Dakota"],[47,"Tennessee"],[48,"Texas"],[49,"Utah"],[50,"Vermont"],[51,"Virginia"],[53,"Washington"],
+    [54,"West Virginia"],[55,"Wisconsin"],[56,"Wyoming"],[72,"Puerto Rico"]
+  ]);
+  function stateName(id){ return fipsToName.get(id) || `State ${id}`; }
+  </script>
+</body>
+</html>
+"""
+
+# 2. Save HTML locally
+path_to_write = "/neaest/amerib/GC/energy/POWER/Yianni/Dashboards/"
+html_name = "YANUS_Home.html"
+dashboard_html_path = os.path.join(path_to_write, html_name)
+
+with open(dashboard_html_path, "w", encoding="utf-8") as f:
+    f.write(dashboard_html)
+
+print(f"✅ HTML saved locally at: {dashboard_html_path}")
+
+# 3. Upload to SFTP
+def write_to_folder_html(file_path, path_remote, html_name):
+    fconn = lib.sftp.SFTP(
+        host="NAEASTFTP01.JS.JPMCHASE.NET",
+        port=22,
+        passwordName="sftp/A0266066",
+        useProxy=False,
+        connect=False
+    )
+    fconn.connect(useFakeKeyboardIdent=True)
+    fconn.chdir(path_remote)
+    with open(file_path, "rb") as file_obj:
+        fconn.put(file_obj, os.path.join(fconn.getcwd(), html_name))
+    fconn.close()
+    print("✅ Uploaded to SFTP:", html_name)
+
+# Run upload
+write_to_folder_html(dashboard_html_path, path_to_write, html_name)
