@@ -1,0 +1,205 @@
+dashboard_html = """<!DOCTYPE html>
+<html>
+<head>
+    <title>YANUS - ISO Markets</title>
+    <style>
+        body, html {
+            height: 100%;
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            font-family: Arial, sans-serif;
+        }
+        .center-container {
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            width: 100vw;
+            padding: 40px 20px;
+        }
+        .yanus-logo {
+            font-size: 96px;
+            font-family: Arial, sans-serif;
+            letter-spacing: 16px;
+            margin-bottom: 40px;
+            text-align: center;
+        }
+        .yanus-logo span:nth-child(1) { color: #4285F4; }
+        .yanus-logo span:nth-child(2) { color: #DB4437; }
+        .yanus-logo span:nth-child(3) { color: #F4B400; }
+        .yanus-logo span:nth-child(4) { color: #0F9D58; }
+        .yanus-logo span:nth-child(5) { color: #4285F4; }
+        
+        .map-container {
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 20px;
+            padding: 40px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        
+        .map-title {
+            color: #fff;
+            font-size: 32px;
+            text-align: center;
+            margin-bottom: 30px;
+            font-weight: 300;
+            letter-spacing: 2px;
+        }
+        
+        svg {
+            max-width: 1000px;
+            width: 100%;
+            height: auto;
+        }
+        
+        .iso-region {
+            transition: all 0.3s ease;
+            cursor: pointer;
+            stroke: rgba(255, 255, 255, 0.3);
+            stroke-width: 2;
+        }
+        
+        .iso-region:hover {
+            filter: brightness(1.3);
+            stroke: #fff;
+            stroke-width: 3;
+        }
+        
+        .iso-label {
+            font-size: 24px;
+            font-weight: bold;
+            fill: white;
+            text-anchor: middle;
+            pointer-events: none;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.8);
+        }
+        
+        .legend {
+            display: flex;
+            justify-content: center;
+            flex-wrap: wrap;
+            gap: 20px;
+            margin-top: 30px;
+        }
+        
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            color: #fff;
+            font-size: 16px;
+        }
+        
+        .legend-color {
+            width: 30px;
+            height: 30px;
+            border-radius: 5px;
+            border: 2px solid rgba(255, 255, 255, 0.3);
+        }
+    </style>
+</head>
+<body>
+    <div class="center-container">
+        <div class="yanus-logo">
+            <span>Y</span><span>A</span><span>N</span><span>U</span><span>S</span>
+        </div>
+        
+        <div class="map-container">
+            <div class="map-title">US ISO Markets</div>
+            
+            <svg viewBox="0 0 1000 600" xmlns="http://www.w3.org/2000/svg">
+                <!-- CAISO (California) -->
+                <path id="caiso" class="iso-region" fill="#4285F4" 
+                      d="M 50 150 L 50 450 L 120 480 L 140 400 L 130 200 L 100 150 Z" />
+                <text class="iso-label" x="95" y="320">CAISO</text>
+                
+                <!-- ERCOT (Texas) -->
+                <path id="ercot" class="iso-region" fill="#DB4437"
+                      d="M 350 350 L 280 380 L 280 480 L 400 520 L 480 500 L 500 420 L 450 350 Z" />
+                <text class="iso-label" x="380" y="440">ERCOT</text>
+                
+                <!-- MISO (Midwest) -->
+                <path id="miso" class="iso-region" fill="#F4B400"
+                      d="M 400 200 L 350 250 L 350 400 L 500 380 L 580 300 L 550 200 Z" />
+                <text class="iso-label" x="460" y="300">MISO</text>
+                
+                <!-- PJM (Mid-Atlantic) -->
+                <path id="pjm" class="iso-region" fill="#0F9D58"
+                      d="M 580 250 L 550 300 L 600 380 L 700 350 L 720 280 L 680 240 Z" />
+                <text class="iso-label" x="640" y="310">PJM</text>
+                
+                <!-- NYISO (New York) -->
+                <path id="nyiso" class="iso-region" fill="#9C27B0"
+                      d="M 700 150 L 650 180 L 680 240 L 750 230 L 800 200 L 780 150 Z" />
+                <text class="iso-label" x="725" y="200">NYISO</text>
+                
+                <!-- NEPOOL/ISO-NE (New England) -->
+                <path id="nepool" class="iso-region" fill="#FF6B6B"
+                      d="M 800 180 L 780 150 L 850 120 L 920 140 L 900 200 L 850 210 Z" />
+                <text class="iso-label" x="855" y="170">NEPOOL</text>
+            </svg>
+            
+            <div class="legend">
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #4285F4;"></div>
+                    <span>CAISO</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #DB4437;"></div>
+                    <span>ERCOT</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #F4B400;"></div>
+                    <span>MISO</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #0F9D58;"></div>
+                    <span>PJM</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #9C27B0;"></div>
+                    <span>NYISO</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #FF6B6B;"></div>
+                    <span>NEPOOL</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // ====== EASY CONFIGURATION SECTION ======
+        // Add your links here for each ISO market
+        const isoLinks = {
+            caiso: '',    // Add CAISO link here
+            ercot: '',    // Add ERCOT link here
+            miso: '',     // Add MISO link here
+            pjm: '',      // Add PJM link here
+            nyiso: '',    // Add NYISO link here
+            nepool: ''    // Add NEPOOL link here
+        };
+        // ========================================
+
+        // Add click handlers to each ISO region
+        Object.keys(isoLinks).forEach(isoId => {
+            const element = document.getElementById(isoId);
+            if (element) {
+                element.addEventListener('click', function() {
+                    const link = isoLinks[isoId];
+                    if (link && link.trim() !== '') {
+                        window.open(link, '_blank');
+                    } else {
+                        console.log(`No link configured for ${isoId.toUpperCase()}`);
+                    }
+                });
+            }
+        });
+    </script>
+</body>
+</html>"""
