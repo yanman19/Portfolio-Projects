@@ -1,0 +1,139 @@
+import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
+
+def load_export_data_file_with_title_for_filename(df, value_col, title, current_year, filename):
+fig, ax = plt.subplots(figsize=(16, 10))
+ax.axis(‘tight’)
+ax.axis(‘off’)
+
+```
+# Table data prep
+pivot = df.pivot_table(index='year', columns='entity', values=value_col, aggfunc='mean')
+pivot = pivot.reset_index()
+
+years = pivot['year'].values
+seq_years = years[np.arange(len(years))]
+
+# Filter data
+seq_row = pivot.iloc[seq_years].copy()
+for col in seq_row.columns[1:]:
+    if seq_row[col].notna().sum() == 0 or (seq_row[col] == 0).all():
+        seq_row.drop(columns=[col], inplace=True)
+
+# Add title text at the top with spacing
+ax.text(0.5, 0.98, title, ha='center', va='top', fontsize=18, 
+        fontweight='bold', transform=ax.transAxes, color='#2C3E50')
+
+# Create the table (positioned lower to make room for title)
+table = ax.table(cellText=seq_row.values,
+                 colLabels=seq_row.columns,
+                 cellLoc='center',
+                 loc='center',
+                 bbox=[0, 0.1, 1, 0.85])
+
+# Enhanced styling
+table.auto_set_font_size(False)
+table.set_fontsize(11)
+table.scale(1.2, 2.5)
+
+# Modern color scheme
+header_color = '#34495E'
+year_col_color = '#5D6D7E'
+alt_row_color1 = '#ECF0F1'
+alt_row_color2 = '#FFFFFF'
+
+# Style header row with gradient effect
+for col_idx in range(len(seq_row.columns)):
+    cell = table[(0, col_idx)]
+    cell.set_facecolor(header_color)
+    cell.set_text_props(weight='bold', color='white', fontsize=12)
+    cell.set_edgecolor('#2C3E50')
+    cell.set_linewidth(2)
+
+# Get data range for color mapping (excluding year column)
+data_values = seq_row.iloc[:, 1:].values.flatten()
+data_values = data_values[~np.isnan(data_values)]
+vmin, vmax = np.percentile(data_values, [10, 90])
+
+# Color map for data cells (professional blue-red gradient)
+cmap = plt.cm.RdYlGn_r  # Red for high, Yellow for mid, Green for low
+norm = plt.Normalize(vmin=vmin, vmax=vmax)
+
+# Style data cells
+for row_idx in range(1, len(seq_row) + 1):
+    # Alternate row background for year column
+    year_cell = table[(row_idx, 0)]
+    if row_idx % 2 == 0:
+        year_cell.set_facecolor(alt_row_color1)
+    else:
+        year_cell.set_facecolor(alt_row_color2)
+    year_cell.set_text_props(weight='bold', fontsize=11, color='#2C3E50')
+    year_cell.set_edgecolor('#BDC3C7')
+    year_cell.set_linewidth(1)
+    
+    # Data columns with color gradient
+    for col_idx in range(1, len(seq_row.columns)):
+        cell = table[(row_idx, col_idx)]
+        value = seq_row.iloc[row_idx-1, col_idx]
+        
+        if pd.notna(value):
+            # Apply color based on value
+            color = cmap(norm(value))
+            cell.set_facecolor(color)
+            
+            # Adjust text color for readability
+            if norm(value) < 0.3 or norm(value) > 0.7:
+                cell.set_text_props(color='white', weight='bold')
+            else:
+                cell.set_text_props(color='#2C3E50', weight='bold')
+            
+            # Format number
+            cell.get_text().set_text(f'{value:.1f}')
+        else:
+            cell.set_facecolor('#F8F9F9')
+            
+        cell.set_edgecolor('#BDC3C7')
+        cell.set_linewidth(0.5)
+
+# Highlight current year row
+if current_year in seq_row['year'].values:
+    current_idx = seq_row[seq_row['year'] == current_year].index[0] + 1
+    for col_idx in range(len(seq_row.columns)):
+        cell = table[(current_idx, col_idx)]
+        cell.set_edgecolor('#E74C3C')
+        cell.set_linewidth(3)
+
+# Highlight 4yr AVG row
+if '4yr AVG' in seq_row['year'].values or 'AVG' in str(seq_row.iloc[-1, 0]):
+    avg_idx = len(seq_row)
+    for col_idx in range(len(seq_row.columns)):
+        cell = table[(avg_idx, col_idx)]
+        cell.set_facecolor('#3498DB' if col_idx == 0 else '#AED6F1')
+        cell.set_text_props(weight='bold', color='#2C3E50')
+        cell.set_edgecolor('#2980B9')
+        cell.set_linewidth(2)
+
+# Add subtle shadow effect with background
+fig.patch.set_facecolor('#F4F6F7')
+
+plt.tight_layout()
+plt.savefig(filename, dpi=300, bbox_inches='tight', facecolor='#F4F6F7')
+plt.close()
+```
+
+# Example usage:
+
+# load_export_data_file_with_title_for_filename(
+
+# df=your_dataframe,
+
+# value_col=‘value_column_name’,
+
+# title=‘ATC WH_BLEND_SPARK_10’,
+
+# current_year=2025,
+
+# filename=‘output_table.png’
+
+# )
