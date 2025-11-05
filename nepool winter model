@@ -1,0 +1,69 @@
+import pandas as pd
+
+def nepool_price_forecast_temp(df,
+                               S0=13.4,          # initial LNG inventory (Bcf)
+                               Fmax=1.9,         # max send-out (Bcf/day)
+                               conv=0.186,       # Bcf per GW-day
+                               henry=3,          # $/MMBtu
+                               basis0=5,         # $/MMBtu
+                               heat_rate=7.5,    # MMBtu/MWh
+                               nonfuel=15,       # $/MWh
+                               T_ref=35,         # °F reference for cold premium
+                               alpha=0.4,        # $/MMBtu per °F below ref
+                               beta=0.6,         # $/MMBtu per Bcf below full
+                               ttf_landed=15,    # $/MMBtu (price ceiling)
+                               cargo_size=6.7,   # Bcf per cargo
+                               cargo_lag=14,     # days between order & arrival
+                               S_trigger=4):     # Bcf threshold for refill
+    """
+    Inputs required:
+      - Date       : datetime
+      - Bos_Temp   : °F (daily avg)
+      - GasGen     : MW (gas generation)
+    """
+
+    S = [S0]
+    prices = []
+    cargo_eta = None
+    cargo_ordered, cargo_arrived = [], []
+
+    for i, row in df.iterrows():
+        temp = row["Bos_Temp"]
+        gas_mw = row["GasGen"]
+        p = gas_mw / 1000.0  # convert MW → GW
+
+        burn = min(Fmax, p * conv)
+        s_next = max(S[-1] - burn, 0)
+
+        # --- Cargo order logic ---
+        if s_next <= S_trigger and cargo_eta is None:
+            cargo_eta = i + cargo_lag
+            cargo_ordered.append(True)
+        else:
+            cargo_ordered.append(False)
+
+        # --- Cargo arrival logic ---
+        if cargo_eta == i:
+            s_next = min(s_next + cargo_size, S0)
+            cargo_eta = None
+            cargo_arrived.append(True)
+        else:
+            cargo_arrived.append(False)
+
+        # --- Gas price formation (temp + storage effects) ---
+        gas_price = henry + basis0
+        gas_price += alpha * max(0, T_ref - temp)           # cold premium
+        gas_price += beta * max(0, (S0 - s_next)) / S0      # storage scarcity premium
+        gas_price = min(gas_price, ttf_landed)              # cap at LNG import parity
+
+        # --- Power price ---
+        power_price = heat_rate * gas_price + nonfuel
+
+        S.append(s_next)
+        prices.append(power_price)
+
+    df["Storage_Bcf"] = S[1:]
+    df["PowerPrice_$MWh"] = prices
+    df["CargoOrdered"] = cargo_ordered
+    df["CargoArrived"] = cargo_arrived
+    return df
