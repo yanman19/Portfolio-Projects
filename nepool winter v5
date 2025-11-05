@@ -1,0 +1,67 @@
+import pandas as pd, numpy as np, matplotlib.pyplot as plt
+from sklearn.metrics import mean_absolute_error, mean_squared_error
+
+def nepool_price_forecast_temp(df,
+                               gas_units="GW",
+                               S0=13.4, Fmax=1.9, conv=0.186,
+                               S_trigger=4, S_min=1.0,
+                               refill_rate=0.25,      # continuous inflow (Bcf/day)
+                               henry=3, basis0=5,
+                               heat_rate=7.5, nonfuel=15,
+                               T_ref=35, alpha=1.0, beta=1.4,
+                               ttf_landed=25,
+                               add_volatility=True, sigma=0.10,
+                               start_date=None, end_date=None):
+    """
+    Continuous-refill LNG storage model for NEPOOL price forecasting.
+    Requires columns: Date, Bos_Temp, GasGen, optional NE_MAHUB_PK.
+    """
+
+    # --- date window ---
+    if start_date and end_date:
+        df = df[(df["Date"] >= pd.to_datetime(start_date)) &
+                (df["Date"] <= pd.to_datetime(end_date))].copy()
+        if df.empty:
+            raise ValueError("No data found between start_date and end_date.")
+
+    S = [S0]; prices=[]
+    for _, row in df.iterrows():
+        temp, gen_val = row["Bos_Temp"], row["GasGen"]
+        p = gen_val if gas_units=="GW" else gen_val/1000.0
+        burn = min(Fmax, p*conv)
+
+        # --- continuous refill if low ---
+        inflow = refill_rate if S[-1]<=S_trigger else 0
+        s_next = max(min(S[-1] - burn + inflow, S0), S_min)
+
+        # --- gas pricing ---
+        gas_price = henry + basis0
+        gas_price += alpha*max(0, T_ref-temp)
+        gas_price += beta*max(0, (S0-s_next))/S0
+        if temp<20: gas_price *= 1.25 + 0.02*(20-temp)
+        if s_next<=S_min+0.2: gas_price=max(gas_price,0.8*ttf_landed)
+        gas_price=min(gas_price,ttf_landed)
+        if add_volatility: gas_price*=np.random.normal(1,sigma)
+
+        power_price = heat_rate*gas_price + nonfuel
+        S.append(s_next); prices.append(power_price)
+
+    df["Storage_Bcf"]=S[1:]; df["PredictedPrice_$MWh"]=prices
+
+    if "NE_MAHUB_PK" in df.columns:
+        act=df["NE_MAHUB_PK"].astype(float); pred=df["PredictedPrice_$MWh"]
+        mae=mean_absolute_error(act,pred); rmse=np.sqrt(mean_squared_error(act,pred))
+        mape=np.mean(np.abs((act-pred)/act))*100
+        print(f"📊 MAE:{mae:.2f} RMSE:{rmse:.2f} MAPE:{mape:.2f}%")
+        print(f"Avg Pred:{pred.mean():.1f} | Avg Act:{act.mean():.1f}")
+
+        fig,ax1=plt.subplots(figsize=(13,6))
+        ax1.plot(df["Date"],act,color="black",label="Actual NE_MAHUB_PK",lw=2)
+        ax1.plot(df["Date"],pred,color="tab:blue",label="Predicted Price",lw=2)
+        ax1.set_ylabel("$/MWh"); ax1.legend(loc="upper left"); ax1.grid(alpha=0.3)
+        ax2=ax1.twinx()
+        ax2.plot(df["Date"],df["Storage_Bcf"],"--",color="tab:orange",label="Storage (Bcf)")
+        ax2.set_ylabel("Storage (Bcf)"); ax2.legend(loc="upper right")
+        plt.title("NEPOOL Power Price Forecast vs Actual — Continuous Refill LNG Model")
+        plt.show()
+    return df
