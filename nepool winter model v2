@@ -1,0 +1,102 @@
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+from sklearn.metrics import mean_absolute_error, mean_squared_error
+
+def nepool_price_forecast_temp(df,
+                               S0=13.4, Fmax=1.9, conv=0.186,
+                               henry=3, basis0=5,
+                               heat_rate=7.5, nonfuel=15,
+                               T_ref=35, alpha=0.4, beta=0.6,
+                               ttf_landed=15, cargo_size=6.7,
+                               cargo_lag=14, S_trigger=4,
+                               start_date=None, end_date=None):
+    """
+    Forecast NEPOOL daily power prices based on temperature, gas generation, and LNG storage.
+    Compares model output to realized NE_MAHUB_PK if available.
+
+    Required df columns:
+      Date, Bos_Temp (°F), GasGen (MW), NE_MAHUB_PK (optional, realized price)
+    """
+
+    # --- Optional date filter ---
+    if start_date and end_date:
+        df = df[(df["Date"] >= pd.to_datetime(start_date)) &
+                (df["Date"] <= pd.to_datetime(end_date))].copy()
+        if df.empty:
+            raise ValueError("No data found between start_date and end_date.")
+
+    S = [S0]
+    prices = []
+    cargo_eta = None
+    cargo_ordered, cargo_arrived = [], []
+
+    for i, row in df.iterrows():
+        temp = row["Bos_Temp"]
+        gas_mw = row["GasGen"]
+        p = gas_mw / 1000.0  # MW → GW
+
+        burn = min(Fmax, p * conv)
+        s_next = max(S[-1] - burn, 0)
+
+        # --- Cargo order logic ---
+        if s_next <= S_trigger and cargo_eta is None:
+            cargo_eta = i + cargo_lag
+            cargo_ordered.append(True)
+        else:
+            cargo_ordered.append(False)
+
+        # --- Cargo arrival logic ---
+        if cargo_eta == i:
+            s_next = min(s_next + cargo_size, S0)
+            cargo_eta = None
+            cargo_arrived.append(True)
+        else:
+            cargo_arrived.append(False)
+
+        # --- Gas price formation ---
+        gas_price = henry + basis0
+        gas_price += alpha * max(0, T_ref - temp)          # cold premium
+        gas_price += beta * max(0, (S0 - s_next)) / S0     # storage scarcity premium
+        gas_price = min(gas_price, ttf_landed)             # cap at LNG import parity
+
+        # --- Power price ---
+        power_price = heat_rate * gas_price + nonfuel
+        S.append(s_next)
+        prices.append(power_price)
+
+    # --- Store results ---
+    df["Storage_Bcf"] = S[1:]
+    df["PredictedPrice_$MWh"] = prices
+    df["CargoOrdered"] = cargo_ordered
+    df["CargoArrived"] = cargo_arrived
+
+    # --- If realized price available, calculate metrics ---
+    if "NE_MAHUB_PK" in df.columns:
+        actual = df["NE_MAHUB_PK"].astype(float)
+        predicted = df["PredictedPrice_$MWh"]
+
+        mae = mean_absolute_error(actual, predicted)
+        rmse = np.sqrt(mean_squared_error(actual, predicted))
+        mape = np.mean(np.abs((actual - predicted) / actual)) * 100
+
+        print("📊 Model Performance:")
+        print(f"MAE  : {mae:.2f} $/MWh")
+        print(f"RMSE : {rmse:.2f} $/MWh")
+        print(f"MAPE : {mape:.2f}%")
+
+        # --- Plot ---
+        plt.figure(figsize=(12,6))
+        plt.plot(df["Date"], actual, label="Actual NE_MAHUB_PK", color="black", linewidth=2)
+        plt.plot(df["Date"], predicted, label="Predicted Price", color="tab:blue", linewidth=2)
+        plt.title("NEPOOL Power Price Forecast vs Actual")
+        plt.xlabel("Date")
+        plt.ylabel("$/MWh")
+        plt.legend()
+        plt.grid(True, alpha=0.3)
+        plt.show()
+
+    else:
+        print("⚠️ No 'NE_MAHUB_PK' column found — skipping performance metrics and plot.")
+
+    return df
