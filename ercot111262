@@ -1,0 +1,637 @@
+"""
+ERCOT Scenario Pricing Model
+============================
+This model predicts forward power prices using:
+- XGBoost for load and heat rate relationships
+- Battery dispatch logic with offer curves
+- Weather scenario analysis across historical years
+
+Author: Claude
+Date: January 2025
+"""
+
+import pandas as pd
+import numpy as np
+from xgboost import XGBRegressor
+from datetime import datetime
+from typing import Dict, List, Tuple
+import warnings
+warnings.filterwarnings('ignore')
+
+# =============================================================================
+# CONFIGURATION - Set your target months/years here
+# =============================================================================
+TARGET_MONTH_YEARS = [
+    (2, 2026),
+    (3, 2026),
+    (4, 2026),
+    (5, 2026),
+    (6, 2026),
+    (7, 2026),
+    (8, 2026),
+    (9, 2026),
+    (10, 2026),
+    (11, 2026),
+    (12, 2026),
+    (1, 2027),
+    (2, 2027),
+]
+
+LOAD_GROWTH_RATE = 0.065  # 6.5% YoY
+BATTERY_GEN_THRESHOLD = 1000  # MW threshold for battery dispatch
+
+
+# =============================================================================
+# LOAD YOUR DATA HERE
+# =============================================================================
+
+def load_data():
+    """
+    Load your actual DataFrames here.
+    
+    Returns:
+    --------
+    merged_df : pd.DataFrame
+        Historical training data with columns:
+        - Datetime, Month, Year, HE (hour ending 1-24)
+        - ERCOT_Pop_Temp_F, ERCOT_Pop_Humidity_%
+        - RTLoad, SolarGen, WindGen, NetLoad
+        - BatteryGen, Climb, Ramp, HR, HSC, LMP
+        - MONTH, YEAR, DAY, etc.
+    
+    scenario_df : pd.DataFrame
+        Historical weather scenarios with columns:
+        - Datetime, MONTH, YEAR, DAY, HE
+        - ERCOT_Pop_Temp_F, ERCOT_Pop_Humidity_%
+        - ERCOT_Pop_Wind_Speed_mph
+        - SolarGen_Cap_Factor, WindGen_Cap_Factor
+        - xOutage
+    
+    stack_df : pd.DataFrame
+        Forward generation stack assumptions with columns:
+        - Month, YEAR, MONTH
+        - Solar_Stack, Wind_Stack
+        - Battery_MWH (daily MWH capacity)
+        - HSC
+        - conventional_capacity
+    
+    battery_offer_curve : pd.DataFrame
+        Battery offer curve lookup table with columns:
+        - BatteryGen (row index values: 500, 1000, 1500, ...)
+        - ramp_X_Y_climb_A_B columns for price lookup
+    """
+    # TODO: Replace these with your actual data loading code
+    # Example:
+    # merged_df = pd.read_csv('path/to/merged_df.csv')
+    # scenario_df = pd.read_csv('path/to/scenario_df.csv')
+    # stack_df = pd.read_csv('path/to/stack_df.csv')
+    # battery_offer_curve = pd.read_csv('path/to/battery_offer_curve.csv')
+    
+    raise NotImplementedError("Please implement load_data() with your actual data sources")
+
+
+
+
+# =============================================================================
+# BATTERY DISPATCH MODEL
+# =============================================================================
+
+def redistribute_netload(df: pd.DataFrame, datetime_col: str, netload_col: str, battery_col: str) -> pd.DataFrame:
+    """
+    Battery dispatch algorithm - redistributes net load across hours.
+    Charges during low net load, discharges during high net load.
+    
+    The battery_col contains the daily MWH capacity constraint from stack_df.
+    This represents the total energy (MWh) the battery can discharge in a day.
+    
+    Optimized version using vectorized operations.
+    
+    Parameters:
+    -----------
+    df : DataFrame with scenario data
+    datetime_col : column name for datetime
+    netload_col : column name for net load values
+    battery_col : column name for daily battery MWH capacity (from stack_df)
+    
+    Returns:
+    --------
+    DataFrame with added columns:
+        - xBatteryGenMW: Battery generation (positive = discharging, negative = charging)
+        - NetLoad_Adj: Adjusted net load after battery dispatch
+        - Daily_Battery_MWH_Used: Total MWh discharged that day (for verification)
+    """
+    df = df.copy()
+    
+    # Convert to numeric
+    df[datetime_col] = pd.to_datetime(df[datetime_col], errors='coerce')
+    df[netload_col] = pd.to_numeric(df[netload_col], errors='coerce')
+    df[battery_col] = pd.to_numeric(df[battery_col], errors='coerce')
+    
+    # Initialize output arrays
+    battery_gen_out = np.zeros(len(df), dtype=float)
+    netload_adj_out = df[netload_col].to_numpy(copy=True)
+    daily_mwh_used = np.zeros(len(df), dtype=float)
+    
+    # Add date column for grouping
+    df['_date'] = df[datetime_col].dt.date
+    
+    # Group by date - optimized dispatch with MWH constraint
+    for date_val, group in df.groupby('_date'):
+        idx = group.index.to_numpy()
+        y_orig = group[netload_col].to_numpy(dtype=float)
+        battery_mwh_available = group[battery_col].iloc[0]  # Daily MWH capacity from stack_df
+        
+        # Skip if no battery or invalid
+        if pd.isna(battery_mwh_available) or battery_mwh_available <= 0 or len(y_orig) < 2:
+            continue
+        
+        n_hours = len(y_orig)
+        
+        # Vectorized dispatch: rank hours by net load
+        # Charge in lowest hours, discharge in highest hours
+        sorted_indices = np.argsort(y_orig)
+        
+        # Determine dispatch strategy based on available MWH
+        # Typical battery duration is 2-4 hours, so we'll use the MWH to determine
+        # how much power (MW) can be dispatched per hour
+        
+        # Assume a reasonable number of discharge hours (peak shaving)
+        # and charging hours (valley filling) based on daily shape
+        discharge_hours_count = min(n_hours // 3, 8)  # Max 8 hours of discharge
+        charge_hours_count = discharge_hours_count  # Equal charge/discharge hours
+        
+        if discharge_hours_count > 0:
+            # MW per hour = Total MWH available / number of discharge hours
+            # This ensures we don't exceed the daily MWH constraint
+            mw_per_hour = battery_mwh_available / discharge_hours_count
+            
+            # Charging hours (lowest net load) - battery absorbs energy
+            charge_hours = sorted_indices[:charge_hours_count]
+            
+            # Discharging hours (highest net load) - battery provides energy
+            discharge_hours = sorted_indices[-discharge_hours_count:]
+            
+            # Calculate adjustments
+            adjustment = np.zeros(n_hours)
+            adjustment[charge_hours] = mw_per_hour  # Charging increases net load (absorbing)
+            adjustment[discharge_hours] = -mw_per_hour  # Discharging decreases net load (providing)
+            
+            # Battery generation is positive when discharging
+            battery_gen_out[idx] = -adjustment  # Positive = generation (discharge)
+            netload_adj_out[idx] = y_orig + adjustment
+            
+            # Track MWH used (sum of discharge = battery_mwh_available)
+            daily_mwh_used[idx] = battery_mwh_available
+    
+    df['xBatteryGenMW'] = battery_gen_out
+    df['NetLoad_Adj'] = netload_adj_out
+    df['Daily_Battery_MWH_Available'] = df[battery_col]
+    df['Daily_Battery_MWH_Used'] = daily_mwh_used
+    df.drop('_date', axis=1, inplace=True)
+    
+    return df
+
+
+# =============================================================================
+# BATTERY OFFER CURVE LOOKUP
+# =============================================================================
+
+def get_battery_price(battery_gen: float, climb: float, ramp: float, 
+                      offer_curve_df: pd.DataFrame) -> float:
+    """
+    Look up price from battery offer curve based on battery gen, climb, and ramp.
+    """
+    # Define buckets
+    climb_buckets = [(-10000, 3000), (3000, 6000), (6000, 18000)]
+    ramp_buckets = [(45000, 60000), (60000, 70000), (70000, 90000)]
+    
+    # Find climb bucket
+    climb_bucket = None
+    for cb in climb_buckets:
+        if cb[0] <= ramp < cb[1]:  # Note: ramp determines the first part
+            climb_bucket = cb
+            break
+    if climb_bucket is None:
+        climb_bucket = climb_buckets[-1] if ramp >= climb_buckets[-1][1] else climb_buckets[0]
+    
+    # Find ramp bucket (actually climb in the naming)
+    ramp_bucket = None
+    for rb in ramp_buckets:
+        if rb[0] <= climb < rb[1]:
+            ramp_bucket = rb
+            break
+    if ramp_bucket is None:
+        ramp_bucket = ramp_buckets[-1] if climb >= ramp_buckets[-1][1] else ramp_buckets[0]
+    
+    # Build column name
+    col_name = f'ramp_{climb_bucket[0]}_{climb_bucket[1]}_climb_{ramp_bucket[0]}_{ramp_bucket[1]}'
+    
+    # Find battery level row
+    battery_levels = offer_curve_df['BatteryGen'].values
+    idx = np.searchsorted(battery_levels, battery_gen, side='right') - 1
+    idx = max(0, min(idx, len(battery_levels) - 1))
+    
+    if col_name in offer_curve_df.columns:
+        return offer_curve_df.loc[idx, col_name]
+    else:
+        # Default if column not found
+        return 50.0
+
+
+# =============================================================================
+# MAIN SCENARIO MODEL
+# =============================================================================
+
+class ERCOTScenarioModel:
+    """
+    Main class for running ERCOT forward price scenarios.
+    """
+    
+    def __init__(self, merged_df: pd.DataFrame, scenario_df: pd.DataFrame, 
+                 stack_df: pd.DataFrame, battery_offer_curve: pd.DataFrame):
+        self.merged_df = merged_df.copy()
+        self.scenario_df = scenario_df.copy()
+        self.stack_df = stack_df.copy()
+        self.battery_offer_curve = battery_offer_curve.copy()
+        
+        # Results storage
+        self.results_atc = {}
+        self.results_peak = {}
+        self.results_nights = {}
+        
+        # Get the most recent year in merged_df for reference
+        self.latest_training_year = self.merged_df['YEAR'].max()
+        
+    def get_training_month_year(self, target_month: int, target_year: int) -> Tuple[int, int]:
+        """
+        Get the most recent available month/year for training.
+        """
+        # Filter merged_df to find the most recent occurrence of this month
+        month_data = self.merged_df[self.merged_df['MONTH'] == target_month]
+        if len(month_data) == 0:
+            raise ValueError(f"No training data available for month {target_month}")
+        
+        # Get the most recent year for this month
+        training_year = month_data['YEAR'].max()
+        return target_month, training_year
+    
+    def calculate_load_growth_multiplier(self, target_year: int, training_year: int) -> float:
+        """
+        Calculate compound load growth multiplier.
+        """
+        years_diff = target_year - training_year
+        return (1 + LOAD_GROWTH_RATE) ** years_diff
+    
+    def train_load_model(self, month: int, year: int) -> XGBRegressor:
+        """
+        Train XGBoost model for RTLoad based on temperature and humidity.
+        """
+        # Filter training data
+        train_data = self.merged_df[
+            (self.merged_df['MONTH'] == month) & 
+            (self.merged_df['YEAR'] == year)
+        ].copy()
+        
+        if len(train_data) < 24:
+            raise ValueError(f"Insufficient training data for month {month}, year {year}")
+        
+        features = ['ERCOT_Pop_Temp_F', 'ERCOT_Pop_Humidity_%']
+        X = train_data[features]
+        y = train_data['RTLoad']
+        
+        model = XGBRegressor(
+            n_estimators=100,
+            max_depth=5,
+            learning_rate=0.1,
+            random_state=42
+        )
+        model.fit(X, y)
+        
+        return model
+    
+    def train_hr_model(self, month: int, year: int) -> XGBRegressor:
+        """
+        Train XGBoost model for HR based on Climb and Ramp.
+        Excludes hours with BatteryGen > 1000.
+        """
+        # Filter training data - exclude high battery hours
+        train_data = self.merged_df[
+            (self.merged_df['MONTH'] == month) & 
+            (self.merged_df['YEAR'] == year) &
+            (self.merged_df['BatteryGen'] <= BATTERY_GEN_THRESHOLD)
+        ].copy()
+        
+        # Remove NaN ramp values
+        train_data = train_data.dropna(subset=['Ramp', 'HR'])
+        
+        if len(train_data) < 24:
+            raise ValueError(f"Insufficient HR training data for month {month}, year {year}")
+        
+        features = ['Climb', 'Ramp']
+        X = train_data[features]
+        y = train_data['HR']
+        
+        model = XGBRegressor(
+            n_estimators=100,
+            max_depth=5,
+            learning_rate=0.1,
+            random_state=42
+        )
+        model.fit(X, y)
+        
+        return model
+    
+    def get_stack_values(self, month: int, year: int) -> dict:
+        """
+        Get generation stack values for a given month/year from stack_df.
+        """
+        stack_row = self.stack_df[
+            (self.stack_df['MONTH'] == month) & 
+            (self.stack_df['YEAR'] == year)
+        ]
+        
+        if len(stack_row) == 0:
+            # If exact match not found, get the closest available
+            stack_row = self.stack_df[self.stack_df['YEAR'] == year]
+            if len(stack_row) == 0:
+                stack_row = self.stack_df.iloc[[-1]]  # Use latest
+        
+        row = stack_row.iloc[0]
+        return {
+            'Solar_Stack': row['Solar_Stack'],
+            'Wind_Stack': row['Wind_Stack'],
+            'Battery_MWH': row['Battery_MWH'],
+            'HSC': row['HSC'],
+            'conventional_capacity': row['conventional_capacity']
+        }
+    
+    def run_month_scenario(self, target_month: int, target_year: int) -> pd.DataFrame:
+        """
+        Run scenario for a single month/year combination.
+        """
+        print(f"\n{'='*60}")
+        print(f"Processing: Month {target_month}, Year {target_year}")
+        print(f"{'='*60}")
+        
+        # Step 1: Get training month/year
+        train_month, train_year = self.get_training_month_year(target_month, target_year)
+        print(f"Training on: Month {train_month}, Year {train_year}")
+        
+        # Step 2: Filter scenario_df for this month (all historical years)
+        scenario_month = self.scenario_df[self.scenario_df['MONTH'] == target_month].copy()
+        print(f"Scenario rows: {len(scenario_month)}")
+        
+        # Step 3: Get stack values for target month/year
+        stack_vals = self.get_stack_values(target_month, target_year)
+        print(f"Stack values: Solar={stack_vals['Solar_Stack']:.0f} MW, Wind={stack_vals['Wind_Stack']:.0f} MW, Battery={stack_vals['Battery_MWH']:.0f} MWH/day")
+        
+        # Step 4: Train load model and predict RTLoad
+        load_model = self.train_load_model(train_month, train_year)
+        load_features = ['ERCOT_Pop_Temp_F', 'ERCOT_Pop_Humidity_%']
+        scenario_month['Predicted_RTLoad_Base'] = load_model.predict(scenario_month[load_features])
+        
+        # Step 5: Apply load growth
+        load_growth_mult = self.calculate_load_growth_multiplier(target_year, train_year)
+        scenario_month['Predicted_RTLoad'] = scenario_month['Predicted_RTLoad_Base'] * load_growth_mult
+        print(f"Load growth multiplier: {load_growth_mult:.4f}")
+        
+        # Step 6: Calculate Solar and Wind generation
+        scenario_month['Predicted_SolarGen'] = scenario_month['SolarGen_Cap_Factor'] * stack_vals['Solar_Stack']
+        scenario_month['Predicted_WindGen'] = scenario_month['WindGen_Cap_Factor'] * stack_vals['Wind_Stack']
+        
+        # Step 7: Calculate Net Load
+        scenario_month['Predicted_NetLoad'] = (
+            scenario_month['Predicted_RTLoad'] - 
+            scenario_month['Predicted_WindGen'] - 
+            scenario_month['Predicted_SolarGen']
+        )
+        
+        # Step 8: Calculate Climb
+        scenario_month['Predicted_Climb'] = scenario_month['Predicted_NetLoad'] + scenario_month['xOutage']
+        
+        # Step 9: Calculate Ramp (diff of 2)
+        scenario_month = scenario_month.sort_values(['YEAR', 'MONTH', 'DAY', 'HE']).reset_index(drop=True)
+        scenario_month['Predicted_Ramp'] = scenario_month['Predicted_Climb'].diff(2)
+        
+        # Step 10: Drop NaN ramp rows
+        scenario_month = scenario_month.dropna(subset=['Predicted_Ramp']).reset_index(drop=True)
+        
+        # Step 11: Apply battery dispatch model
+        scenario_month['Battery_MWH'] = stack_vals['Battery_MWH']
+        scenario_month = redistribute_netload(
+            scenario_month, 
+            'Datetime', 
+            'Predicted_NetLoad', 
+            'Battery_MWH'
+        )
+        scenario_month['Predicted_BatteryGen'] = scenario_month['xBatteryGenMW']
+        
+        # Step 12: Identify high battery hours
+        scenario_month['Is_High_Battery'] = scenario_month['Predicted_BatteryGen'].abs() > BATTERY_GEN_THRESHOLD
+        
+        # Step 13: Train HR model (excluding high battery hours) and predict
+        hr_model = self.train_hr_model(train_month, train_year)
+        hr_features = ['Predicted_Climb', 'Predicted_Ramp']
+        
+        # Predict HR for low battery hours
+        low_battery_mask = ~scenario_month['Is_High_Battery']
+        scenario_month.loc[low_battery_mask, 'Predicted_HR'] = hr_model.predict(
+            scenario_month.loc[low_battery_mask, ['Predicted_Climb', 'Predicted_Ramp']].rename(
+                columns={'Predicted_Climb': 'Climb', 'Predicted_Ramp': 'Ramp'}
+            )
+        )
+        
+        # Step 14: Calculate price for low battery hours using HR * HSC
+        hsc = stack_vals['HSC']
+        scenario_month['HSC'] = hsc
+        scenario_month.loc[low_battery_mask, 'Predicted_Price'] = (
+            scenario_month.loc[low_battery_mask, 'Predicted_HR'] * hsc
+        )
+        
+        # Step 15: Calculate price for high battery hours using offer curve
+        high_battery_mask = scenario_month['Is_High_Battery']
+        
+        def get_price_from_curve(row):
+            return get_battery_price(
+                abs(row['Predicted_BatteryGen']),
+                row['Predicted_Climb'],
+                row['Predicted_Ramp'],
+                self.battery_offer_curve
+            )
+        
+        if high_battery_mask.any():
+            scenario_month.loc[high_battery_mask, 'Predicted_Price'] = (
+                scenario_month.loc[high_battery_mask].apply(get_price_from_curve, axis=1)
+            )
+        
+        # Ensure no NaN prices
+        scenario_month['Predicted_Price'] = scenario_month['Predicted_Price'].fillna(
+            scenario_month['Predicted_HR'].fillna(9) * hsc
+        )
+        
+        # Add target month/year columns for reference
+        scenario_month['Target_Month'] = target_month
+        scenario_month['Target_Year'] = target_year
+        
+        return scenario_month
+    
+    def run_all_scenarios(self, target_month_years: List[Tuple[int, int]]):
+        """
+        Run scenarios for all target month/year combinations.
+        """
+        for month, year in target_month_years:
+            try:
+                scenario_result = self.run_month_scenario(month, year)
+                
+                # Calculate averages
+                key = f"{year}-{month:02d}"
+                
+                # ATC (All hours)
+                self.results_atc[key] = {
+                    'Price': scenario_result['Predicted_Price'].mean(),
+                    'Load': scenario_result['Predicted_RTLoad'].mean(),
+                    'NetLoad': scenario_result['Predicted_NetLoad'].mean(),
+                    'SolarGen': scenario_result['Predicted_SolarGen'].mean(),
+                    'WindGen': scenario_result['Predicted_WindGen'].mean(),
+                    'BatteryGen': scenario_result['Predicted_BatteryGen'].mean(),
+                    'HR': scenario_result['Predicted_HR'].mean(),
+                    'Climb': scenario_result['Predicted_Climb'].mean(),
+                    'Ramp': scenario_result['Predicted_Ramp'].mean(),
+                }
+                
+                # Peak hours (HE 7-22)
+                peak_mask = (scenario_result['HE'] >= 7) & (scenario_result['HE'] <= 22)
+                peak_data = scenario_result[peak_mask]
+                self.results_peak[key] = {
+                    'Price': peak_data['Predicted_Price'].mean(),
+                    'Load': peak_data['Predicted_RTLoad'].mean(),
+                    'NetLoad': peak_data['Predicted_NetLoad'].mean(),
+                    'SolarGen': peak_data['Predicted_SolarGen'].mean(),
+                    'WindGen': peak_data['Predicted_WindGen'].mean(),
+                    'BatteryGen': peak_data['Predicted_BatteryGen'].mean(),
+                    'HR': peak_data['Predicted_HR'].mean(),
+                    'Climb': peak_data['Predicted_Climb'].mean(),
+                    'Ramp': peak_data['Predicted_Ramp'].mean(),
+                }
+                
+                # Night hours (not HE 7-22)
+                night_data = scenario_result[~peak_mask]
+                self.results_nights[key] = {
+                    'Price': night_data['Predicted_Price'].mean(),
+                    'Load': night_data['Predicted_RTLoad'].mean(),
+                    'NetLoad': night_data['Predicted_NetLoad'].mean(),
+                    'SolarGen': night_data['Predicted_SolarGen'].mean(),
+                    'WindGen': night_data['Predicted_WindGen'].mean(),
+                    'BatteryGen': night_data['Predicted_BatteryGen'].mean(),
+                    'HR': night_data['Predicted_HR'].mean(),
+                    'Climb': night_data['Predicted_Climb'].mean(),
+                    'Ramp': night_data['Predicted_Ramp'].mean(),
+                }
+                
+                print(f"\nResults for {key}:")
+                print(f"  ATC Price: ${self.results_atc[key]['Price']:.2f}/MWh")
+                print(f"  Peak Price: ${self.results_peak[key]['Price']:.2f}/MWh")
+                print(f"  Night Price: ${self.results_nights[key]['Price']:.2f}/MWh")
+                
+            except Exception as e:
+                print(f"Error processing {month}/{year}: {str(e)}")
+                continue
+        
+        return self.results_atc, self.results_peak, self.results_nights
+    
+    def get_summary_df(self) -> pd.DataFrame:
+        """
+        Create summary DataFrame of all results.
+        """
+        records = []
+        for key in self.results_atc.keys():
+            records.append({
+                'Month_Year': key,
+                'ATC_Price': self.results_atc[key]['Price'],
+                'Peak_Price': self.results_peak[key]['Price'],
+                'Night_Price': self.results_nights[key]['Price'],
+                'ATC_Load': self.results_atc[key]['Load'],
+                'Peak_Load': self.results_peak[key]['Load'],
+                'Night_Load': self.results_nights[key]['Load'],
+                'ATC_NetLoad': self.results_atc[key]['NetLoad'],
+                'ATC_SolarGen': self.results_atc[key]['SolarGen'],
+                'ATC_WindGen': self.results_atc[key]['WindGen'],
+            })
+        
+        return pd.DataFrame(records)
+
+
+# =============================================================================
+# MAIN EXECUTION
+# =============================================================================
+
+def main(merged_df: pd.DataFrame, scenario_df: pd.DataFrame, 
+         stack_df: pd.DataFrame, battery_offer_curve: pd.DataFrame):
+    """
+    Main execution function.
+    
+    Parameters:
+    -----------
+    merged_df : pd.DataFrame - Historical training data
+    scenario_df : pd.DataFrame - Historical weather scenarios  
+    stack_df : pd.DataFrame - Forward generation stack assumptions
+    battery_offer_curve : pd.DataFrame - Battery offer curve lookup table
+    
+    Returns:
+    --------
+    model : ERCOTScenarioModel - The fitted model
+    atc_results : dict - ATC price results by month/year
+    peak_results : dict - Peak price results by month/year
+    night_results : dict - Night price results by month/year
+    """
+    print("="*60)
+    print("ERCOT SCENARIO PRICING MODEL")
+    print("="*60)
+    
+    # Show data info
+    print("\n1. Loading DataFrames...")
+    print(f"   merged_df shape: {merged_df.shape}")
+    print(f"   scenario_df shape: {scenario_df.shape}")
+    print(f"   stack_df shape: {stack_df.shape}")
+    print(f"   battery_offer_curve shape: {battery_offer_curve.shape}")
+    
+    # Initialize model
+    print("\n2. Initializing scenario model...")
+    model = ERCOTScenarioModel(merged_df, scenario_df, stack_df, battery_offer_curve)
+    
+    # Run scenarios
+    print("\n3. Running scenarios for target month/years...")
+    atc_results, peak_results, night_results = model.run_all_scenarios(TARGET_MONTH_YEARS)
+    
+    # Display summary
+    print("\n" + "="*60)
+    print("FINAL RESULTS SUMMARY")
+    print("="*60)
+    
+    summary_df = model.get_summary_df()
+    print("\nSummary Table:")
+    print(summary_df.to_string(index=False))
+    
+    # Print dictionaries
+    print("\n" + "-"*60)
+    print("ATC Results Dictionary:")
+    for k, v in atc_results.items():
+        print(f"  {k}: ${v['Price']:.2f}/MWh")
+    
+    print("\n" + "-"*60)
+    print("Peak Results Dictionary:")
+    for k, v in peak_results.items():
+        print(f"  {k}: ${v['Price']:.2f}/MWh")
+    
+    print("\n" + "-"*60)
+    print("Night Results Dictionary:")
+    for k, v in night_results.items():
+        print(f"  {k}: ${v['Price']:.2f}/MWh")
+    
+    return model, atc_results, peak_results, night_results
+
+
+if __name__ == "__main__":
+    # Load your data here
+    merged_df, scenario_df, stack_df, battery_offer_curve = load_data()
+    model, atc, peak, nights = main(merged_df, scenario_df, stack_df, battery_offer_curve)
