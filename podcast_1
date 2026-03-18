@@ -1,0 +1,49 @@
+"""
+
+Let me search for the latest on PJM load growth expectations and forward prices.​​​​​​​​​​​​​​​​
+
+Yianni, here’s the executive summary:
+
+What is PJM?
+PJM Interconnection is the largest electricity grid operator in the U.S., managing the power system across 13 states (from New Jersey to Illinois) plus D.C., serving about 67 million people. It runs wholesale electricity markets and, critically, a capacity market — essentially an auction where PJM pays power plants to promise they’ll be available when demand peaks. Think of it as a reservation fee to keep the lights on.
+
+The Big Story: Data Centers Are Rewriting the Demand Picture
+The defining theme in PJM right now is an unprecedented surge in forecasted electricity demand, driven almost entirely by AI data centers.
+How big is the shift? Back in PJM’s 2021 load forecast, summer peak demand was projected to grow at about 0.3% per year. The 2026 forecast now projects 3.6% annual growth over the next decade — more than ten times the prior rate.  PJM’s summer peak is now forecasted to reach roughly 222,000 MW by 2036, an increase of nearly 66,000 MW over 10 years.  To put that in context, 66,000 MW is roughly equivalent to the entire generating fleet of a country like Australia.
+Where is it concentrated? Northern Virginia — already the world’s largest data center market — is ground zero. The Dominion zone (which covers Virginia) saw its long-term data center load forecast jump from about 5,700 MW of growth in the 2022 forecast to over 20,000 MW in the 2025 forecast. 
+But there are doubts. PJM’s January 2026 update actually trimmed its near-term forecast (through 2032) due to stricter vetting of data center applications and a weaker economic outlook.  Analysts at Jefferies interpreted this as project delays, not weakening demand. Consumer advocates and the independent market monitor have argued that the load forecasts may be inflated — many data center projects are speculative, with weak contractual commitments.
+
+What’s Happened to Prices
+Capacity auction prices have exploded. Here’s the trajectory:
+The 2024/25 delivery year cleared at ~$29/MW-day. The 2025/26 auction surged to $270/MW-day — nearly a tenfold increase. The 2026/27 auction hit the price cap at $329/MW-day. The most recent auction (December 2025, for 2027/28) cleared at $333/MW-day, again at the cap. 
+Why caps? Pennsylvania Governor Shapiro led an effort to put a price collar (cap and floor) on the last two auctions after modeling showed uncapped prices could reach ~$530/MW-day. PJM estimates the collar saved roughly $3 billion in one auction and $10 billion in the next. 
+The system is running short. The December 2025 auction fell 6,623 MW short of PJM’s 20% reserve margin target, achieving only 14.8%.  This was the first time in PJM history that the entire footprint (including self-supply areas) failed to meet the reliability requirement.
+Who’s paying? Data center load accounted for $6.5 billion, or 40%, of the $16.4 billion in capacity costs from the most recent auction. Across PJM’s last three auctions, data center forecasts drove $21.3 billion — 45% of $47.2 billion in total capacity costs.  In D.C., Pepco residential customers saw bills rise about $21/month starting in June 2025 due to capacity increases alone. 
+
+Key Regulatory Events to Watch
+1. The June 2026 Capacity Auction (2028/29 Delivery Year) — This is the single biggest near-term event. If supply falls short for a third consecutive auction, it could trigger a “Reliability Backstop Auction” — an emergency procurement mechanism that has never been used.  PJM filed with FERC on February 27 to extend the ~$325 cap / ~$175 floor to the next two auctions. Without this, the price cap would jump to roughly $550/MW-day.  PJM has asked FERC to rule by April 28. Whether FERC approves this collar — and whether the auction still comes up short even with it — are the two key questions.
+2. FERC’s Co-Location Order Compliance Filings — In December 2025, FERC found PJM’s tariff unjust and unreasonable for lacking clear rules on co-locating data centers directly at power plants  (think: a data center sitting right next to a gas plant or nuclear station and drawing power behind the meter). PJM had multiple compliance deadlines in January and February 2026, and a paper hearing process is underway with PJM’s initial brief due February 16, responses due March 18, and replies due April 17.  The outcome will determine how much of a fast lane co-located data centers get — and how costs are shared with other ratepayers.
+3. Backstop Reliability Procurement — PJM’s Board has committed to developing a one-time backstop procurement to secure new supply, with costs allocated to large loads (i.e., data centers).  The design is being developed through the stakeholder process now. This is a novel mechanism that, if executed, would be the first time PJM administratively procures capacity outside the regular auction.
+4. Expedited Interconnection Track — PJM has proposed a fast-track process allowing up to 10 interconnection requests per year for new or uprated capacity resources of at least 250 MW, backed by a state siting authority pledge to get the project online within three years.  This is pending at FERC and, if approved, would be a new tool to unclog the ~170,000+ MW interconnection queue.
+5. “Connect-and-Manage” Framework for Data Centers — PJM is developing rules that would allow data centers to connect to the grid but subject them to curtailment during peak conditions if they don’t bring their own generation.  The market monitor has taken the even stronger position that no new data centers should be allowed to connect unless PJM can reliably serve them. This debate is live and politically charged.
+6. Federal Jurisdiction ANOPR — The Department of Energy initiated an Advance Notice of Proposed Rulemaking that could reshape the jurisdictional line between FERC and state regulators when it comes to large load interconnections.  This is a slower-burn issue but could have sweeping implications for who controls how data centers plug into the grid.
+
+The Bottom Line
+PJM is in the middle of a structural transformation. Demand is growing at rates not seen in decades, driven by a single sector (AI data centers). Supply can’t keep up — retirements are outpacing new builds, the interconnection queue is clogged, and renewables alone can’t replace dispatchable thermal capacity on a MW-for-MW basis. Prices have responded accordingly, with capacity costs up roughly 10x in three years. The June 2026 auction and FERC’s rulings on the price collar, co-location, and backstop procurement will be the pivotal moments that determine whether PJM stabilizes or enters truly uncharted territory.​​​​​​​​​​​​​​​​
+
+Detail:
+
+Summer, winter(when is load going to come)
+Executive order - plan is change tariff before September. 
+
+Emergency auction - what happens to the regular auction. Do you cut the load and supply and run everything preexisting. 
+RBA update, earliest cal30
+
+Coal - you cannot extend to the RBA. 
+
+IPPs to build in this RBA, there is a question mark to the traditional auction. 
+
+
+
+
+"""
