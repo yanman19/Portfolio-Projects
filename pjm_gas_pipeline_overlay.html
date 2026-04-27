@@ -1,0 +1,665 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PJM × Gas Pipeline Overlay // YANUS</title>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #08090C;
+    --bg-2: #0E1014;
+    --fg: #E8E6E0;
+    --muted: #6B6E78;
+    --line: #1C1F26;
+    --gold: #D4AF37;
+    --power: #D4AF37;       /* PJM zones */
+    --tetco: #E27D60;       /* Texas Eastern (orange) */
+    --transco: #5BC0BE;     /* Transco (teal) */
+    --columbia: #B8B8FF;    /* Columbia (TCO) lavender */
+    --dominion: #FF7B7B;    /* Dominion South red */
+    --tennessee: #9DD9D2;   /* Tennessee Gas pale teal */
+    --chicago: #FFD166;     /* Chicago CG yellow */
+    --leidy: #C9ADA7;       /* Leidy mauve */
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--fg);
+    font-family: 'JetBrains Mono', monospace;
+    font-weight: 400;
+    line-height: 1.45;
+    padding: 16px;
+    min-height: 100vh;
+  }
+  .wrap { max-width: 1200px; margin: 0 auto; }
+  header {
+    border-bottom: 1px solid var(--line);
+    padding-bottom: 14px;
+    margin-bottom: 20px;
+  }
+  .brand {
+    color: var(--gold);
+    font-size: 11px;
+    letter-spacing: 0.25em;
+    text-transform: uppercase;
+    margin-bottom: 6px;
+  }
+  h1 {
+    font-size: 22px;
+    margin: 0 0 4px 0;
+    font-weight: 500;
+  }
+  .sub {
+    font-size: 12px;
+    color: var(--muted);
+  }
+  .map-container {
+    background: var(--bg-2);
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    padding: 8px;
+    margin-bottom: 18px;
+    overflow: hidden;
+  }
+  svg { display: block; width: 100%; height: auto; }
+
+  .legend-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 14px;
+    margin-bottom: 18px;
+  }
+  @media (max-width: 640px) {
+    .legend-grid { grid-template-columns: 1fr; }
+  }
+  .legend-box {
+    background: var(--bg-2);
+    border: 1px solid var(--line);
+    padding: 14px;
+    border-radius: 4px;
+  }
+  .legend-title {
+    font-size: 10px;
+    letter-spacing: 0.2em;
+    color: var(--gold);
+    text-transform: uppercase;
+    margin-bottom: 10px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--line);
+  }
+  .legend-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 11px;
+    padding: 4px 0;
+    color: var(--fg);
+  }
+  .swatch {
+    width: 22px;
+    height: 3px;
+    flex-shrink: 0;
+    border-radius: 1px;
+  }
+  .swatch.dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+  }
+  .legend-row .name { color: var(--fg); font-weight: 500; min-width: 110px; }
+  .legend-row .desc { color: var(--muted); font-size: 10px; }
+
+  .flow-summary {
+    background: var(--bg-2);
+    border: 1px solid var(--line);
+    padding: 14px;
+    border-radius: 4px;
+    margin-bottom: 18px;
+  }
+  .flow-summary h3 {
+    font-size: 10px;
+    letter-spacing: 0.2em;
+    color: var(--gold);
+    text-transform: uppercase;
+    margin: 0 0 12px 0;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--line);
+  }
+  .flow-row {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    font-size: 11px;
+    padding: 6px 0;
+    border-bottom: 1px dashed var(--line);
+  }
+  .flow-row:last-child { border-bottom: none; }
+  .flow-row .from { color: var(--gold); min-width: 130px; font-weight: 500; }
+  .flow-row .arrow { color: var(--muted); }
+  .flow-row .to { color: var(--fg); min-width: 130px; }
+  .flow-row .note { color: var(--muted); font-size: 10px; flex: 1; }
+
+  footer {
+    color: var(--muted);
+    font-size: 10px;
+    padding-top: 12px;
+    border-top: 1px solid var(--line);
+    text-align: right;
+  }
+
+  /* SVG element styles */
+  .state-outline { fill: #12141A; stroke: #2A2D36; stroke-width: 0.8; }
+  .state-label { fill: #4A4D57; font-size: 8px; letter-spacing: 0.15em; font-weight: 500; }
+  .zone-fill { fill-opacity: 0.20; stroke-width: 0.6; stroke-opacity: 0.55; }
+  .zone-label { fill: var(--gold); font-size: 6.5px; font-weight: 600; letter-spacing: 0.05em; }
+  .pipeline { fill: none; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+  .pipeline.dashed { stroke-dasharray: 5 3; }
+  .hub-node { stroke: var(--bg); stroke-width: 1.5; }
+  .hub-label {
+    font-size: 7.5px;
+    font-weight: 700;
+    fill: var(--fg);
+    paint-order: stroke;
+    stroke: var(--bg);
+    stroke-width: 2.5;
+    stroke-linejoin: round;
+    letter-spacing: 0.02em;
+  }
+  .hub-sublabel {
+    font-size: 5.5px;
+    fill: var(--muted);
+    paint-order: stroke;
+    stroke: var(--bg);
+    stroke-width: 2;
+    font-weight: 400;
+  }
+  .flow-arrow { fill: none; stroke-width: 1.4; stroke-linecap: round; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <div class="brand">YANUS // PJM × Pipeline Schematic</div>
+  <h1>PJM Trading Zones with ICE-Traded Gas Hub Overlay</h1>
+  <div class="sub">Stylized schematic — geography simplified for trading mental model. Power zones (gold fills), gas pipelines (colored lines), gas hub nodes (labeled circles).</div>
+</header>
+
+<div class="map-container">
+<svg viewBox="0 0 1000 720" xmlns="http://www.w3.org/2000/svg">
+
+<!-- ===========================================================
+     LAYER 1: STATE OUTLINES (stylized, schematic)
+     =========================================================== -->
+<g id="states">
+  <!-- Illinois -->
+  <rect class="state-outline" x="40" y="180" width="160" height="220" rx="2"/>
+  <text class="state-label" x="120" y="395" text-anchor="middle">ILLINOIS</text>
+
+  <!-- Michigan slice -->
+  <rect class="state-outline" x="200" y="120" width="120" height="80" rx="2"/>
+  <text class="state-label" x="260" y="195" text-anchor="middle">MI (I&amp;M)</text>
+
+  <!-- Indiana -->
+  <rect class="state-outline" x="200" y="200" width="120" height="200" rx="2"/>
+  <text class="state-label" x="260" y="395" text-anchor="middle">INDIANA</text>
+
+  <!-- Ohio -->
+  <rect class="state-outline" x="320" y="200" width="180" height="180" rx="2"/>
+  <text class="state-label" x="410" y="375" text-anchor="middle">OHIO</text>
+
+  <!-- Pennsylvania -->
+  <rect class="state-outline" x="500" y="180" width="240" height="160" rx="2"/>
+  <text class="state-label" x="620" y="335" text-anchor="middle">PENNSYLVANIA</text>
+
+  <!-- New Jersey -->
+  <rect class="state-outline" x="740" y="220" width="80" height="160" rx="2"/>
+  <text class="state-label" x="780" y="375" text-anchor="middle">NJ</text>
+
+  <!-- West Virginia -->
+  <rect class="state-outline" x="380" y="380" width="160" height="140" rx="2"/>
+  <text class="state-label" x="460" y="515" text-anchor="middle">W. VIRGINIA</text>
+
+  <!-- Kentucky -->
+  <rect class="state-outline" x="240" y="400" width="140" height="120" rx="2"/>
+  <text class="state-label" x="310" y="515" text-anchor="middle">KENTUCKY</text>
+
+  <!-- Tennessee slice -->
+  <rect class="state-outline" x="380" y="520" width="120" height="40" rx="2"/>
+  <text class="state-label" x="440" y="555" text-anchor="middle">TN</text>
+
+  <!-- Virginia -->
+  <rect class="state-outline" x="500" y="400" width="240" height="160" rx="2"/>
+  <text class="state-label" x="620" y="555" text-anchor="middle">VIRGINIA</text>
+
+  <!-- North Carolina sliver -->
+  <rect class="state-outline" x="540" y="560" width="160" height="40" rx="2"/>
+  <text class="state-label" x="620" y="585" text-anchor="middle">NC (DOM)</text>
+
+  <!-- Maryland -->
+  <rect class="state-outline" x="620" y="340" width="140" height="60" rx="2"/>
+  <text class="state-label" x="690" y="395" text-anchor="middle">MD</text>
+
+  <!-- DC dot -->
+  <circle class="state-outline" cx="685" cy="400" r="3"/>
+  <text class="state-label" x="678" y="412" text-anchor="end">DC</text>
+
+  <!-- Delaware -->
+  <rect class="state-outline" x="760" y="340" width="40" height="60" rx="2"/>
+  <text class="state-label" x="780" y="395" text-anchor="middle">DE</text>
+</g>
+
+<!-- ===========================================================
+     LAYER 2: PJM ZONE COLORED FILLS (gold, semi-transparent)
+     =========================================================== -->
+<g id="pjm-zones">
+  <!-- ComEd: all of IL footprint -->
+  <rect class="zone-fill" fill="var(--power)" stroke="var(--power)" x="40" y="180" width="160" height="220" rx="2"/>
+  <text class="zone-label" x="120" y="220" text-anchor="middle">COMED</text>
+
+  <!-- I&M: IN + MI sliver -->
+  <rect class="zone-fill" fill="var(--power)" stroke="var(--power)" x="200" y="120" width="120" height="280" rx="2"/>
+  <text class="zone-label" x="260" y="240" text-anchor="middle">AEP (I&amp;M)</text>
+
+  <!-- AEP Ohio (central + SE): bottom + right of OH -->
+  <rect class="zone-fill" fill="var(--power)" stroke="var(--power)" x="380" y="280" width="120" height="100" rx="2"/>
+  <text class="zone-label" x="440" y="300" text-anchor="middle">AEP OH</text>
+
+  <!-- ATSI (FE Ohio): N+NE of OH -->
+  <rect class="zone-fill" fill="var(--power)" stroke="var(--power)" x="380" y="200" width="120" height="80" rx="2"/>
+  <text class="zone-label" x="440" y="225" text-anchor="middle">ATSI/FE OHIO</text>
+
+  <!-- DAY (AES Ohio): SW corner OH -->
+  <rect class="zone-fill" fill="var(--power)" stroke="var(--power)" x="320" y="280" width="60" height="60" rx="2"/>
+  <text class="zone-label" x="350" y="305" text-anchor="middle">DAY</text>
+
+  <!-- DEOK: Cincy area, OH/KY border -->
+  <rect class="zone-fill" fill="var(--power)" stroke="var(--power)" x="320" y="340" width="60" height="60" rx="2"/>
+  <text class="zone-label" x="350" y="365" text-anchor="middle">DEOK</text>
+
+  <!-- DUQ: Pittsburgh, far W PA -->
+  <rect class="zone-fill" fill="var(--power)" stroke="var(--power)" x="500" y="220" width="50" height="50" rx="2"/>
+  <text class="zone-label" x="525" y="240" text-anchor="middle">DUQ</text>
+
+  <!-- APS / West Penn: W/Central PA + W. MD + N. WV -->
+  <rect class="zone-fill" fill="var(--power)" stroke="var(--power)" x="500" y="270" width="100" height="70" rx="2"/>
+  <text class="zone-label" x="550" y="295" text-anchor="middle">APS</text>
+
+  <!-- ATSI Penn Power: NW PA -->
+  <rect class="zone-fill" fill="var(--power)" stroke="var(--power)" x="500" y="180" width="50" height="40" rx="2"/>
+  <text class="zone-label" x="525" y="200" text-anchor="middle">PENN</text>
+
+  <!-- PENELEC: N PA -->
+  <rect class="zone-fill" fill="var(--power)" stroke="var(--power)" x="550" y="180" width="80" height="40" rx="2"/>
+  <text class="zone-label" x="590" y="200" text-anchor="middle">PENELEC</text>
+
+  <!-- PPL: NE/E central PA -->
+  <rect class="zone-fill" fill="var(--power)" stroke="var(--power)" x="630" y="180" width="80" height="80" rx="2"/>
+  <text class="zone-label" x="670" y="222" text-anchor="middle">PPL</text>
+
+  <!-- METED: south central PA -->
+  <rect class="zone-fill" fill="var(--power)" stroke="var(--power)" x="600" y="290" width="60" height="50" rx="2"/>
+  <text class="zone-label" x="630" y="315" text-anchor="middle">METED</text>
+
+  <!-- PECO: SE PA -->
+  <rect class="zone-fill" fill="var(--power)" stroke="var(--power)" x="660" y="270" width="80" height="70" rx="2"/>
+  <text class="zone-label" x="700" y="298" text-anchor="middle">PECO</text>
+
+  <!-- PSEG: N NJ -->
+  <rect class="zone-fill" fill="var(--power)" stroke="var(--power)" x="740" y="220" width="80" height="50" rx="2"/>
+  <text class="zone-label" x="780" y="245" text-anchor="middle">PSEG</text>
+
+  <!-- JCPL: central NJ -->
+  <rect class="zone-fill" fill="var(--power)" stroke="var(--power)" x="740" y="270" width="80" height="50" rx="2"/>
+  <text class="zone-label" x="780" y="295" text-anchor="middle">JCPL</text>
+
+  <!-- AE: south NJ -->
+  <rect class="zone-fill" fill="var(--power)" stroke="var(--power)" x="740" y="320" width="80" height="60" rx="2"/>
+  <text class="zone-label" x="780" y="345" text-anchor="middle">AE</text>
+
+  <!-- BGE: central MD -->
+  <rect class="zone-fill" fill="var(--power)" stroke="var(--power)" x="660" y="340" width="60" height="40" rx="2"/>
+  <text class="zone-label" x="690" y="362" text-anchor="middle">BGE</text>
+
+  <!-- PEPCO: DC + suburbs -->
+  <rect class="zone-fill" fill="var(--power)" stroke="var(--power)" x="620" y="340" width="40" height="40" rx="2"/>
+  <text class="zone-label" x="640" y="362" text-anchor="middle">PEPCO</text>
+
+  <!-- DPL: DE + eastern shore -->
+  <rect class="zone-fill" fill="var(--power)" stroke="var(--power)" x="720" y="340" width="80" height="40" rx="2"/>
+  <text class="zone-label" x="760" y="362" text-anchor="middle">DPL</text>
+
+  <!-- DOM: most of VA + NE NC -->
+  <rect class="zone-fill" fill="var(--power)" stroke="var(--power)" x="560" y="400" width="180" height="200" rx="2"/>
+  <text class="zone-label" x="650" y="450" text-anchor="middle">DOM (Dominion)</text>
+
+  <!-- APCo (AEP) WV/SW VA -->
+  <rect class="zone-fill" fill="var(--power)" stroke="var(--power)" x="380" y="380" width="180" height="180" rx="2"/>
+  <text class="zone-label" x="470" y="430" text-anchor="middle">AEP (APCo)</text>
+
+  <!-- KY zones (DEOK / AEP-KY / EKPC) -->
+  <rect class="zone-fill" fill="var(--power)" stroke="var(--power)" x="240" y="400" width="140" height="120" rx="2"/>
+  <text class="zone-label" x="310" y="440" text-anchor="middle">EKPC / KY POWER</text>
+</g>
+
+<!-- ===========================================================
+     LAYER 3: PIPELINE PATHS
+     =========================================================== -->
+<g id="pipelines">
+  <!-- Texas Eastern: M2 receipts (SW PA) → M3 (NJ/E.PA) - Marcellus flowing east -->
+  <path class="pipeline" stroke="var(--tetco)"
+        d="M 510,310 Q 565,300 615,295 Q 665,290 720,290 Q 750,288 780,275"/>
+
+  <!-- Transco mainline: Z5 (south) up through MD/PA into Z6 non-NY (NJ) and Z6 NY -->
+  <path class="pipeline" stroke="var(--transco)"
+        d="M 600,540 Q 640,470 670,400 Q 690,360 710,330 Q 750,295 780,250 L 800,210"/>
+
+  <!-- Columbia (TCO Pool) - WV/OH/KY, distribution net -->
+  <path class="pipeline dashed" stroke="var(--columbia)"
+        d="M 350,460 Q 400,440 450,430 Q 500,420 540,425"/>
+  <path class="pipeline dashed" stroke="var(--columbia)"
+        d="M 450,430 Q 470,400 480,370 Q 485,340 470,310"/>
+
+  <!-- Dominion (Dom South / Eastern Gas South) - WV core to delivery -->
+  <path class="pipeline" stroke="var(--dominion)"
+        d="M 460,440 Q 520,420 580,420 Q 640,420 680,415"/>
+  <path class="pipeline" stroke="var(--dominion)"
+        d="M 460,440 Q 460,400 470,360 Q 480,320 510,290"/>
+
+  <!-- Tennessee Gas (TGP Z4) - Marcellus / KY delivery -->
+  <path class="pipeline dashed" stroke="var(--tennessee)"
+        d="M 320,490 Q 380,510 440,530 Q 480,540 530,535"/>
+
+  <!-- Leidy → Transco interconnect (NEPA Marcellus exit) -->
+  <path class="pipeline" stroke="var(--leidy)"
+        d="M 670,205 Q 700,225 730,260 Q 755,278 775,275"/>
+
+  <!-- Chicago CG - Midwest hub (separate ecosystem) -->
+  <path class="pipeline" stroke="var(--chicago)"
+        d="M 80,280 Q 130,275 180,275"/>
+  <!-- Chicago to Michigan/I&M -->
+  <path class="pipeline dashed" stroke="var(--chicago)"
+        d="M 180,275 Q 220,260 260,240"/>
+</g>
+
+<!-- ===========================================================
+     LAYER 4: ARROW HEADS (flow direction)
+     =========================================================== -->
+<defs>
+  <marker id="arrow-tetco" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+    <path d="M 0 0 L 10 5 L 0 10 z" fill="var(--tetco)"/>
+  </marker>
+  <marker id="arrow-dom" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+    <path d="M 0 0 L 10 5 L 0 10 z" fill="var(--dominion)"/>
+  </marker>
+  <marker id="arrow-leidy" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+    <path d="M 0 0 L 10 5 L 0 10 z" fill="var(--leidy)"/>
+  </marker>
+</defs>
+
+<!-- Direction arrows (Marcellus → demand) -->
+<path class="flow-arrow" stroke="var(--tetco)" marker-end="url(#arrow-tetco)"
+      d="M 540,302 L 555,300"/>
+<path class="flow-arrow" stroke="var(--tetco)" marker-end="url(#arrow-tetco)"
+      d="M 700,290 L 715,288"/>
+<path class="flow-arrow" stroke="var(--dominion)" marker-end="url(#arrow-dom)"
+      d="M 540,425 L 555,422"/>
+<path class="flow-arrow" stroke="var(--leidy)" marker-end="url(#arrow-leidy)"
+      d="M 720,250 L 735,260"/>
+
+<!-- ===========================================================
+     LAYER 5: GAS HUB NODES
+     =========================================================== -->
+<g id="hubs">
+  <!-- TETCO M2 (SW PA production) -->
+  <circle class="hub-node" cx="510" cy="310" r="6.5" fill="var(--tetco)"/>
+  <text class="hub-label" x="510" y="328" text-anchor="middle">TETCO M2</text>
+  <text class="hub-sublabel" x="510" y="338" text-anchor="middle">production</text>
+
+  <!-- TETCO M3 (NJ delivered) -->
+  <circle class="hub-node" cx="780" cy="275" r="6.5" fill="var(--tetco)"/>
+  <text class="hub-label" x="780" y="263" text-anchor="middle">TETCO M3</text>
+  <text class="hub-sublabel" x="780" y="208" text-anchor="middle"></text>
+
+  <!-- Transco Z5 -->
+  <circle class="hub-node" cx="600" cy="540" r="6.5" fill="var(--transco)"/>
+  <text class="hub-label" x="600" y="558" text-anchor="middle">Transco Z5</text>
+  <text class="hub-sublabel" x="600" y="568" text-anchor="middle">VA/NC delivered</text>
+
+  <!-- Transco Z6 non-NY -->
+  <circle class="hub-node" cx="765" cy="248" r="6.5" fill="var(--transco)"/>
+  <text class="hub-label" x="755" y="232" text-anchor="end">Transco Z6 non-NY</text>
+
+  <!-- Transco Z6 NY (off-map indicator at top right) -->
+  <circle class="hub-node" cx="810" cy="200" r="5" fill="var(--transco)" stroke-dasharray="2 2"/>
+  <text class="hub-label" x="810" y="190" text-anchor="middle">Z6 NY</text>
+  <text class="hub-sublabel" x="810" y="180" text-anchor="middle">(NYC, off-PJM)</text>
+
+  <!-- TCO Pool (Columbia Appalachia) -->
+  <circle class="hub-node" cx="450" cy="430" r="6.5" fill="var(--columbia)"/>
+  <text class="hub-label" x="450" y="448" text-anchor="middle">TCO Pool</text>
+  <text class="hub-sublabel" x="450" y="458" text-anchor="middle">Columbia Appalachia</text>
+
+  <!-- Dom South / Eastern Gas South -->
+  <circle class="hub-node" cx="460" cy="440" r="0" fill="var(--dominion)"/>
+  <circle class="hub-node" cx="500" cy="395" r="6.5" fill="var(--dominion)"/>
+  <text class="hub-label" x="500" y="383" text-anchor="middle">Dom South</text>
+  <text class="hub-sublabel" x="500" y="373" text-anchor="middle">Eastern Gas South</text>
+
+  <!-- TGP Z4 -->
+  <circle class="hub-node" cx="320" cy="490" r="6" fill="var(--tennessee)"/>
+  <text class="hub-label" x="320" y="478" text-anchor="middle">TGP Z4</text>
+
+  <!-- Leidy -->
+  <circle class="hub-node" cx="670" cy="205" r="6" fill="var(--leidy)"/>
+  <text class="hub-label" x="670" y="173" text-anchor="middle">Leidy</text>
+  <text class="hub-sublabel" x="670" y="163" text-anchor="middle">NE PA Marcellus</text>
+
+  <!-- Chicago Citygate -->
+  <circle class="hub-node" cx="80" cy="280" r="7" fill="var(--chicago)"/>
+  <text class="hub-label" x="80" y="298" text-anchor="middle">Chicago CG</text>
+  <text class="hub-sublabel" x="80" y="308" text-anchor="middle">Citygate</text>
+
+  <!-- MichCon -->
+  <circle class="hub-node" cx="260" cy="160" r="5.5" fill="var(--chicago)"/>
+  <text class="hub-label" x="260" y="148" text-anchor="middle">MichCon</text>
+
+  <!-- Cove Point (LNG) -->
+  <circle class="hub-node" cx="720" cy="380" r="4" fill="var(--transco)" stroke-dasharray="1 1"/>
+  <text class="hub-sublabel" x="720" y="395" text-anchor="middle">Cove Pt LNG</text>
+</g>
+
+<!-- ===========================================================
+     LAYER 6: KEY ANNOTATIONS
+     =========================================================== -->
+<g id="annotations">
+  <!-- Marcellus production zone callout -->
+  <rect x="450" y="265" width="120" height="14" rx="7" fill="none" stroke="var(--gold)" stroke-width="0.5" stroke-dasharray="2 2" opacity="0.6"/>
+  <text x="510" y="275" text-anchor="middle" fill="var(--gold)" font-size="6.5" font-weight="600" letter-spacing="0.1em" font-family="JetBrains Mono">MARCELLUS CORE</text>
+
+  <!-- Title corner -->
+  <text x="20" y="35" fill="var(--gold)" font-size="11" font-weight="700" letter-spacing="0.2em" font-family="JetBrains Mono">PJM × GAS PIPELINE NETWORK</text>
+  <text x="20" y="52" fill="var(--muted)" font-size="8" font-family="JetBrains Mono">schematic — not to geographic scale</text>
+
+  <!-- Compass / orientation -->
+  <text x="970" y="30" fill="var(--muted)" font-size="9" text-anchor="end" font-family="JetBrains Mono">N ↑</text>
+</g>
+
+</svg>
+</div>
+
+<!-- LEGENDS -->
+<div class="legend-grid">
+
+<div class="legend-box">
+  <div class="legend-title">Pipelines (gas flow)</div>
+  <div class="legend-row">
+    <div class="swatch" style="background:#E27D60"></div>
+    <span class="name">Texas Eastern</span>
+    <span class="desc">M2 (prod) → M3 (delivered, NJ)</span>
+  </div>
+  <div class="legend-row">
+    <div class="swatch" style="background:#5BC0BE"></div>
+    <span class="name">Transco</span>
+    <span class="desc">Z5 (VA/NC) → Z6 non-NY → Z6 NY</span>
+  </div>
+  <div class="legend-row">
+    <div class="swatch" style="background:#FF7B7B"></div>
+    <span class="name">Dominion</span>
+    <span class="desc">Dom South / EGS Marcellus production</span>
+  </div>
+  <div class="legend-row">
+    <div class="swatch" style="background:#B8B8FF; background-image: repeating-linear-gradient(90deg,#B8B8FF 0 4px, transparent 4px 7px)"></div>
+    <span class="name">Columbia</span>
+    <span class="desc">TCO Pool — Appalachian distribution</span>
+  </div>
+  <div class="legend-row">
+    <div class="swatch" style="background:#9DD9D2; background-image: repeating-linear-gradient(90deg,#9DD9D2 0 4px, transparent 4px 7px)"></div>
+    <span class="name">Tennessee Gas</span>
+    <span class="desc">TGP Z4 (Marcellus & KY/TN delivery)</span>
+  </div>
+  <div class="legend-row">
+    <div class="swatch" style="background:#C9ADA7"></div>
+    <span class="name">Leidy / NE PA</span>
+    <span class="desc">Marcellus exit → Transco interconnect</span>
+  </div>
+  <div class="legend-row">
+    <div class="swatch" style="background:#FFD166"></div>
+    <span class="name">Midwest hubs</span>
+    <span class="desc">Chicago CG, MichCon (separate market)</span>
+  </div>
+</div>
+
+<div class="legend-box">
+  <div class="legend-title">Map Elements</div>
+  <div class="legend-row">
+    <div class="swatch dot" style="background:#D4AF37; opacity:0.4"></div>
+    <span class="name">PJM zone</span>
+    <span class="desc">gold semi-transparent fill</span>
+  </div>
+  <div class="legend-row">
+    <div class="swatch dot" style="background:#E27D60"></div>
+    <span class="name">Gas hub node</span>
+    <span class="desc">colored circle, labeled</span>
+  </div>
+  <div class="legend-row">
+    <div class="swatch" style="background:#D4AF37"></div>
+    <span class="name">Solid line</span>
+    <span class="desc">primary trunk pipeline</span>
+  </div>
+  <div class="legend-row">
+    <div class="swatch" style="background-image: repeating-linear-gradient(90deg,#D4AF37 0 4px, transparent 4px 7px)"></div>
+    <span class="name">Dashed line</span>
+    <span class="desc">distribution / lateral</span>
+  </div>
+  <div class="legend-row">
+    <span style="color:#D4AF37; font-size:11px; min-width: 22px; text-align:center">→</span>
+    <span class="name">Arrow</span>
+    <span class="desc">primary flow direction (Marcellus out)</span>
+  </div>
+  <div class="legend-row">
+    <div class="swatch dot" style="border:1px dashed #5BC0BE; background:transparent"></div>
+    <span class="name">Off-PJM hub</span>
+    <span class="desc">e.g. Z6 NY (NYISO), Cove Pt LNG</span>
+  </div>
+</div>
+
+</div>
+
+<!-- FLOW SUMMARY -->
+<div class="flow-summary">
+  <h3>Key Spark-Spread Pairings (gas hub × PJM zone)</h3>
+  <div class="flow-row">
+    <span class="from">TETCO M3</span>
+    <span class="arrow">×</span>
+    <span class="to">PSEG / JCPL / PECO</span>
+    <span class="note">eastern PJM gen on Transco/TETCO mainline; cleanest "delivered gas" spark</span>
+  </div>
+  <div class="flow-row">
+    <span class="from">Transco Z6 non-NY</span>
+    <span class="arrow">×</span>
+    <span class="to">Western Hub / PSEG</span>
+    <span class="note">benchmark eastern gen-stack reference</span>
+  </div>
+  <div class="flow-row">
+    <span class="from">TCO Pool</span>
+    <span class="arrow">×</span>
+    <span class="to">AEP / DAY / FE OHIO / DEOK</span>
+    <span class="note">Ohio gen-stack on Appalachian production</span>
+  </div>
+  <div class="flow-row">
+    <span class="from">Dom South</span>
+    <span class="arrow">×</span>
+    <span class="to">AD Hub / DOM</span>
+    <span class="note">Marcellus production vs central PJM power</span>
+  </div>
+  <div class="flow-row">
+    <span class="from">TETCO M2</span>
+    <span class="arrow">×</span>
+    <span class="to">DUQ / APS / Penn Power</span>
+    <span class="note">SW PA / Pittsburgh-area gen, M2 receipts pricing</span>
+  </div>
+  <div class="flow-row">
+    <span class="from">Chicago CG</span>
+    <span class="arrow">×</span>
+    <span class="to">NI Hub / ComEd</span>
+    <span class="note">cleanest gas-power expression in PJM (no Appalachian basis noise)</span>
+  </div>
+  <div class="flow-row">
+    <span class="from">Transco Z5</span>
+    <span class="arrow">×</span>
+    <span class="to">DOM zone</span>
+    <span class="note">Virginia data-center demand vs Z5 delivered</span>
+  </div>
+  <div class="flow-row">
+    <span class="from">Leidy</span>
+    <span class="arrow">×</span>
+    <span class="to">PPL / Western Hub</span>
+    <span class="note">NE PA Marcellus exit; basis trade vs M3 / Z6 non-NY</span>
+  </div>
+</div>
+
+<!-- BASIS TRADE NOTES -->
+<div class="flow-summary">
+  <h3>Inter-Hub Basis Trades (gas-side)</h3>
+  <div class="flow-row">
+    <span class="from">M2 → M3</span>
+    <span class="arrow">spread:</span>
+    <span class="to">Texas Eastern</span>
+    <span class="note">canonical "Appalachian production vs Mid-Atl delivered" basis</span>
+  </div>
+  <div class="flow-row">
+    <span class="from">Dom South → TCO</span>
+    <span class="arrow">spread:</span>
+    <span class="to">production cousins</span>
+    <span class="note">WV/OH/PA Appalachian production area arb</span>
+  </div>
+  <div class="flow-row">
+    <span class="from">Leidy → M3</span>
+    <span class="arrow">spread:</span>
+    <span class="to">NE PA exit</span>
+    <span class="note">NEPA Marcellus exit play; pipeline capacity-constrained</span>
+  </div>
+  <div class="flow-row">
+    <span class="from">Z5 → Z6 non-NY</span>
+    <span class="arrow">spread:</span>
+    <span class="to">Transco mainline</span>
+    <span class="note">south-north flow up the eastern seaboard</span>
+  </div>
+  <div class="flow-row">
+    <span class="from">Chicago → MichCon</span>
+    <span class="arrow">spread:</span>
+    <span class="to">Midwest crossing</span>
+    <span class="note">into MI I&amp;M / Consumers territory</span>
+  </div>
+</div>
+
+<footer>
+  YANUS // schematic for trading mental model — geographic boundaries simplified · PJM zones approximate · pipelines drawn as primary corridors · production direction shown for Marcellus core
+</footer>
+
+</div>
+</body>
+</html>
