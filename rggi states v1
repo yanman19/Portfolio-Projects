@@ -1,0 +1,60 @@
+import pandas as pd
+from io import StringIO
+
+# RGGI status by PJM transmission zone, 2020-2030
+# IN = full compliance year | OUT = not in | PARTIAL = mid-year transition or sub-state slice
+zones_csv = """Zone,States,2020,2021,2022,2023,2024,2025,2026,2027,2028,2029,2030,Notes
+AE,NJ,IN,IN,IN,IN,IN,IN,IN,IN,IN,IN,IN,Pure NJ. Continuous since rejoin Jan 2020.
+JCP&L,NJ,IN,IN,IN,IN,IN,IN,IN,IN,IN,IN,IN,Pure NJ.
+PSEG,NJ,IN,IN,IN,IN,IN,IN,IN,IN,IN,IN,IN,Pure NJ.
+RECO,NJ,IN,IN,IN,IN,IN,IN,IN,IN,IN,IN,IN,Pure NJ (PJM portion).
+BGE,MD,IN,IN,IN,IN,IN,IN,IN,IN,IN,IN,IN,Pure MD. Original 2009 RGGI member.
+PEPCO,MD/DC,IN,IN,IN,IN,IN,IN,IN,IN,IN,IN,IN,MD portion in RGGI; DC negligible thermal.
+DPL,DE/MD/VA,IN,IN,IN,IN,IN,IN,IN,IN,IN,IN,IN,>95% RGGI throughout; tiny VA Eastern Shore slice follows VA timeline.
+Dominion,VA/NC,OUT,IN,IN,IN,OUT,OUT,PARTIAL,IN,IN,IN,IN,VA joined 2021. Youngkin repeal eff. Dec 31 2023. HB29 signed Feb 20 2026 - re-entry late May 2026.
+AEP,OH/WV/VA/IN/KY/TN/MI,PARTIAL,PARTIAL,PARTIAL,PARTIAL,OUT,OUT,PARTIAL,PARTIAL,PARTIAL,PARTIAL,PARTIAL,Only Appalachian Power (SW VA) slice carries RGGI - ~10-15% of zone MWh.
+AP,PA/WV/MD,PARTIAL,PARTIAL,PARTIAL,PARTIAL,PARTIAL,PARTIAL,PARTIAL,PARTIAL,PARTIAL,PARTIAL,PARTIAL,Only western MD slice (Garrett/Allegany) RGGI throughout. <10% of zone.
+PECO,PA,OUT,OUT,OUT,OUT,OUT,OUT,OUT,OUT,OUT,OUT,OUT,PA injunction blocked all compliance; HB416 abrogated Nov 12 2025.
+PPL,PA,OUT,OUT,OUT,OUT,OUT,OUT,OUT,OUT,OUT,OUT,OUT,Same PA timeline.
+METED,PA,OUT,OUT,OUT,OUT,OUT,OUT,OUT,OUT,OUT,OUT,OUT,Same PA timeline.
+PENELEC,PA,OUT,OUT,OUT,OUT,OUT,OUT,OUT,OUT,OUT,OUT,OUT,Same PA timeline.
+DLCO,PA,OUT,OUT,OUT,OUT,OUT,OUT,OUT,OUT,OUT,OUT,OUT,Pure PA (Pittsburgh).
+ATSI,OH/PA,OUT,OUT,OUT,OUT,OUT,OUT,OUT,OUT,OUT,OUT,OUT,Predominantly OH; neither state in RGGI.
+DAY,OH,OUT,OUT,OUT,OUT,OUT,OUT,OUT,OUT,OUT,OUT,OUT,Pure OH.
+DEO&K,OH/KY,OUT,OUT,OUT,OUT,OUT,OUT,OUT,OUT,OUT,OUT,OUT,Neither state in RGGI.
+EKPC,KY,OUT,OUT,OUT,OUT,OUT,OUT,OUT,OUT,OUT,OUT,OUT,Pure KY.
+OVEC,OH/IN,OUT,OUT,OUT,OUT,OUT,OUT,OUT,OUT,OUT,OUT,OUT,Neither state in RGGI.
+ComEd,IL,OUT,OUT,OUT,OUT,OUT,OUT,OUT,OUT,OUT,OUT,OUT,IL has CEJA but not RGGI."""
+
+# RGGI status by state, 2020-2030
+states_csv = """State,2020,2021,2022,2023,2024,2025,2026,2027,2028,2029,2030,Notes
+NY,IN,IN,IN,IN,IN,IN,IN,IN,IN,IN,IN,Original 2009 member. NYCI cap-and-invest may stack on top late decade.
+NJ,IN,IN,IN,IN,IN,IN,IN,IN,IN,IN,IN,Rejoined Jan 1 2020.
+DE,IN,IN,IN,IN,IN,IN,IN,IN,IN,IN,IN,Original 2009 member.
+MD,IN,IN,IN,IN,IN,IN,IN,IN,IN,IN,IN,Original 2009 member.
+MA,IN,IN,IN,IN,IN,IN,IN,IN,IN,IN,IN,Original 2009 member.
+CT,IN,IN,IN,IN,IN,IN,IN,IN,IN,IN,IN,Original 2009 member.
+RI,IN,IN,IN,IN,IN,IN,IN,IN,IN,IN,IN,Original 2009 member.
+ME,IN,IN,IN,IN,IN,IN,IN,IN,IN,IN,IN,Original 2009 member.
+NH,IN,IN,IN,IN,IN,IN,IN,IN,IN,IN,IN,Original 2009 member.
+VT,IN,IN,IN,IN,IN,IN,IN,IN,IN,IN,IN,Original 2009 member.
+VA,OUT,IN,IN,IN,OUT,OUT,PARTIAL,IN,IN,IN,IN,Joined Jan 1 2021. Youngkin repeal eff. Dec 31 2023. HB29 signed Feb 20 2026.
+PA,OUT,OUT,OUT,OUT,OUT,OUT,OUT,OUT,OUT,OUT,OUT,Reg published Apr 2022 but injunction blocked compliance. HB416 abrogated Nov 12 2025. Generators never paid.
+WV,OUT,OUT,OUT,OUT,OUT,OUT,OUT,OUT,OUT,OUT,OUT,Never in.
+OH,OUT,OUT,OUT,OUT,OUT,OUT,OUT,OUT,OUT,OUT,OUT,Never in.
+DC,OUT,OUT,OUT,OUT,OUT,OUT,OUT,OUT,OUT,OUT,OUT,Negligible thermal generation.
+IN,OUT,OUT,OUT,OUT,OUT,OUT,OUT,OUT,OUT,OUT,OUT,Never in.
+KY,OUT,OUT,OUT,OUT,OUT,OUT,OUT,OUT,OUT,OUT,OUT,Never in.
+TN,OUT,OUT,OUT,OUT,OUT,OUT,OUT,OUT,OUT,OUT,OUT,Never in.
+MI,OUT,OUT,OUT,OUT,OUT,OUT,OUT,OUT,OUT,OUT,OUT,Never in.
+IL,OUT,OUT,OUT,OUT,OUT,OUT,OUT,OUT,OUT,OUT,OUT,CEJA is separate state-only program.
+NC,OUT,OUT,OUT,OUT,OUT,OUT,OUT,OUT,OUT,OUT,OUT,Never in."""
+
+zones = pd.read_csv(StringIO(zones_csv))
+states = pd.read_csv(StringIO(states_csv))
+
+# Numeric exposure weights for quant work: IN=1.0, PARTIAL=0.5, OUT=0.0
+year_cols = [str(y) for y in range(2020, 2031)]
+weight_map = {"IN": 1.0, "PARTIAL": 0.5, "OUT": 0.0}
+zones_w = zones.copy(); zones_w[year_cols] = zones[year_cols].replace(weight_map)
+states_w = states.copy(); states_w[year_cols] = states[year_cols].replace(weight_map)
