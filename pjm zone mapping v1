@@ -1,0 +1,124 @@
+## “””
+PJM Zone Lookup — YANUS
+
+Map (lat, lon) -> PJM tariff zone code.
+
+Install:  pip install geopandas shapely requests
+
+Usage:
+from pjm_zone_lookup import get_pjm_zone, load_pjm_zones
+get_pjm_zone(40.2264, -75.5872)   # -> ‘PECO’
+
+```
+# Bulk: pre-load once, reuse the GeoDataFrame
+zones = load_pjm_zones()
+[get_pjm_zone(lat, lon, zones) for lat, lon in coords]
+```
+
+Caveat: returns the geographic LSE footprint. A generator’s economic
+injection is its pnode — usually but not always the same zone.
+“””
+
+from **future** import annotations
+from pathlib import Path
+import requests
+import geopandas as gpd
+from shapely.geometry import Point
+
+# HIFLD Electric Retail Service Territories (open data, ~50 MB GeoJSON).
+
+# If the URL rotates: https://hifld-geoplatform.hub.arcgis.com/  -> search the dataset.
+
+HIFLD_URL = (
+“https://opendata.arcgis.com/api/v3/datasets/”
+“c4fd0b01c2544a2f83440dab292f0980_0/downloads/data”
+“?format=geojson&spatialRefId=4326”
+)
+CACHE = Path(“hifld_service_territories.geojson”)
+
+# Utility legal name (HIFLD ‘NAME’ field, uppercased) -> PJM tariff zone code.
+
+PJM_UTILITY_MAP: dict[str, str] = {
+# FirstEnergy
+“MONONGAHELA POWER CO”:               “APS”,
+“POTOMAC EDISON CO”:                  “APS”,
+“WEST PENN POWER CO”:                 “APS”,
+“OHIO EDISON CO”:                     “ATSI”,
+“CLEVELAND ELECTRIC ILLUMINATING CO”: “ATSI”,
+“TOLEDO EDISON CO”:                   “ATSI”,
+“PENNSYLVANIA ELECTRIC CO”:           “PENELEC”,
+“METROPOLITAN EDISON CO”:             “METED”,
+“JERSEY CENTRAL POWER & LIGHT CO”:    “JCPL”,
+# AEP
+“OHIO POWER CO”:                      “AEP”,
+“APPALACHIAN POWER CO”:               “AEP”,
+“INDIANA MICHIGAN POWER CO”:          “AEP”,
+“KENTUCKY POWER CO”:                  “AEP”,
+“KINGSPORT POWER CO”:                 “AEP”,
+“WHEELING POWER CO”:                  “AEP”,
+# Exelon / former Exelon
+“COMMONWEALTH EDISON CO”:             “ComEd”,
+“PECO ENERGY CO”:                     “PECO”,
+“BALTIMORE GAS & ELECTRIC CO”:        “BGE”,
+“ATLANTIC CITY ELECTRIC CO”:          “AECO”,
+“DELMARVA POWER & LIGHT CO”:          “DPL”,
+“POTOMAC ELECTRIC POWER CO”:          “PEPCO”,
+# Standalone
+“PPL ELECTRIC UTILITIES CORP”:        “PPL”,
+“PUBLIC SERVICE ELECTRIC AND GAS CO”: “PSEG”,
+“ROCKLAND ELECTRIC CO”:               “RECO”,
+“VIRGINIA ELECTRIC & POWER CO”:       “DOM”,
+“DUQUESNE LIGHT CO”:                  “DLCO”,
+“DAYTON POWER & LIGHT CO”:            “DAY”,
+“DUKE ENERGY OHIO INC”:               “DEOK”,
+“DUKE ENERGY KENTUCKY INC”:           “DEOK”,
+“EAST KENTUCKY POWER COOP INC”:       “EKPC”,
+“OHIO VALLEY ELECTRIC CORP”:          “OVEC”,
+}
+
+_ZONES_CACHE: gpd.GeoDataFrame | None = None
+
+def load_pjm_zones(force_refresh: bool = False) -> gpd.GeoDataFrame:
+“”“Download HIFLD if needed, filter to PJM utilities, dissolve by zone.”””
+global _ZONES_CACHE
+if _ZONES_CACHE is not None and not force_refresh:
+return _ZONES_CACHE
+
+```
+if force_refresh or not CACHE.exists():
+    r = requests.get(HIFLD_URL, timeout=180)
+    r.raise_for_status()
+    CACHE.write_bytes(r.content)
+
+gdf = gpd.read_file(CACHE)
+gdf["NAME_U"] = gdf["NAME"].astype(str).str.upper().str.strip()
+gdf["pjm_zone"] = gdf["NAME_U"].map(PJM_UTILITY_MAP)
+
+pjm = gdf[gdf["pjm_zone"].notna()].copy()
+pjm = pjm.set_crs(4326) if pjm.crs is None else pjm.to_crs(4326)
+
+_ZONES_CACHE = pjm.dissolve(by="pjm_zone").reset_index()
+return _ZONES_CACHE
+```
+
+def get_pjm_zone(lat: float, lon: float,
+zones: gpd.GeoDataFrame | None = None) -> str | None:
+“”“Return PJM tariff zone code for (lat, lon), or None if outside footprint.”””
+if zones is None:
+zones = load_pjm_zones()
+hit = zones[zones.contains(Point(lon, lat))]
+return hit[“pjm_zone”].iloc[0] if len(hit) else None
+
+# —————————————————————————
+
+if **name** == “**main**”:
+zones = load_pjm_zones()
+tests = [
+(“Limerick”,        40.2264, -75.5872),
+(“Peach Bottom”,    39.7589, -76.2686),
+(“Mountaineer”,     39.0461, -81.7311),
+(“Mt. Storm”,       39.1956, -79.2614),
+(“Byron”,           42.0744, -89.2814),
+]
+for name, lat, lon in tests:
+print(f”{name:<16} -> {get_pjm_zone(lat, lon, zones)}”)
